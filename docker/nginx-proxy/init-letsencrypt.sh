@@ -11,7 +11,7 @@ EMAIL="${2:?Usage: init-letsencrypt.sh <domaine> <email>}"
 
 echo "Obtention du certificat pour ${DOMAIN}..."
 
-docker compose -f docker-compose.proxy.yml run --rm certbot certonly \
+docker compose -f docker-compose.proxy.yml run --rm --entrypoint certbot certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email "${EMAIL}" \
