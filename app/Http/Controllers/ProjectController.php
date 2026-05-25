@@ -317,7 +317,7 @@ class ProjectController extends Controller
             'chatMessages' => $chatMessages,
             'chatMembers' => $space->isFull
                 ? []
-                : SpaceChatAccess::membersWithPresence($project, $space->key),
+                : SpaceChatAccess::membersWithPresence($project, $space->key, $user),
             'members' => $members,
             'teamMembers' => $teamMembers,
             'teamCandidates' => $teamCandidates,

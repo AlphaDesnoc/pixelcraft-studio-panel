@@ -29,6 +29,7 @@ const { messages, chatMembers, loading, sending, send, listRef } = useSpaceChat(
   activeRef,
   spaceKeyRef,
   initialMembersRef,
+  currentUserId,
 );
 
 function formatTime(iso) {

@@ -59,7 +59,7 @@ class ChatMessageController extends Controller
         $space = ProjectSpace::resolve($request, $project, $user);
         $this->authorizeSpace($user, $project, $space);
 
-        $members = SpaceChatAccess::membersWithPresence($project, $space->key);
+        $members = SpaceChatAccess::membersWithPresence($project, $space->key, $user);
 
         return response()->json([
             'members' => $members,

@@ -9,6 +9,8 @@ class UserPresence extends Model
 {
     public $incrementing = false;
 
+    public $timestamps = false;
+
     protected $primaryKey = 'user_id';
 
     protected $fillable = [

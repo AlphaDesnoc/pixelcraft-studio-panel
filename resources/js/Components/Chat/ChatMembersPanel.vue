@@ -1,15 +1,9 @@
 <script setup>
-import { computed } from "vue";
-
-const props = defineProps({
+defineProps({
   members: { type: Array, default: () => [] },
   currentUserId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
 });
-
-const onlineCount = computed(
-  () => props.members.filter((member) => member.is_online).length,
-);
 
 function initials(name) {
   return (name ?? "?")
@@ -23,19 +17,20 @@ function initials(name) {
 
 <template>
   <aside
-    class="flex w-full shrink-0 flex-col border-t border-border bg-muted/10 md:w-56 md:border-l md:border-t-0"
+    class="flex w-full shrink-0 flex-col border-t border-border bg-muted/10 md:w-60 md:border-l md:border-t-0"
   >
     <div class="border-b border-border px-4 py-3">
-      <h3 class="text-sm font-semibold text-foreground">Membres</h3>
+      <h3 class="text-sm font-semibold text-foreground">Membres du chat</h3>
       <p class="mt-0.5 text-xs text-muted-foreground">
-        <template v-if="loading">Chargement…</template>
+        <template v-if="loading && members.length === 0">Chargement…</template>
         <template v-else>
-          {{ onlineCount }} en ligne · {{ members.length }} autorisé{{ members.length > 1 ? "s" : "" }}
+          {{ members.filter((m) => m.is_online).length }} en ligne ·
+          {{ members.length }} autorisé{{ members.length > 1 ? "s" : "" }}
         </template>
       </p>
     </div>
 
-    <ul class="max-h-[320px] flex-1 space-y-0.5 overflow-y-auto p-2 md:max-h-none">
+    <ul class="min-h-[120px] flex-1 space-y-0.5 overflow-y-auto p-2 md:min-h-[280px]">
       <li
         v-if="loading && members.length === 0"
         class="px-2 py-6 text-center text-xs text-muted-foreground"

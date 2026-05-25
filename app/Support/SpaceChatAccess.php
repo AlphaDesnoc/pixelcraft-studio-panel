@@ -4,7 +4,9 @@ namespace App\Support;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Models\UserPresence;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 
 class SpaceChatAccess
 {
@@ -16,7 +18,7 @@ class SpaceChatAccess
             return false;
         }
 
-        if (! $user->is_active) {
+        if (Schema::hasColumn('users', 'is_active') && ! $user->is_active) {
             return false;
         }
 
@@ -45,24 +47,58 @@ class SpaceChatAccess
             return collect();
         }
 
-        return User::query()
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->filter(fn (User $user) => self::canAccess($user, $project, $spaceKey))
-            ->values();
+        $query = User::query()->orderBy('name');
+
+        if (Schema::hasColumn('users', 'is_active')) {
+            $query->where('is_active', true);
+        }
+
+        if ($spaceKey === ProjectSpace::GLOBAL) {
+            $memberIds = $project->members()->pluck('users.id');
+            if ($project->owner_id) {
+                $memberIds = $memberIds->push($project->owner_id)->unique()->values();
+            }
+
+            return $query
+                ->where(function ($q) use ($memberIds) {
+                    $q->whereIn('id', $memberIds)
+                        ->orWhere('role', User::ROLE_ADMIN);
+                })
+                ->get(['id', 'name']);
+        }
+
+        $rank = $project->ranks()->where('slug', $spaceKey)->first();
+        if (! $rank) {
+            return collect();
+        }
+
+        $rankMemberIds = $rank->members()->pluck('users.id');
+
+        return $query
+            ->where(function ($q) use ($rankMemberIds) {
+                $q->whereIn('id', $rankMemberIds)
+                    ->orWhere('role', User::ROLE_ADMIN);
+            })
+            ->get(['id', 'name']);
     }
 
     /** @return array<int, array{id: int, name: string, is_online: bool}> */
-    public static function membersWithPresence(Project $project, string $spaceKey): array
+    public static function membersWithPresence(Project $project, string $spaceKey, ?User $viewer = null): array
     {
+        if ($viewer) {
+            UserPresence::query()->updateOrCreate(
+                ['user_id' => $viewer->id],
+                ['last_seen_at' => now()],
+            );
+        }
+
         $eligible = self::eligibleUsers($project, $spaceKey);
 
         if ($eligible->isEmpty()) {
             return [];
         }
 
-        $onlineIds = \App\Models\UserPresence::query()
+        $onlineIds = UserPresence::query()
             ->whereIn('user_id', $eligible->pluck('id'))
             ->where('last_seen_at', '>=', now()->subSeconds(self::ONLINE_WINDOW_SECONDS))
             ->pluck('user_id')
@@ -72,7 +108,8 @@ class SpaceChatAccess
             ->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
-                'is_online' => $onlineIds->has($user->id),
+                'is_online' => $onlineIds->has($user->id)
+                    || ($viewer && (int) $viewer->id === (int) $user->id),
             ])
             ->values()
             ->all();
