@@ -1,5 +1,7 @@
 # ── Stage 0 : dépendances PHP (Ziggy requis par Vite) ────────────────────────
-FROM composer:2 AS composer
+FROM php:8.4-cli-bookworm AS composer
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
@@ -34,7 +36,7 @@ ENV VITE_APP_NAME=$VITE_APP_NAME \
 RUN npm run build
 
 # ── Stage 2 : application PHP ────────────────────────────────────────────────
-FROM php:8.3-fpm-bookworm AS app
+FROM php:8.4-fpm-bookworm AS app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
