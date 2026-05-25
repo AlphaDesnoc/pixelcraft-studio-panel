@@ -23,7 +23,7 @@ function initials(name) {
 
 <template>
   <aside
-    class="flex w-44 shrink-0 flex-col border-l border-border bg-muted/10 sm:w-52"
+    class="flex h-full min-h-0 w-44 shrink-0 flex-col overflow-hidden border-l border-border bg-muted/10 sm:w-52"
   >
     <div class="shrink-0 border-b border-border px-3 py-2.5">
       <h3 class="text-xs font-semibold text-foreground">Membres</h3>
@@ -35,7 +35,7 @@ function initials(name) {
       </p>
     </div>
 
-    <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+    <ul class="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-y-contain p-2">
       <li
         v-if="loading && members.length === 0"
         class="px-1 py-4 text-center text-xs text-muted-foreground"
