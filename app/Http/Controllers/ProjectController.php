@@ -116,44 +116,15 @@ class ProjectController extends Controller
                 'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name] : null,
             ])->values();
 
-        $lists = $project->lists->map(function ($list) {
-            return [
-                'id' => $list->id,
-                'name' => $list->name,
-                'color' => $list->color,
-                'status_kind' => $list->status_kind,
-                'position' => $list->position,
-                'rank_id' => $list->rank_id,
-                'tasks' => $list->tasks->map(fn ($task) => [
-                    'id' => $task->id,
-                    'list_id' => $task->list_id,
-                    'title' => $task->title,
-                    'description' => $task->description,
-                    'priority' => $task->priority,
-                    'status' => $task->status,
-                    'position' => $task->position,
-                    'progress' => (int) $task->progress,
-                    'assignee_id' => $task->assignee_id,
-                    'start_date' => optional($task->start_date)?->toDateString(),
-                    'due_date' => optional($task->due_date)?->toDateString(),
-                    'checklists' => $task->checklists->map(fn ($cl) => [
-                        'id' => $cl->id,
-                        'name' => $cl->name,
-                        'position' => $cl->position,
-                        'items' => $cl->items->map(fn ($it) => [
-                            'id' => $it->id,
-                            'content' => $it->content,
-                            'is_done' => (bool) $it->is_done,
-                            'position' => $it->position,
-                        ])->values(),
-                    ])->values(),
-                ])->values(),
-            ];
-        })->values();
+        $lists = ($space->isGlobal || $space->isFull)
+            ? $this->buildMergedKanbanLists($project)
+            : $this->mapLists($project->lists);
 
-        $tasksQuery = Task::query()
-            ->where('project_id', $project->id)
-            ->whereHas('list', fn ($q) => $space->applyScope($q, 'rank_id'));
+        $tasksQuery = Task::query()->where('project_id', $project->id);
+
+        if (! $space->isGlobal && ! $space->isFull) {
+            $tasksQuery->whereHas('list', fn ($q) => $space->applyScope($q, 'rank_id'));
+        }
 
         $statusCounts = (clone $tasksQuery)
             ->selectRaw('status, COUNT(*) as total')
@@ -354,6 +325,126 @@ class ProjectController extends Controller
                 TaskList::STATUS_IN_PROGRESS => 'En cours',
                 TaskList::STATUS_DONE => 'Terminée',
             ],
+            'globalKanban' => $space->isGlobal || $space->isFull,
         ]);
+    }
+
+    private function mapLists($lists)
+    {
+        return $lists->map(function ($list) {
+            return [
+                'id' => $list->id,
+                'name' => $list->name,
+                'color' => $list->color,
+                'status_kind' => $list->status_kind,
+                'position' => $list->position,
+                'rank_id' => $list->rank_id,
+                'tasks' => $list->tasks->map(fn ($task) => $this->mapTask($task))->values(),
+            ];
+        })->values();
+    }
+
+    private function buildMergedKanbanLists(Project $project)
+    {
+        $this->ensureGlobalKanbanLists($project);
+
+        $defaultNames = collect(TaskList::defaultsFor($project->id))->pluck('name')->all();
+
+        $globalLists = $project->lists()
+            ->whereNull('rank_id')
+            ->whereIn('name', $defaultNames)
+            ->get()
+            ->sortBy(fn ($list) => array_search($list->name, $defaultNames, true))
+            ->values();
+
+        $allTasks = Task::query()
+            ->where('project_id', $project->id)
+            ->with([
+                'list',
+                'checklists' => fn ($q) => $q->orderBy('position'),
+                'checklists.items' => fn ($q) => $q->orderBy('position'),
+            ])
+            ->orderBy('position')
+            ->get();
+
+        return $globalLists->map(function ($globalList) use ($allTasks) {
+            $tasks = $allTasks
+                ->filter(function ($task) use ($globalList) {
+                    $source = $task->list;
+                    if (! $source) {
+                        return false;
+                    }
+
+                    if ($source->rank_id === null && $source->id === $globalList->id) {
+                        return true;
+                    }
+
+                    if ($source->name === $globalList->name) {
+                        return true;
+                    }
+
+                    return $source->name === 'Tout' && $globalList->name === 'À faire';
+                })
+                ->values();
+
+            return [
+                'id' => $globalList->id,
+                'name' => $globalList->name,
+                'color' => $globalList->color,
+                'status_kind' => $globalList->status_kind,
+                'position' => $globalList->position,
+                'rank_id' => null,
+                'tasks' => $tasks->map(fn ($task) => $this->mapTask($task))->values(),
+            ];
+        })->values();
+    }
+
+    private function ensureGlobalKanbanLists(Project $project): void
+    {
+        $existingNames = $project->lists()
+            ->whereNull('rank_id')
+            ->pluck('name')
+            ->all();
+
+        foreach (TaskList::defaultsFor($project->id) as $default) {
+            if (in_array($default['name'], $existingNames, true)) {
+                continue;
+            }
+
+            $project->lists()->create(
+                collect($default)
+                    ->except('project_id')
+                    ->merge(['rank_id' => null])
+                    ->all()
+            );
+        }
+    }
+
+    private function mapTask(Task $task): array
+    {
+        return [
+            'id' => $task->id,
+            'list_id' => $task->list_id,
+            'title' => $task->title,
+            'description' => $task->description,
+            'priority' => $task->priority,
+            'status' => $task->status,
+            'position' => $task->position,
+            'progress' => (int) $task->progress,
+            'assignee_id' => $task->assignee_id,
+            'start_date' => optional($task->start_date)?->toDateString(),
+            'due_date' => optional($task->due_date)?->toDateString(),
+            'checklists' => $task->checklists->map(fn ($cl) => [
+                'id' => $cl->id,
+                'name' => $cl->name,
+                'position' => $cl->position,
+                'items' => $cl->items->map(fn ($it) => [
+                    'id' => $it->id,
+                    'content' => $it->content,
+                    'is_done' => (bool) $it->is_done,
+                    'position' => $it->position,
+                ])->values(),
+            ])->values(),
+        ];
     }
 }

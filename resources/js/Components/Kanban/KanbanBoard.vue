@@ -16,6 +16,7 @@ const props = defineProps({
   priorities: { type: Object, required: true },
   statusKinds: { type: Object, required: true },
   rankId: { type: Number, default: null },
+  globalKanban: { type: Boolean, default: false },
 });
 
 const localLists = ref(cloneLists(props.lists));
@@ -150,15 +151,27 @@ function handleTasksReorder({ listId, tasks, sync }) {
   <div class="flex flex-col gap-3">
     <div class="flex items-center justify-between gap-2">
       <p class="text-xs text-muted-foreground">
-        Glissez les cartes et colonnes · Cliquez sur une carte pour l'ouvrir
+        <template v-if="globalKanban">
+          Toutes les équipes · 4 colonnes unifiées · Glissez les cartes entre colonnes
+        </template>
+        <template v-else>
+          Glissez les cartes et colonnes · Cliquez sur une carte pour l'ouvrir
+        </template>
       </p>
-      <Button size="sm" variant="outline" class="gap-1.5" @click="openCreateColumn">
+      <Button
+        v-if="!globalKanban"
+        size="sm"
+        variant="outline"
+        class="gap-1.5"
+        @click="openCreateColumn"
+      >
         <Plus class="h-3.5 w-3.5" />
         Colonne
       </Button>
     </div>
 
     <VueDraggable
+      v-if="!globalKanban"
       v-model="localLists"
       :animation="180"
       handle=".kanban-column-handle"
@@ -177,6 +190,23 @@ function handleTasksReorder({ listId, tasks, sync }) {
         @tasks-reorder="handleTasksReorder"
       />
     </VueDraggable>
+
+    <div
+      v-else
+      class="flex items-stretch gap-3 overflow-x-auto pb-3"
+    >
+      <KanbanColumn
+        v-for="list in localLists"
+        :key="list.id"
+        :list="list"
+        :readonly-column="globalKanban"
+        class="min-h-[420px]"
+        @edit-list="openEditColumn"
+        @add-card="openCreateTask"
+        @open-card="openCard"
+        @tasks-reorder="handleTasksReorder"
+      />
+    </div>
 
     <ColumnFormDialog
       v-model:open="columnDialogOpen"

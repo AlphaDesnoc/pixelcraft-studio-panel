@@ -6,6 +6,7 @@ import KanbanCard from "./KanbanCard.vue";
 
 const props = defineProps({
   list: { type: Object, required: true },
+  readonlyColumn: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -27,12 +28,14 @@ function onDragEnd() {
 
 <template>
   <div
-    class="kanban-column flex h-full w-[280px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card/40"
+    class="kanban-column flex h-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card/40"
+    :class="readonlyColumn ? 'w-full' : 'w-[280px]'"
   >
     <header
       class="flex items-center gap-1.5 border-b border-border px-2.5 py-2"
     >
       <GripVertical
+        v-if="!readonlyColumn"
         class="kanban-column-handle h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground/50 active:cursor-grabbing"
       />
       <span
@@ -46,6 +49,7 @@ function onDragEnd() {
         {{ list.tasks.length }}
       </span>
       <button
+        v-if="!readonlyColumn"
         type="button"
         class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         @click="emit('editList', list)"

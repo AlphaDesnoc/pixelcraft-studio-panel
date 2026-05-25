@@ -87,6 +87,32 @@ class ProjectSpace
 
         $rankId = $this->rankIdForCreate();
 
+        if ($this->isGlobal) {
+            if (! $project->lists()->whereNull('rank_id')->exists()) {
+                $project->lists()->createMany(
+                    collect(TaskList::defaultsFor($project->id))
+                        ->map(fn ($l) => array_merge(
+                            collect($l)->except('project_id')->all(),
+                            ['rank_id' => null],
+                        ))
+                        ->all()
+                );
+            }
+
+            if (! $project->sheets()->whereNull('rank_id')->exists()) {
+                $project->sheets()->create([
+                    'name' => 'Feuille 1',
+                    'position' => 0,
+                    'rows' => 50,
+                    'cols' => 26,
+                    'data' => new \stdClass,
+                    'rank_id' => null,
+                ]);
+            }
+
+            return;
+        }
+
         if (! $project->lists()->where('rank_id', $rankId)->exists()) {
             $project->lists()->createMany(
                 collect(TaskList::defaultsFor($project->id))

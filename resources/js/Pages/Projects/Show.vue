@@ -401,6 +401,7 @@ const totalStatusCount = computed(() =>
           :priorities="priorities"
           :status-kinds="statusKinds"
           :rank-id="activeRankId"
+          :global-kanban="activeSpace === 'global' || activeSpace === 'full'"
         />
       </section>
 
