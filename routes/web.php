@@ -28,7 +28,7 @@ Route::get('/', function () {
         : redirect()->route('login');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::post('/realtime/heartbeat', [RealtimeController::class, 'heartbeat'])->name('realtime.heartbeat');
@@ -112,6 +112,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
         Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+        Route::patch('/users/{user}/active', [AdminUserController::class, 'toggleActive'])->name('users.toggle-active');
         Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
 
         Route::get('/projects', [AdminProjectController::class, 'index'])->name('projects.index');

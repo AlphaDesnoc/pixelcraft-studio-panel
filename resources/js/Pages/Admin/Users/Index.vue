@@ -8,6 +8,7 @@ import UserFormDialog from "@/Components/Admin/UserFormDialog.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Card } from "@/Components/ui/card";
+import { Switch } from "@/Components/ui/switch";
 
 defineProps({
   users: { type: Array, required: true },
@@ -20,6 +21,7 @@ const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 
 const dialogOpen = ref(false);
 const editingUser = ref(null);
+const togglingUserId = ref(null);
 
 const openCreate = () => {
   editingUser.value = null;
@@ -58,6 +60,25 @@ const confirmDelete = (user) => {
 };
 
 const roleVariant = (role) => (role === "admin" ? "default" : "secondary");
+
+const toggleActive = (user, isActive) => {
+  if (user.id === currentUserId.value) {
+    return;
+  }
+
+  togglingUserId.value = user.id;
+
+  router.patch(
+    route("admin.users.toggle-active", user.id),
+    { is_active: isActive },
+    {
+      preserveScroll: true,
+      onFinish: () => {
+        togglingUserId.value = null;
+      },
+    },
+  );
+};
 </script>
 
 <template>
@@ -92,6 +113,7 @@ const roleVariant = (role) => (role === "admin" ? "default" : "secondary");
               <th class="px-5 py-3 text-xs font-medium">Rôle</th>
               <th class="px-5 py-3 text-xs font-medium">Projets</th>
               <th class="px-5 py-3 text-xs font-medium">Tâches</th>
+              <th class="px-5 py-3 text-xs font-medium">Actif</th>
               <th class="px-5 py-3 text-xs font-medium">Créé le</th>
               <th class="px-5 py-3 text-right text-xs font-medium"></th>
             </tr>
@@ -101,6 +123,7 @@ const roleVariant = (role) => (role === "admin" ? "default" : "secondary");
               v-for="user in users"
               :key="user.id"
               class="border-b border-border/40 last:border-b-0 hover:bg-muted/30"
+              :class="{ 'opacity-60': !user.is_active }"
             >
               <td class="px-5 py-4 font-semibold text-foreground">
                 {{ user.name }}
@@ -118,6 +141,20 @@ const roleVariant = (role) => (role === "admin" ? "default" : "secondary");
               </td>
               <td class="px-5 py-4 text-muted-foreground">
                 {{ user.tasks_count }}
+              </td>
+              <td class="px-5 py-4">
+                <Switch
+                  :model-value="user.is_active"
+                  :disabled="
+                    user.id === currentUserId || togglingUserId === user.id
+                  "
+                  :aria-label="
+                    user.is_active
+                      ? `Désactiver ${user.name}`
+                      : `Activer ${user.name}`
+                  "
+                  @update:model-value="toggleActive(user, $event)"
+                />
               </td>
               <td class="px-5 py-4 text-muted-foreground">
                 {{ formatDate(user.created_at) }}
@@ -150,7 +187,7 @@ const roleVariant = (role) => (role === "admin" ? "default" : "secondary");
             </tr>
 
             <tr v-if="users.length === 0">
-              <td colspan="7" class="px-5 py-10 text-center text-muted-foreground">
+              <td colspan="8" class="px-5 py-10 text-center text-muted-foreground">
                 Aucun utilisateur pour l'instant.
               </td>
             </tr>

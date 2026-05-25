@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -27,6 +28,7 @@ class UserController extends Controller
                 'name',
                 'email',
                 'role',
+                'is_active',
                 'created_at',
             ])
             ->map(fn (User $user) => [
@@ -36,6 +38,7 @@ class UserController extends Controller
                 'pseudo' => $user->pseudo,
                 'role' => $user->role,
                 'is_admin' => $user->is_admin,
+                'is_active' => $user->is_active,
                 'projects_count' => $user->projects_count,
                 'tasks_count' => $user->tasks_count,
                 'created_at' => $user->created_at?->toIso8601String(),
@@ -80,6 +83,7 @@ class UserController extends Controller
             'email' => $email,
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
+            'is_active' => true,
             'email_verified_at' => now(),
         ]);
 
@@ -134,6 +138,31 @@ class UserController extends Controller
         $user->save();
 
         return back()->with('success', 'Utilisateur mis à jour.');
+    }
+
+    public function toggleActive(Request $request, User $user): RedirectResponse
+    {
+        if ($user->id === $request->user()->id) {
+            return back()->withErrors([
+                'user' => 'Vous ne pouvez pas désactiver votre propre compte.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $user->is_active = $validated['is_active'];
+        $user->save();
+
+        if (! $user->is_active) {
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+        }
+
+        return back()->with(
+            'success',
+            $user->is_active ? 'Utilisateur réactivé.' : 'Utilisateur désactivé.'
+        );
     }
 
     public function destroy(Request $request, User $user): RedirectResponse
