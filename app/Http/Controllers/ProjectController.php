@@ -10,6 +10,7 @@ use App\Models\TaskList;
 use App\Models\User;
 use App\Support\ProjectAccess;
 use App\Support\ProjectSpace;
+use App\Support\SpaceChatAccess;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -314,6 +315,9 @@ class ProjectController extends Controller
             'sheets' => $sheets,
             'fileNodes' => $fileNodes,
             'chatMessages' => $chatMessages,
+            'chatMembers' => $space->isFull
+                ? []
+                : SpaceChatAccess::membersWithPresence($project, $space->key),
             'members' => $members,
             'teamMembers' => $teamMembers,
             'teamCandidates' => $teamCandidates,

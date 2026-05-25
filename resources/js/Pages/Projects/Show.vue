@@ -70,6 +70,7 @@ const props = defineProps({
   bugPriorities: { type: Object, default: () => ({}) },
   bugStatuses: { type: Object, default: () => ({}) },
   chatMessages: { type: Array, default: () => [] },
+  chatMembers: { type: Array, default: () => [] },
 });
 
 const activeSpace = ref(props.activeSpace);
@@ -452,6 +453,7 @@ const totalStatusCount = computed(() =>
           :space-key="activeSpace"
           :space-label="spaceLabel"
           :active="activeTab === 'chat'"
+          :initial-chat-members="chatMembers"
         />
       </section>
 

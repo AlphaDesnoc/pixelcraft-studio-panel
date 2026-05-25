@@ -59,7 +59,7 @@ function applyEchoPresence(members, echoUsers) {
   }));
 }
 
-export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
+export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef, initialMembersRef = null) {
   const messages = ref([]);
   const chatMembers = ref([]);
   const loading = ref(false);
@@ -183,7 +183,7 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
     activeSpace = spaceKey;
     loading.value = true;
     messages.value = [];
-    chatMembers.value = [];
+    chatMembers.value = [...(initialMembersRef?.value ?? [])];
 
     try {
       await Promise.all([
