@@ -28,5 +28,4 @@ jobs:
           script: |
             set -e
             cd "${{ secrets.DEPLOY_PATH }}"
-            chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh
+            bash scripts/deploy.sh

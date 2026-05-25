@@ -376,7 +376,7 @@ Sur GitHub → repo → **Settings → Deploy keys → Add deploy key** : colle 
 
 ```bash
 chown -R deploy:deploy /opt/pixelcraft/pixelcraft-studio-panel
-chmod +x /opt/pixelcraft/pixelcraft-studio-panel/scripts/deploy.sh
+# chmod +x optionnel — le workflow utilise « bash scripts/deploy.sh »
 ```
 
 #### 2. Clé SSH pour GitHub Actions → serveur
