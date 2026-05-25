@@ -1,3 +1,11 @@
+# ── Stage 0 : dépendances PHP (Ziggy requis par Vite) ────────────────────────
+FROM composer:2 AS composer
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
+
 # ── Stage 1 : build des assets Vue/Vite ──────────────────────────────────────
 FROM node:22-bookworm-slim AS frontend
 
@@ -9,6 +17,7 @@ RUN npm ci
 COPY vite.config.js postcss.config.js tailwind.config.js jsconfig.json ./
 COPY resources ./resources
 COPY public ./public
+COPY --from=composer /app/vendor/tightenco/ziggy ./vendor/tightenco/ziggy
 
 ARG VITE_APP_NAME="PixelCraft Studio"
 ARG VITE_REVERB_APP_KEY=""

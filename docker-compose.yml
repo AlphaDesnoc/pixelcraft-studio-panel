@@ -77,6 +77,7 @@ services:
 
   reverb:
     image: pixelcraft-panel-app:latest
+    pull_policy: never
     restart: unless-stopped
     command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
     env_file:
@@ -99,6 +100,7 @@ services:
 
   worker:
     image: pixelcraft-panel-app:latest
+    pull_policy: never
     restart: unless-stopped
     command: ["php", "artisan", "queue:work", "database", "--sleep=3", "--tries=3", "--max-time=3600"]
     env_file:
