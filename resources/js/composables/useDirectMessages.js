@@ -1,0 +1,324 @@
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import axios from "axios";
+import { bindPresenceHandlers } from "@/lib/presence.js";
+import { onDirectMessage } from "@/composables/useSiteRealtime.js";
+
+const POLL_MS = 2000;
+const HIGHLIGHT_MS = 2600;
+
+function sortMessages(list) {
+  return [...list].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+}
+
+function sortConversations(list) {
+  return [...list].sort((a, b) => {
+    const aTime = new Date(a.last_message?.created_at ?? a.last_message_at ?? 0).getTime();
+    const bTime = new Date(b.last_message?.created_at ?? b.last_message_at ?? 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function mergeMessages(existing, incoming) {
+  if (incoming.length === 0) {
+    return existing;
+  }
+
+  const lastExisting = existing[existing.length - 1]?.id;
+  const lastIncoming = incoming[incoming.length - 1]?.id;
+  if (existing.length === incoming.length && lastExisting === lastIncoming) {
+    return existing;
+  }
+
+  const byId = new Map(existing.map((m) => [m.id, m]));
+  for (const message of incoming) {
+    byId.set(message.id, message);
+  }
+
+  return sortMessages([...byId.values()]);
+}
+
+function participantFromInbox(inbox, currentUserId) {
+  return (
+    inbox.participants?.find((p) => p.id !== currentUserId) ??
+    inbox.participant ??
+    null
+  );
+}
+
+export function useDirectMessages({
+  conversationIdRef,
+  currentUserIdRef,
+  conversationsRef,
+}) {
+  const messages = ref([]);
+  const onlineUsers = ref([]);
+  const loading = ref(false);
+  const sending = ref(false);
+  const live = ref(false);
+  const highlightedIds = ref(new Set());
+  const listRef = ref(null);
+  let pollTimer = null;
+  let channel = null;
+  let activeConversationId = null;
+  let unsubscribeInbox = null;
+  const highlightTimers = new Map();
+
+  function scrollToBottom(smooth = true) {
+    if (!listRef.value) return;
+    listRef.value.scrollTo({
+      top: listRef.value.scrollHeight,
+      behavior: smooth ? "smooth" : "auto",
+    });
+  }
+
+  function highlightMessage(messageId) {
+    if (!messageId) return;
+    highlightedIds.value = new Set([...highlightedIds.value, messageId]);
+    if (highlightTimers.has(messageId)) {
+      clearTimeout(highlightTimers.get(messageId));
+    }
+    highlightTimers.set(
+      messageId,
+      setTimeout(() => {
+        const next = new Set(highlightedIds.value);
+        next.delete(messageId);
+        highlightedIds.value = next;
+        highlightTimers.delete(messageId);
+      }, HIGHLIGHT_MS),
+    );
+  }
+
+  function leaveConversation() {
+    if (channel && window.Echo && activeConversationId) {
+      window.Echo.leave(`direct.${activeConversationId}`);
+      channel = null;
+    }
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    activeConversationId = null;
+    onlineUsers.value = [];
+  }
+
+  function upsertConversation(inbox, { incrementUnread = false } = {}) {
+    if (!inbox?.id || !conversationsRef?.value) return;
+
+    const currentUserId = currentUserIdRef.value;
+    const participant =
+      inbox.participant ?? participantFromInbox(inbox, currentUserId);
+    const existing = conversationsRef.value.find((c) => c.id === inbox.id);
+    const isActive = conversationIdRef.value === inbox.id;
+    const fromSelf = inbox.last_message?.user_id === currentUserId;
+
+    const unreadCount = (() => {
+      if (isActive) return 0;
+      if (incrementUnread && !fromSelf) {
+        return (existing?.unread_count ?? 0) + 1;
+      }
+      return existing?.unread_count ?? 0;
+    })();
+
+    const next = {
+      id: inbox.id,
+      last_message_at: inbox.last_message_at,
+      last_message: inbox.last_message,
+      participant: participant ?? existing?.participant ?? null,
+      unread_count: unreadCount,
+    };
+
+    const list = existing
+      ? conversationsRef.value.map((c) => (c.id === inbox.id ? { ...c, ...next } : c))
+      : [...conversationsRef.value, next];
+
+    conversationsRef.value = sortConversations(list);
+  }
+
+  function appendMessage(message, { highlight = true, scroll = true } = {}) {
+    if (!message?.id || messages.value.some((m) => m.id === message.id)) {
+      return false;
+    }
+    messages.value = sortMessages([...messages.value, message]);
+    if (highlight) {
+      highlightMessage(message.id);
+    }
+    if (scroll) {
+      nextTick(() => scrollToBottom(true));
+    }
+    return true;
+  }
+
+  function handleIncoming(event, { fromInbox = false, skipUnreadIncrement = false } = {}) {
+    const message = event?.message ?? event;
+    const inbox = event?.inbox;
+    const currentUserId = currentUserIdRef.value;
+    const conversationId = message?.direct_conversation_id ?? inbox?.id;
+    const isActive = conversationIdRef.value === conversationId;
+    const fromOther = message?.user?.id && message.user.id !== currentUserId;
+
+    if (inbox) {
+      upsertConversation(inbox, {
+        incrementUnread: fromInbox && !skipUnreadIncrement && !isActive && fromOther,
+      });
+    }
+
+    if (isActive && message?.id) {
+      appendMessage(message, { highlight: fromOther, scroll: true });
+      if (fromOther) {
+        markRead(conversationId);
+      }
+    }
+  }
+
+  async function markRead(conversationId) {
+    if (!conversationId) return;
+    try {
+      await axios.post(route("messages.conversations.read", conversationId));
+      if (conversationsRef?.value) {
+        conversationsRef.value = conversationsRef.value.map((c) =>
+          c.id === conversationId ? { ...c, unread_count: 0 } : c,
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchMessages(conversationId, { scroll = false } = {}) {
+    const { data } = await axios.get(
+      route("messages.conversations.messages", conversationId),
+    );
+    const incoming = data.messages ?? [];
+    const merged = mergeMessages(messages.value, incoming);
+    if (merged !== messages.value) {
+      const previousIds = new Set(messages.value.map((m) => m.id));
+      messages.value = merged;
+      for (const message of merged) {
+        if (!previousIds.has(message.id) && message.user?.id !== currentUserIdRef.value) {
+          highlightMessage(message.id);
+        }
+      }
+      if (scroll) {
+        await nextTick();
+        scrollToBottom(false);
+      }
+    }
+  }
+
+  function subscribe(conversationId) {
+    if (!window.Echo || !conversationId) {
+      return;
+    }
+
+    channel = window.Echo.join(`direct.${conversationId}`);
+    bindPresenceHandlers(channel, onlineUsers);
+    channel
+      .listen(".DirectMessageSent", (event) => handleIncoming(event, { fromInbox: false }))
+      .listen("DirectMessageSent", (event) => handleIncoming(event, { fromInbox: false }))
+      .error((error) => {
+        console.warn("[direct-messages] Echo subscription error", error);
+      });
+    live.value = true;
+  }
+
+  function startPolling(conversationId) {
+    pollTimer = setInterval(() => {
+      fetchMessages(conversationId).catch(() => {});
+    }, POLL_MS);
+  }
+
+  async function start(conversationId, initialMessages = []) {
+    leaveConversation();
+    activeConversationId = conversationId;
+    loading.value = true;
+    messages.value = sortMessages(initialMessages);
+
+    try {
+      await fetchMessages(conversationId, { scroll: true });
+      subscribe(conversationId);
+      startPolling(conversationId);
+      await markRead(conversationId);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function send(body, conversationId, recipientId = null) {
+    const trimmed = body?.trim();
+    if (!trimmed || sending.value) {
+      return null;
+    }
+
+    sending.value = true;
+    try {
+      const payload = { body: trimmed };
+      if (conversationId) {
+        payload.conversation_id = conversationId;
+      } else if (recipientId) {
+        payload.recipient_id = recipientId;
+      } else {
+        return null;
+      }
+
+      const { data } = await axios.post(route("messages.store"), payload);
+      appendMessage(data.message, { highlight: false, scroll: true });
+      if (data.conversation) {
+        upsertConversation({
+          id: data.conversation.id,
+          last_message_at: data.conversation.last_message_at,
+          last_message: data.conversation.last_message,
+          participant: data.conversation.participant,
+        });
+      }
+      return data;
+    } finally {
+      sending.value = false;
+    }
+  }
+
+  watch(
+    conversationIdRef,
+    (conversationId, previousId) => {
+      if (conversationId && conversationId !== previousId) {
+        start(conversationId);
+        return;
+      }
+      if (!conversationId) {
+        leaveConversation();
+        messages.value = [];
+        loading.value = false;
+      }
+    },
+    { immediate: false },
+  );
+
+  onMounted(() => {
+    unsubscribeInbox = onDirectMessage((event, opts) =>
+      handleIncoming(event, { fromInbox: true, skipUnreadIncrement: opts?.skipUnreadIncrement }),
+    );
+  });
+
+  onUnmounted(() => {
+    leaveConversation();
+    unsubscribeInbox?.();
+    highlightTimers.forEach((timer) => clearTimeout(timer));
+    highlightTimers.clear();
+  });
+
+  return {
+    messages,
+    onlineUsers,
+    loading,
+    sending,
+    live,
+    highlightedIds,
+    send,
+    listRef,
+    start,
+    leaveConversation,
+    markRead,
+    upsertConversation,
+  };
+}

@@ -1,0 +1,237 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Project;
+use App\Models\Rank;
+use App\Models\Task;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class RankController extends Controller
+{
+    public function index(Request $request, Project $project): Response
+    {
+        $user = $request->user();
+        $isAdmin = $user->is_admin;
+        $isMember = $project->members()->whereKey($user->id)->exists();
+        abort_unless($isAdmin || $isMember, 403);
+
+        $this->ensureDefaultRanks($project);
+
+        $project->load([
+            'members:id,name,email',
+            'ranks' => fn ($q) => $q->orderBy('position'),
+            'ranks.responsible:id,name,email',
+            'ranks.members:id,name,email',
+        ]);
+
+        $members = $project->members->map(fn ($m) => [
+            'id' => $m->id,
+            'name' => $m->name,
+            'email' => $m->email,
+        ])->values();
+
+        $ranks = $project->ranks->map(fn ($rank) => $this->serializeRank($rank))->values();
+
+        return Inertia::render('Projects/Ranks', [
+            'project' => [
+                'id' => $project->id,
+                'name' => $project->name,
+                'slug' => $project->slug,
+                'image_url' => $project->image_url,
+                'status' => $project->status,
+            ],
+            'ranks' => $ranks,
+            'members' => $members,
+            'canEdit' => $isAdmin,
+        ]);
+    }
+
+    public function store(Request $request, Project $project): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        $maxPos = (int) $project->ranks()->max('position');
+
+        $project->ranks()->create([
+            'name' => $validated['name'],
+            'slug' => Rank::uniqueSlug($project->id, $validated['name']),
+            'description' => $validated['description'] ?? null,
+            'color' => $validated['color'] ?? '#7c5cff',
+            'position' => $maxPos + 1,
+        ]);
+
+        return back();
+    }
+
+    public function update(Request $request, Project $project, Rank $rank): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        abort_unless($rank->project_id === $project->id, 404);
+
+        $validated = $request->validate([
+            'name' => ['nullable', 'string', 'max:80'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'manages_bugs' => ['nullable', 'boolean'],
+        ]);
+
+        $update = [];
+        if (! empty($validated['name'])) {
+            $update['name'] = $validated['name'];
+            $update['slug'] = Rank::uniqueSlug($project->id, $validated['name'], $rank->id);
+        }
+        if (array_key_exists('description', $validated)) {
+            $update['description'] = $validated['description'];
+        }
+        if (! empty($validated['color'])) {
+            $update['color'] = $validated['color'];
+        }
+        if (array_key_exists('manages_bugs', $validated) && $validated['manages_bugs'] !== null) {
+            $update['manages_bugs'] = (bool) $validated['manages_bugs'];
+        }
+
+        if (! empty($update)) {
+            $rank->update($update);
+        }
+
+        return back();
+    }
+
+    public function destroy(Request $request, Project $project, Rank $rank): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        abort_unless($rank->project_id === $project->id, 404);
+
+        $rank->delete();
+
+        $project->ranks()
+            ->orderBy('position')
+            ->get()
+            ->each(fn ($r, $idx) => $r->update(['position' => $idx]));
+
+        return back();
+    }
+
+    public function addMember(Request $request, Project $project, Rank $rank): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        abort_unless($rank->project_id === $project->id, 404);
+
+        $validated = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+
+        abort_unless(
+            $project->members()->whereKey($validated['user_id'])->exists(),
+            422,
+            'Cet utilisateur n\'est pas membre du projet.',
+        );
+
+        $rank->members()->syncWithoutDetaching([$validated['user_id']]);
+
+        return back();
+    }
+
+    public function removeMember(Request $request, Project $project, Rank $rank, int $userId): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        abort_unless($rank->project_id === $project->id, 404);
+
+        $rank->members()->detach($userId);
+        if ($rank->responsible_id === $userId) {
+            $rank->update(['responsible_id' => null]);
+        }
+
+        return back();
+    }
+
+    public function setResponsible(Request $request, Project $project, Rank $rank): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        abort_unless($rank->project_id === $project->id, 404);
+
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+        ]);
+
+        $userId = $validated['user_id'] ?? null;
+        if ($userId !== null) {
+            abort_unless(
+                $project->members()->whereKey($userId)->exists(),
+                422,
+                'Cet utilisateur n\'est pas membre du projet.',
+            );
+            $rank->members()->syncWithoutDetaching([$userId]);
+        }
+
+        $rank->update(['responsible_id' => $userId]);
+
+        return back();
+    }
+
+    public function toggleBugs(Request $request, Project $project, Rank $rank): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        abort_unless($rank->project_id === $project->id, 404);
+
+        $rank->update(['manages_bugs' => ! $rank->manages_bugs]);
+
+        return back();
+    }
+
+    private function ensureDefaultRanks(Project $project): void
+    {
+        if ($project->ranks()->exists()) {
+            return;
+        }
+        foreach (Rank::defaultsFor($project->id) as $r) {
+            $project->ranks()->create($r);
+        }
+    }
+
+    private function ensureCanEdit(Request $request, Project $project): void
+    {
+        $user = $request->user();
+        $isAdmin = $user->is_admin;
+        abort_unless($isAdmin, 403);
+    }
+
+    private function serializeRank(Rank $rank): array
+    {
+        return [
+            'id' => $rank->id,
+            'name' => $rank->name,
+            'slug' => $rank->slug,
+            'color' => $rank->color,
+            'description' => $rank->description,
+            'manages_bugs' => (bool) $rank->manages_bugs,
+            'position' => (int) $rank->position,
+            'responsible' => $rank->responsible ? [
+                'id' => $rank->responsible->id,
+                'name' => $rank->responsible->name,
+            ] : null,
+            'members' => $rank->members->map(fn ($m) => [
+                'id' => $m->id,
+                'name' => $m->name,
+            ])->values(),
+            'counts' => [
+                'members' => $rank->members->count(),
+                'tasks' => Task::query()
+                    ->where('project_id', $rank->project_id)
+                    ->whereHas('list', fn ($q) => $q->where('rank_id', $rank->id))
+                    ->count(),
+                'notes' => $rank->notes()->count(),
+            ],
+        ];
+    }
+}

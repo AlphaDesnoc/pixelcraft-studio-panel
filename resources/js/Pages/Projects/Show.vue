@@ -1,0 +1,494 @@
+<script setup>
+import { computed, ref, watch } from "vue";
+import { Head, Link, router } from "@inertiajs/vue3";
+import {
+  BarChart3,
+  Bell,
+  CheckCircle2,
+  Clock,
+  StickyNote,
+  TriangleAlert,
+  Users,
+  Shield,
+  Calendar,
+} from "lucide-vue-next";
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import { Avatar } from "@/Components/ui/avatar";
+import { Badge } from "@/Components/ui/badge";
+import { Button } from "@/Components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/Components/ui/card";
+import EspaceBadge from "@/Components/Projects/EspaceBadge.vue";
+import ProjectTabs from "@/Components/Projects/ProjectTabs.vue";
+import StatChip from "@/Components/Projects/StatChip.vue";
+import DonutChart from "@/Components/Projects/DonutChart.vue";
+import BarChart from "@/Components/Projects/BarChart.vue";
+import KanbanBoard from "@/Components/Kanban/KanbanBoard.vue";
+import CalendarView from "@/Components/Calendar/Calendar.vue";
+import Gantt from "@/Components/Gantt/Gantt.vue";
+import NotesView from "@/Components/Notes/NotesView.vue";
+import SpreadsheetView from "@/Components/Spreadsheet/SpreadsheetView.vue";
+import FilesView from "@/Components/Files/FilesView.vue";
+import BugsView from "@/Components/Bugs/BugsView.vue";
+import ChatView from "@/Components/Chat/ChatView.vue";
+import TeamView from "@/Components/Team/TeamView.vue";
+import { spaceOnlyProps } from "@/composables/useProjectSpace.js";
+
+const props = defineProps({
+  project: { type: Object, required: true },
+  activeSpace: { type: String, default: "global" },
+  activeRankId: { type: Number, default: null },
+  spaceLabel: { type: String, default: "Global" },
+  stats: { type: Object, required: true },
+  progress: { type: Number, default: 0 },
+  byStatus: { type: Array, default: () => [] },
+  byPriority: { type: Array, default: () => [] },
+  spaces: { type: Array, default: () => [] },
+  ranks: { type: Array, default: () => [] },
+  canManageRanks: { type: Boolean, default: false },
+  lists: { type: Array, default: () => [] },
+  events: { type: Array, default: () => [] },
+  notes: { type: Array, default: () => [] },
+  sheets: { type: Array, default: () => [] },
+  fileNodes: { type: Array, default: () => [] },
+  members: { type: Array, default: () => [] },
+  teamMembers: { type: Array, default: () => [] },
+  teamCandidates: { type: Array, default: () => [] },
+  canManageTeam: { type: Boolean, default: false },
+  memberRoles: { type: Object, default: () => ({}) },
+  priorities: { type: Object, default: () => ({}) },
+  statusKinds: { type: Object, default: () => ({}) },
+  canReportBugs: { type: Boolean, default: false },
+  canManageBugs: { type: Boolean, default: false },
+  bugs: { type: Array, default: () => [] },
+  bugRanks: { type: Array, default: () => [] },
+  bugPriorities: { type: Object, default: () => ({}) },
+  bugStatuses: { type: Object, default: () => ({}) },
+  chatMessages: { type: Array, default: () => [] },
+});
+
+const activeSpace = ref(props.activeSpace);
+
+watch(
+  () => props.activeSpace,
+  (value) => {
+    activeSpace.value = value;
+  },
+);
+
+watch(activeSpace, (space) => {
+  if (activeTab.value === "bugs" && !bugsAccess.value.show) {
+    activeTab.value = "overview";
+  }
+  if (activeTab.value === "chat" && space === "full") {
+    activeTab.value = "overview";
+  }
+  if (activeTab.value === "team" && space !== "global") {
+    activeTab.value = "overview";
+  }
+  if (space === props.activeSpace) return;
+  router.get(
+    route("projects.show", props.project.slug),
+    { space },
+    {
+      preserveState: true,
+      preserveScroll: true,
+      replace: true,
+      only: spaceOnlyProps(),
+    },
+  );
+});
+
+const activeRankId = computed(() => props.activeRankId);
+
+const bugsAccess = computed(() => {
+  const space = activeSpace.value;
+  if (space === "global") {
+    return { show: true, canReport: true, canManage: false };
+  }
+  if (space === "full") {
+    return { show: false, canReport: false, canManage: false };
+  }
+  const rank = props.ranks.find((r) => r.key === space);
+  const canManage = Boolean(rank?.manages_bugs);
+  return { show: canManage, canReport: false, canManage };
+});
+
+const baseTabs = [
+  { key: "overview", label: "Vue d'ensemble" },
+  { key: "kanban", label: "Kanban" },
+  { key: "calendar", label: "Calendrier" },
+  { key: "gantt", label: "Gantt" },
+  { key: "notes", label: "Notes" },
+  { key: "spreadsheet", label: "Tableur" },
+  { key: "files", label: "Fichiers" },
+  { key: "chat", label: "Chat" },
+  { key: "team", label: "Équipe" },
+];
+
+const tabs = computed(() => {
+  let result = [...baseTabs];
+  if (activeSpace.value === "full") {
+    result = result.filter((t) => t.key !== "chat");
+  }
+  if (activeSpace.value !== "global") {
+    result = result.filter((t) => t.key !== "team");
+  }
+  if (bugsAccess.value.show) {
+    const chatIndex = result.findIndex((t) => t.key === "chat");
+    result.splice(chatIndex, 0, {
+      key: "bugs",
+      label: "Bugs",
+    });
+  }
+  return result;
+});
+
+watch(
+  () => bugsAccess.value.show,
+  (show) => {
+    if (activeTab.value === "bugs" && !show) {
+      activeTab.value = "overview";
+    }
+  },
+);
+
+const activeTab = ref("overview");
+
+const initials = computed(() =>
+  props.project.name
+    .split(" ")
+    .map((part) => part.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase(),
+);
+
+const statusLabel = computed(
+  () =>
+    ({
+      active: "Actif",
+      completed: "Terminé",
+      archived: "Archivé",
+    })[props.project.status] ?? props.project.status,
+);
+
+const statusVariant = computed(
+  () =>
+    ({
+      active: "success",
+      completed: "default",
+      archived: "secondary",
+    })[props.project.status] ?? "secondary",
+);
+
+const statusColors = {
+  todo: "#a78bfa",
+  in_progress: "#38bdf8",
+  done: "#34d399",
+};
+
+const totalStatusCount = computed(() =>
+  props.byStatus.reduce((acc, s) => acc + s.count, 0),
+);
+</script>
+
+<template>
+  <Head :title="project.name" />
+
+  <AuthenticatedLayout>
+    <div class="flex flex-col gap-5">
+      <header class="flex flex-col gap-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="flex items-start gap-3">
+            <Avatar
+              :src="project.image_url ?? ''"
+              :fallback="initials"
+              size="lg"
+              rounded="lg"
+            />
+            <div>
+              <div class="flex items-center gap-2">
+                <h1 class="text-2xl font-semibold tracking-tight">
+                  {{ project.name }}
+                </h1>
+                <Badge :variant="statusVariant">{{ statusLabel }}</Badge>
+              </div>
+              <p
+                v-if="project.description"
+                class="mt-1 max-w-xl text-sm text-muted-foreground"
+              >
+                {{ project.description }}
+              </p>
+            </div>
+          </div>
+
+          <Button
+            v-if="canManageRanks"
+            as-child
+            variant="outline"
+            size="sm"
+            class="gap-1.5"
+          >
+            <Link :href="route('projects.ranks.index', project.slug)">
+              <Shield class="h-3.5 w-3.5" />
+              Gérer les ranks
+            </Link>
+          </Button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <span
+            class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+          >
+            Espace
+          </span>
+          <EspaceBadge
+            v-for="space in spaces"
+            :key="space.key"
+            :label="space.label"
+            :icon="space.icon"
+            :active="activeSpace === space.key"
+            @click="activeSpace = space.key"
+          />
+          <span class="mx-1 h-4 w-px bg-border" />
+          <EspaceBadge
+            v-for="rank in ranks"
+            :key="rank.key"
+            :label="rank.label"
+            :color="rank.color"
+            :active="activeSpace === rank.key"
+            @click="activeSpace = rank.key"
+          />
+        </div>
+      </header>
+
+      <ProjectTabs :tabs="tabs" :active="activeTab" @update:active="activeTab = $event" />
+
+      <p class="text-xs text-muted-foreground">
+        Espace actif : <span class="font-medium text-foreground">{{ spaceLabel }}</span>
+      </p>
+
+      <section v-if="activeTab === 'overview'" class="flex flex-col gap-4">
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+          <StatChip
+            label="Tâches totales"
+            :value="stats.tasks_total"
+            :icon="BarChart3"
+            tint="info"
+          />
+          <StatChip
+            label="Terminées"
+            :value="stats.tasks_done"
+            :icon="CheckCircle2"
+            tint="success"
+          />
+          <StatChip
+            label="En cours"
+            :value="stats.tasks_in_progress"
+            :icon="Clock"
+            tint="info"
+          />
+          <StatChip
+            label="En retard"
+            :value="stats.tasks_overdue"
+            :icon="TriangleAlert"
+            tint="danger"
+          />
+          <StatChip
+            label="Membres"
+            :value="stats.members"
+            :icon="Users"
+            tint="primary"
+          />
+          <StatChip
+            label="Notes"
+            :value="stats.notes"
+            :icon="StickyNote"
+            tint="default"
+          />
+          <StatChip
+            label="Événements"
+            :value="stats.events"
+            :icon="Calendar"
+            tint="default"
+          />
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Progression globale</CardTitle>
+              <CardDescription>Avancement moyen du projet</CardDescription>
+            </CardHeader>
+            <CardContent class="flex flex-col items-center justify-center gap-3 py-6">
+              <DonutChart :value="progress" :size="180" />
+              <p class="text-xs text-muted-foreground">
+                Taux de complétion : {{ progress }}%
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Par statut</CardTitle>
+              <CardDescription>Répartition des tâches</CardDescription>
+            </CardHeader>
+            <CardContent class="flex h-[260px] flex-col justify-center">
+              <div
+                v-if="totalStatusCount === 0"
+                class="flex h-full flex-col items-center justify-center text-center"
+              >
+                <Bell class="h-6 w-6 text-muted-foreground/60" />
+                <p class="mt-2 text-sm text-muted-foreground">
+                  Aucune tâche pour le moment
+                </p>
+              </div>
+              <ul v-else class="flex flex-col gap-3">
+                <li
+                  v-for="status in byStatus"
+                  :key="status.key"
+                  class="flex flex-col gap-1"
+                >
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="flex items-center gap-1.5 font-medium">
+                      <span
+                        class="inline-block h-2 w-2 rounded-full"
+                        :style="{ backgroundColor: statusColors[status.key] }"
+                      />
+                      {{ status.label }}
+                    </span>
+                    <span class="text-muted-foreground">
+                      {{ status.count }}
+                    </span>
+                  </div>
+                  <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      class="h-full rounded-full transition-all"
+                      :style="{
+                        width: `${(status.count / Math.max(1, totalStatusCount)) * 100}%`,
+                        backgroundColor: statusColors[status.key],
+                      }"
+                    />
+                  </div>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Par priorité</CardTitle>
+              <CardDescription>Distribution des priorités</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BarChart :data="byPriority" :height="220" />
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section v-else-if="activeTab === 'kanban'">
+        <KanbanBoard
+          :project-slug="project.slug"
+          :lists="lists"
+          :members="members"
+          :priorities="priorities"
+          :status-kinds="statusKinds"
+          :rank-id="activeRankId"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'calendar'">
+        <CalendarView
+          :project-slug="project.slug"
+          :events="events"
+          :rank-id="activeRankId"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'gantt'">
+        <Gantt
+          :project-slug="project.slug"
+          :lists="lists"
+          :priorities="priorities"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'notes'">
+        <NotesView
+          :project-slug="project.slug"
+          :notes="notes"
+          :rank-id="activeRankId"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'spreadsheet'">
+        <SpreadsheetView
+          :project-slug="project.slug"
+          :sheets="sheets"
+          :rank-id="activeRankId"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'files'">
+        <FilesView
+          :project-slug="project.slug"
+          :nodes="fileNodes"
+          :rank-id="activeRankId"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'chat'">
+        <ChatView
+          :project-slug="project.slug"
+          :project-id="project.id"
+          :space-key="activeSpace"
+          :space-label="spaceLabel"
+          :active="activeTab === 'chat'"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'bugs'">
+        <BugsView
+          :project-slug="project.slug"
+          :bugs="bugs"
+          :can-report="bugsAccess.canReport"
+          :can-manage="bugsAccess.canManage"
+          :priorities="bugPriorities"
+          :statuses="bugStatuses"
+          :members="members"
+          :bug-ranks="bugRanks"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'team'">
+        <TeamView
+          :project-slug="project.slug"
+          :team-members="teamMembers"
+          :team-candidates="teamCandidates"
+          :can-manage-team="canManageTeam"
+          :can-manage-ranks="canManageRanks"
+          :member-roles="memberRoles"
+        />
+      </section>
+
+      <section
+        v-else
+        class="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card/30 px-8 py-12 text-center"
+      >
+        <p class="text-sm font-medium">
+          Section "{{ tabs.find((t) => t.key === activeTab)?.label ?? activeTab }}" à venir
+        </p>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Cette vue sera implémentée plus tard.
+        </p>
+      </section>
+    </div>
+  </AuthenticatedLayout>
+</template>

@@ -1,0 +1,204 @@
+<script setup>
+import { computed, ref, toRef } from "vue";
+import { usePage } from "@inertiajs/vue3";
+import { MessageSquare, Send } from "lucide-vue-next";
+import { Badge } from "@/Components/ui/badge";
+import { Button } from "@/Components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/Components/ui/dialog";
+import { Textarea } from "@/Components/ui/textarea";
+import OnlineUsersBar from "@/Components/Chat/OnlineUsersBar.vue";
+import { useBugChat } from "@/composables/useBugChat.js";
+
+const props = defineProps({
+  open: { type: Boolean, required: true },
+  projectSlug: { type: String, required: true },
+  bug: { type: Object, default: null },
+  priorities: { type: Object, required: true },
+  statuses: { type: Object, required: true },
+});
+
+const emits = defineEmits(["update:open"]);
+
+const page = usePage();
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+const bugRef = toRef(props, "bug");
+const openRef = toRef(props, "open");
+
+const draft = ref("");
+const { messages, onlineUsers, loading, sending, send, listRef } = useBugChat(
+  props.projectSlug,
+  openRef,
+  bugRef,
+);
+
+const priorityVariant = computed(() => ({
+  low: "secondary",
+  medium: "default",
+  high: "destructive",
+  urgent: "destructive",
+})[props.bug?.priority] ?? "secondary");
+
+const statusVariant = computed(() => ({
+  open: "default",
+  in_progress: "secondary",
+  closed: "secondary",
+})[props.bug?.status] ?? "secondary");
+
+function formatTime(iso) {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
+function initials(name) {
+  return (name ?? "?")
+    .split(" ")
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+async function submitMessage() {
+  if (!draft.value.trim()) return;
+  const body = draft.value;
+  draft.value = "";
+  await send(body);
+}
+</script>
+
+<template>
+  <Dialog :open="open && Boolean(bug)" @update:open="(v) => emits('update:open', v)">
+    <DialogContent class="flex max-h-[90vh] w-full max-w-3xl flex-col gap-0 overflow-hidden p-0">
+      <DialogHeader class="border-b border-border px-5 py-4">
+        <div class="flex flex-wrap items-start justify-between gap-3 pr-6">
+          <div class="min-w-0 flex-1">
+            <DialogTitle class="text-left">{{ bug?.title }}</DialogTitle>
+            <p
+              v-if="bug?.description"
+              class="mt-1 whitespace-pre-wrap text-sm text-muted-foreground"
+            >
+              {{ bug.description }}
+            </p>
+          </div>
+          <div v-if="bug" class="flex shrink-0 items-center gap-1.5">
+            <Badge :variant="statusVariant">{{ statuses[bug.status] ?? bug.status }}</Badge>
+            <Badge :variant="priorityVariant">
+              {{ priorities[bug.priority] ?? bug.priority }}
+            </Badge>
+          </div>
+        </div>
+
+        <div
+          v-if="bug?.screenshots?.length"
+          class="mt-3 flex flex-wrap gap-2"
+        >
+          <a
+            v-for="(src, idx) in bug.screenshots"
+            :key="idx"
+            :href="src"
+            target="_blank"
+            class="block overflow-hidden rounded-md border border-border"
+          >
+            <img :src="src" alt="" class="h-14 w-14 object-cover" />
+          </a>
+        </div>
+
+        <p v-if="bug?.reporter" class="mt-2 text-xs text-muted-foreground">
+          Signalé par {{ bug.reporter.name }}
+          <span v-if="bug.assignee"> · Assigné à {{ bug.assignee.name }}</span>
+        </p>
+      </DialogHeader>
+
+      <section class="flex min-h-0 flex-1 flex-col">
+        <div class="flex items-center gap-2 border-b border-border px-5 py-2.5">
+          <MessageSquare class="h-4 w-4 text-primary" />
+          <span class="text-sm font-medium text-foreground">Discussion</span>
+          <span class="text-xs text-muted-foreground">
+            Échange entre le reporter et l'équipe de gestion
+          </span>
+        </div>
+
+        <OnlineUsersBar
+          :users="onlineUsers"
+          :current-user-id="currentUserId"
+          label="Sur ce ticket"
+        />
+
+        <div
+          ref="listRef"
+          class="min-h-[220px] flex-1 space-y-3 overflow-y-auto px-5 py-4"
+        >
+          <div
+            v-if="loading"
+            class="flex h-full items-center justify-center text-sm text-muted-foreground"
+          >
+            Chargement des messages…
+          </div>
+          <div
+            v-else-if="messages.length === 0"
+            class="flex h-full items-center justify-center text-center text-sm text-muted-foreground"
+          >
+            Aucun message. Démarrez la conversation avec l'équipe.
+          </div>
+          <div
+            v-for="message in messages"
+            :key="message.id"
+            class="flex gap-2.5"
+            :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+          >
+            <div
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
+            >
+              {{ initials(message.user?.name) }}
+            </div>
+            <div
+              class="max-w-[75%] rounded-xl px-3 py-2"
+              :class="
+                message.user?.id === currentUserId
+                  ? 'bg-primary/15 text-foreground'
+                  : 'bg-muted/60 text-foreground'
+              "
+            >
+              <p class="text-[11px] font-medium text-muted-foreground">
+                {{ message.user?.name }}
+                · {{ formatTime(message.created_at) }}
+              </p>
+              <p class="mt-0.5 whitespace-pre-wrap text-sm">{{ message.body }}</p>
+            </div>
+          </div>
+        </div>
+
+        <form
+          class="flex items-end gap-2 border-t border-border px-5 py-4"
+          @submit.prevent="submitMessage"
+        >
+          <Textarea
+            v-model="draft"
+            placeholder="Écrire un message…"
+            rows="2"
+            class="min-h-[44px] flex-1 resize-none"
+            @keydown.enter.exact.prevent="submitMessage"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            class="h-10 w-10 shrink-0"
+            :disabled="sending || !draft.trim()"
+          >
+            <Send class="h-4 w-4" />
+          </Button>
+        </form>
+      </section>
+    </DialogContent>
+  </Dialog>
+</template>
