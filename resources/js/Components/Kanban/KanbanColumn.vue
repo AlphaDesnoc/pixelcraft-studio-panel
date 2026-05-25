@@ -28,8 +28,7 @@ function onDragEnd() {
 
 <template>
   <div
-    class="kanban-column flex h-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card/40"
-    :class="readonlyColumn ? 'w-full' : 'w-[280px]'"
+    class="kanban-column flex h-full w-[280px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card/40"
   >
     <header
       class="flex items-center gap-1.5 border-b border-border px-2.5 py-2"
