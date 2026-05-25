@@ -60,7 +60,7 @@ async function submitMessage() {
 </script>
 
 <template>
-  <div class="flex h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-card">
+  <div class="flex h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-card">
     <header class="shrink-0 border-b border-border px-4 py-3">
       <div class="flex items-center gap-2">
         <MessageSquare class="h-4 w-4 text-primary" />
