@@ -9,7 +9,7 @@ upstream pixelcraft_app {
 
 server {
     listen 80;
-    server_name panel.tondomaine.fr;
+    server_name panel.pixelcraft-studios.fr;
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -23,10 +23,10 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name panel.tondomaine.fr;
+    server_name panel.pixelcraft-studios.fr;
 
-    ssl_certificate     /etc/letsencrypt/live/panel.tondomaine.fr/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/panel.tondomaine.fr/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/panel.pixelcraft-studios.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/panel.pixelcraft-studios.fr/privkey.pem;
 
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 1d;
