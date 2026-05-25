@@ -65,6 +65,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/tasks/{task}/checklists/{checklist}/items/{item}', [TaskChecklistController::class, 'destroyItem'])->name('tasks.checklists.items.destroy');
 
         Route::get('/chat/messages', [ChatMessageController::class, 'index'])->name('chat.messages.index');
+        Route::get('/chat/presence', [ChatMessageController::class, 'presence'])->name('chat.presence');
         Route::post('/chat/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
 
         Route::post('/events', [CalendarEventController::class, 'store'])->name('events.store');

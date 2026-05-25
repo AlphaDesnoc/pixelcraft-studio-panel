@@ -1,8 +1,9 @@
 import { nextTick, onUnmounted, ref, watch } from "vue";
 import axios from "axios";
-import { bindPresenceHandlers } from "@/lib/presence.js";
+import { bindPresenceHandlers, sortPresenceUsers } from "@/lib/presence.js";
 
 const POLL_MS = 2000;
+const PRESENCE_POLL_MS = 15000;
 
 function sortMessages(list) {
   return [...list].sort(
@@ -29,20 +30,55 @@ function mergeMessages(existing, incoming) {
   return sortMessages([...byId.values()]);
 }
 
+function mergeMembers(existing, incoming) {
+  if (incoming.length === 0) {
+    return existing;
+  }
+
+  const byId = new Map(existing.map((member) => [member.id, member]));
+  for (const member of incoming) {
+    byId.set(member.id, member);
+  }
+
+  return sortPresenceUsers([...byId.values()]).map((member) => ({
+    ...member,
+    is_online: member.is_online ?? false,
+  }));
+}
+
+function applyEchoPresence(members, echoUsers) {
+  if (!members.length) {
+    return members;
+  }
+
+  const echoIds = new Set(echoUsers.map((user) => user.id));
+
+  return members.map((member) => ({
+    ...member,
+    is_online: member.is_online || echoIds.has(member.id),
+  }));
+}
+
 export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
   const messages = ref([]);
-  const onlineUsers = ref([]);
+  const chatMembers = ref([]);
   const loading = ref(false);
   const sending = ref(false);
   const listRef = ref(null);
   let pollTimer = null;
+  let presenceTimer = null;
   let channel = null;
   let activeSpace = null;
+  let echoOnlineUsers = [];
 
   function scrollToBottom() {
     if (listRef.value) {
       listRef.value.scrollTop = listRef.value.scrollHeight;
     }
+  }
+
+  function refreshMembersFromEcho() {
+    chatMembers.value = applyEchoPresence(chatMembers.value, echoOnlineUsers);
   }
 
   function unsubscribe() {
@@ -54,8 +90,13 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    if (presenceTimer) {
+      clearInterval(presenceTimer);
+      presenceTimer = null;
+    }
     activeSpace = null;
-    onlineUsers.value = [];
+    echoOnlineUsers = [];
+    chatMembers.value = [];
   }
 
   function appendMessage(message) {
@@ -87,14 +128,39 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
     }
   }
 
+  async function fetchPresence(spaceKey) {
+    const { data } = await axios.get(route("projects.chat.presence", projectSlug), {
+      params: { space: spaceKey },
+    });
+    const incoming = data.members ?? [];
+    chatMembers.value = applyEchoPresence(
+      mergeMembers(chatMembers.value, incoming),
+      echoOnlineUsers,
+    );
+  }
+
   function subscribe(spaceKey) {
     if (!window.Echo || !spaceKey || !projectId) {
       return;
     }
 
     channel = window.Echo.join(`project-chat.${projectId}.${spaceKey}`);
-    bindPresenceHandlers(channel, onlineUsers);
+
     channel
+      .here((users) => {
+        echoOnlineUsers = sortPresenceUsers(users);
+        refreshMembersFromEcho();
+      })
+      .joining((user) => {
+        if (!echoOnlineUsers.some((entry) => entry.id === user.id)) {
+          echoOnlineUsers = sortPresenceUsers([...echoOnlineUsers, user]);
+          refreshMembersFromEcho();
+        }
+      })
+      .leaving((user) => {
+        echoOnlineUsers = echoOnlineUsers.filter((entry) => entry.id !== user.id);
+        fetchPresence(spaceKey).catch(() => {});
+      })
       .listen(".ChatMessageSent", handleIncoming)
       .listen("ChatMessageSent", handleIncoming)
       .error((error) => {
@@ -106,6 +172,10 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
     pollTimer = setInterval(() => {
       fetchMessages(spaceKey).catch(() => {});
     }, POLL_MS);
+
+    presenceTimer = setInterval(() => {
+      fetchPresence(spaceKey).catch(() => {});
+    }, PRESENCE_POLL_MS);
   }
 
   async function start(spaceKey) {
@@ -113,9 +183,13 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
     activeSpace = spaceKey;
     loading.value = true;
     messages.value = [];
+    chatMembers.value = [];
 
     try {
-      await fetchMessages(spaceKey, { scroll: true });
+      await Promise.all([
+        fetchMessages(spaceKey, { scroll: true }),
+        fetchPresence(spaceKey),
+      ]);
       subscribe(spaceKey);
       startPolling(spaceKey);
     } finally {
@@ -151,7 +225,7 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
       }
       unsubscribe();
       messages.value = [];
-      onlineUsers.value = [];
+      chatMembers.value = [];
       loading.value = false;
     },
     { immediate: true },
@@ -159,5 +233,5 @@ export function useSpaceChat(projectSlug, projectId, activeRef, spaceKeyRef) {
 
   onUnmounted(unsubscribe);
 
-  return { messages, onlineUsers, loading, sending, send, listRef };
+  return { messages, chatMembers, loading, sending, send, listRef };
 }

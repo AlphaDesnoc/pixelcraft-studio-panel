@@ -21,7 +21,7 @@ const activeRef = toRef(props, "active");
 const spaceKeyRef = toRef(props, "spaceKey");
 
 const draft = ref("");
-const { messages, onlineUsers, loading, sending, send, listRef } = useSpaceChat(
+const { messages, chatMembers, loading, sending, send, listRef } = useSpaceChat(
   props.projectSlug,
   props.projectId,
   activeRef,
@@ -68,7 +68,7 @@ async function submitMessage() {
     </header>
 
     <OnlineUsersBar
-      :users="onlineUsers"
+      :members="chatMembers"
       :current-user-id="currentUserId"
     />
 

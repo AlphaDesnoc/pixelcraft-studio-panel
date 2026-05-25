@@ -132,6 +132,7 @@ async function submitMessage() {
           :users="onlineUsers"
           :current-user-id="currentUserId"
           label="Sur ce ticket"
+          :show-offline="false"
         />
 
         <div

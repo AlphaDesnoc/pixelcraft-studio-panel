@@ -53,6 +53,20 @@ class ChatMessageController extends Controller
         return response()->json(['message' => $message->toPayload()]);
     }
 
+    public function presence(Request $request, Project $project): JsonResponse
+    {
+        $user = $request->user();
+        $space = ProjectSpace::resolve($request, $project, $user);
+        $this->authorizeSpace($user, $project, $space);
+
+        $members = SpaceChatAccess::membersWithPresence($project, $space->key);
+
+        return response()->json([
+            'members' => $members,
+            'online_count' => collect($members)->where('is_online', true)->count(),
+        ]);
+    }
+
     private function authorizeSpace($user, Project $project, ProjectSpace $space): void
     {
         ProjectAccess::ensureAccess($user, $project);
