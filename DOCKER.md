@@ -324,17 +324,19 @@ php artisan tinker
 
 ## Partie 10 — Mises à jour du projet
 
+### Manuellement (SSH)
+
 Sur le serveur :
 
 ```bash
 cd /opt/pixelcraft/pixelcraft-studio-panel
-git pull
+./scripts/deploy.sh
 ```
 
-Puis dans **Portainer** → Stack → **Update** → coche **Re-pull image and redeploy**  
-**OU** en CLI :
+Équivalent :
 
 ```bash
+git pull
 docker compose up -d --build
 ```
 
@@ -343,6 +345,78 @@ Ordre automatique au rebuild :
 2. `composer install --no-dev`
 3. Migrations au démarrage de `app`
 4. Restart reverb + worker
+
+### CI/CD GitHub Actions (auto sur `main`)
+
+Chaque **push sur `main`** (y compris après merge d'une PR) déclenche le déploiement via SSH.
+
+Fichiers :
+- `.github/workflows/deploy.yml` — workflow GitHub
+- `scripts/deploy.sh` — script exécuté sur le VPS
+
+#### 1. Préparer le serveur (une fois)
+
+```bash
+# Utilisateur dédié (recommandé)
+adduser deploy
+usermod -aG docker deploy
+
+# Cloner le repo si ce n'est pas déjà fait
+mkdir -p /opt/pixelcraft
+git clone git@github.com:TON_ORG/pixelcraft-studio-panel.git /opt/pixelcraft/pixelcraft-studio-panel
+cd /opt/pixelcraft/pixelcraft-studio-panel
+cp .env.docker.example .env   # puis éditer .env
+
+# Clé pour que le serveur puisse git pull depuis GitHub
+sudo -u deploy ssh-keygen -t ed25519 -f /home/deploy/.ssh/github_deploy -N ""
+sudo -u deploy cat /home/deploy/.ssh/github_deploy.pub
+```
+
+Sur GitHub → repo → **Settings → Deploy keys → Add deploy key** : colle la clé publique (lecture seule suffit).
+
+```bash
+chown -R deploy:deploy /opt/pixelcraft/pixelcraft-studio-panel
+chmod +x /opt/pixelcraft/pixelcraft-studio-panel/scripts/deploy.sh
+```
+
+#### 2. Clé SSH pour GitHub Actions → serveur
+
+Sur **ta machine locale** (ou le serveur) :
+
+```bash
+ssh-keygen -t ed25519 -f github_actions_deploy -N "" -C "github-actions-deploy"
+```
+
+- **`github_actions_deploy.pub`** → sur le serveur, dans `/home/deploy/.ssh/authorized_keys`
+- **`github_actions_deploy`** (privée) → secret GitHub `SSH_PRIVATE_KEY`
+
+Test :
+
+```bash
+ssh -i github_actions_deploy deploy@217.154.194.232
+```
+
+#### 3. Secrets GitHub
+
+Repo → **Settings → Secrets and variables → Actions → New repository secret** :
+
+| Secret | Exemple |
+|--------|---------|
+| `SSH_HOST` | `217.154.194.232` ou `panel.pixelcraft-studios.fr` |
+| `SSH_USER` | `deploy` |
+| `SSH_PRIVATE_KEY` | contenu de `github_actions_deploy` (clé privée) |
+| `DEPLOY_PATH` | `/opt/pixelcraft/pixelcraft-studio-panel` |
+| `SSH_PORT` | `22` (optionnel) |
+
+*(Optionnel)* Crée un environnement **production** dans **Settings → Environments** pour exiger une approbation manuelle avant déploiement.
+
+#### 4. Déclenchement
+
+- Merge d'une PR sur `main` → déploiement auto
+- Push direct sur `main` → déploiement auto
+- Manuel : onglet **Actions** → **Deploy production** → **Run workflow**
+
+Le `.env` reste **uniquement sur le serveur** (ignoré par git) — il n'est jamais écrasé par le déploiement.
 
 ---
 
