@@ -317,7 +317,7 @@ async function onFileSelected(event) {
 </script>
 
 <template>
-  <div class="flex h-[620px] flex-col overflow-hidden rounded-xl border border-border bg-card">
+  <div class="flex h-[min(620px,calc(100dvh-12rem))] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-card">
     <header class="shrink-0 border-b border-border px-4 py-3">
       <div class="flex items-center gap-2">
         <MessageSquare class="h-4 w-4 text-primary" />
@@ -334,7 +334,7 @@ async function onFileSelected(event) {
       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div
           ref="listRef"
-          class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
+          class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4"
         >
           <div
             v-if="loading"
