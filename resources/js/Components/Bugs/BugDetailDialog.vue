@@ -166,7 +166,7 @@ function createTaskFromBug() {
         </p>
 
         <div
-          v-if="bug && canManage"
+          v-if="bug && (bug.can_manage || canManage)"
           class="mt-3 space-y-2 rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5"
         >
           <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

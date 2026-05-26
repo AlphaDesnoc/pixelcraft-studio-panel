@@ -15,6 +15,7 @@ use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
 use App\Support\ProjectSpace;
 use App\Support\SpaceChatAccess;
+use App\Support\BugVisibility;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -123,7 +124,7 @@ class ProjectController extends Controller
             ? collect()
             : $project->chatMessages->map(fn ($m) => $m->toPayload())->values();
 
-        $lists = ($space->isGlobal || $space->isFull)
+        $lists = $space->isFull
             ? $this->buildMergedKanbanLists($project)
             : $this->mapLists($project->lists);
 
@@ -224,17 +225,25 @@ class ProjectController extends Controller
             : null;
 
         $canReportBugs = $space->isGlobal;
-        $canManageBugs = (bool) ($currentRank?->manages_bugs);
+        $canManageBugs = match (true) {
+            $space->isFull => $user->is_admin,
+            $space->isGlobal => BugVisibility::userManagesAnyBugRank($user, $project),
+            $space->rankId && ($currentRank?->manages_bugs ?? false) => BugVisibility::userManagesRank(
+                $user,
+                $project,
+                $space->rankId,
+            ),
+            default => false,
+        };
 
-        $bugsQuery = $project->bugs()->with(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name']);
+        $bugsQuery = BugVisibility::queryForSpace(
+            $project->bugs()->with(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name']),
+            $user,
+            $project,
+            $space,
+        );
 
-        if ($canManageBugs) {
-            $bugsCollection = $bugsQuery->get();
-        } elseif ($canReportBugs) {
-            $bugsCollection = $bugsQuery->where('reporter_id', $user->id)->get();
-        } else {
-            $bugsCollection = collect();
-        }
+        $bugsCollection = $bugsQuery->get();
 
         $bugActivities = ActivityLog::query()
             ->whereIn('bug_id', $bugsCollection->pluck('id'))
@@ -263,6 +272,8 @@ class ProjectController extends Controller
                 ->take(30)
                 ->map(fn (ActivityLog $log) => $log->toPayload())
                 ->values(),
+            'can_manage' => BugVisibility::canManage($user, $b, $project),
+            'can_edit' => BugVisibility::canEditReport($user, $b),
         ])->values();
 
         $bugRanks = $project->ranks
@@ -384,7 +395,7 @@ class ProjectController extends Controller
                 TaskList::STATUS_IN_PROGRESS => 'En cours',
                 TaskList::STATUS_DONE => 'Terminée',
             ],
-            'globalKanban' => $space->isGlobal || $space->isFull,
+            'globalKanban' => $space->isFull,
         ]);
     }
 

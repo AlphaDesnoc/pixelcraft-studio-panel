@@ -117,13 +117,17 @@ const activeRankId = computed(() => props.activeRankId);
 const bugsAccess = computed(() => {
   const space = activeSpace.value;
   if (space === "global") {
-    return { show: true, canReport: true, canManage: false };
+    return {
+      show: true,
+      canReport: true,
+      canManage: Boolean(props.canManageBugs),
+    };
   }
   if (space === "full") {
     return { show: false, canReport: false, canManage: false };
   }
   const rank = props.ranks.find((r) => r.key === space);
-  const canManage = Boolean(rank?.manages_bugs);
+  const canManage = Boolean(rank?.manages_bugs) && Boolean(props.canManageBugs);
   return { show: canManage, canReport: false, canManage };
 });
 
@@ -459,7 +463,7 @@ const kanbanBugLinkTasks = computed(() =>
           :priorities="priorities"
           :status-kinds="statusKinds"
           :rank-id="activeRankId"
-          :global-kanban="activeSpace === 'global' || activeSpace === 'full'"
+          :global-kanban="activeSpace === 'full'"
           :tags="tags"
           :task-templates="taskTemplates"
           :swimlane-mode="swimlaneMode"

@@ -11,6 +11,7 @@ use App\Models\TaskList;
 use App\Models\ActivityLog;
 use App\Models\UserNotification;
 use App\Support\ActivityLogger;
+use App\Support\BugVisibility;
 use App\Support\PanelNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,8 +35,6 @@ class BugController extends Controller
             'screenshots.*' => ['image', 'max:5120'],
         ]);
 
-        $defaultRank = $project->ranks()->where('manages_bugs', true)->orderBy('position')->first();
-
         $paths = [];
         if ($request->hasFile('screenshots')) {
             foreach ($request->file('screenshots') as $file) {
@@ -45,7 +44,7 @@ class BugController extends Controller
 
         $bug = $project->bugs()->create([
             'reporter_id' => $request->user()->id,
-            'assigned_rank_id' => $defaultRank?->id,
+            'assigned_rank_id' => null,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'priority' => $validated['priority'] ?? Bug::PRIORITY_MEDIUM,
@@ -64,20 +63,23 @@ class BugController extends Controller
             ['priority' => $bug->priority],
         );
 
-        if ($bug->priority === Bug::PRIORITY_URGENT && $defaultRank) {
-            $rankMembers = $defaultRank->members()->pluck('users.id');
-            foreach ($rankMembers as $memberId) {
-                if ((int) $memberId === (int) $request->user()->id) {
-                    continue;
+        if ($bug->priority === Bug::PRIORITY_URGENT) {
+            $notified = [];
+            foreach ($project->ranks()->where('manages_bugs', true)->with('members:id')->get() as $rank) {
+                foreach ($rank->members as $member) {
+                    if (in_array($member->id, $notified, true) || (int) $member->id === (int) $request->user()->id) {
+                        continue;
+                    }
+                    $notified[] = $member->id;
+                    PanelNotifier::send(
+                        (int) $member->id,
+                        UserNotification::TYPE_BUG_ASSIGNED,
+                        'Bug urgent signalé',
+                        sprintf('Bug urgent : %s', $bug->title),
+                        route('projects.show', $project->slug).'?tab=bugs',
+                        ['project_id' => $project->id, 'bug_id' => $bug->id],
+                    );
                 }
-                PanelNotifier::send(
-                    (int) $memberId,
-                    UserNotification::TYPE_BUG_ASSIGNED,
-                    'Bug urgent signalé',
-                    sprintf('Bug urgent : %s', $bug->title),
-                    route('projects.show', $project->slug).'?tab=bugs',
-                    ['project_id' => $project->id, 'bug_id' => $bug->id],
-                );
             }
         }
 
@@ -86,9 +88,13 @@ class BugController extends Controller
 
     public function update(Request $request, Project $project, Bug $bug): RedirectResponse
     {
-        $this->ensureCanManage($request, $project);
         $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
+
+        $user = $request->user();
+        $canManage = BugVisibility::canManage($user, $bug, $project);
+        $canEditReport = BugVisibility::canEditReport($user, $bug);
+        abort_unless($canManage || $canEditReport, 403);
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -107,17 +113,19 @@ class BugController extends Controller
             'remove_screenshots.*' => ['string'],
         ]);
 
-        if (array_key_exists('assignee_id', $validated) && $validated['assignee_id']) {
-            abort_unless(
-                $project->members()->whereKey($validated['assignee_id'])->exists(),
-                422,
-                'Assigné invalide.',
-            );
-        }
+        if ($canManage) {
+            if (array_key_exists('assignee_id', $validated) && $validated['assignee_id']) {
+                abort_unless(
+                    $project->members()->whereKey($validated['assignee_id'])->exists(),
+                    422,
+                    'Assigné invalide.',
+                );
+            }
 
-        if (! empty($validated['assigned_rank_id'])) {
-            $rank = Rank::find($validated['assigned_rank_id']);
-            abort_unless($rank && $rank->project_id === $project->id && $rank->manages_bugs, 422);
+            if (! empty($validated['assigned_rank_id'])) {
+                $rank = Rank::find($validated['assigned_rank_id']);
+                abort_unless($rank && $rank->project_id === $project->id && $rank->manages_bugs, 422);
+            }
         }
 
         $screenshots = $bug->screenshots ?? [];
@@ -148,13 +156,18 @@ class BugController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'priority' => $validated['priority'] ?? $bug->priority,
-            'status' => $validated['status'] ?? $bug->status,
-            'assignee_id' => $validated['assignee_id'] ?? null,
-            'assigned_rank_id' => array_key_exists('assigned_rank_id', $validated)
-                ? $validated['assigned_rank_id']
-                : $bug->assigned_rank_id,
             'screenshots' => $screenshots ?: null,
         ]);
+
+        if ($canManage) {
+            $bug->fill([
+                'status' => $validated['status'] ?? $bug->status,
+                'assignee_id' => $validated['assignee_id'] ?? null,
+                'assigned_rank_id' => array_key_exists('assigned_rank_id', $validated)
+                    ? $validated['assigned_rank_id']
+                    : $bug->assigned_rank_id,
+            ]);
+        }
 
         $bug->sla_due_at = \App\Support\BugSla::dueAt($bug);
         $bug->save();
@@ -243,7 +256,7 @@ class BugController extends Controller
 
     public function linkTask(Request $request, Project $project, Bug $bug): RedirectResponse
     {
-        $this->ensureCanManage($request, $project);
+        $this->ensureCanManageBug($request, $project, $bug);
         $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
@@ -261,7 +274,7 @@ class BugController extends Controller
 
     public function createTaskFromBug(Request $request, Project $project, Bug $bug): RedirectResponse
     {
-        $this->ensureCanManage($request, $project);
+        $this->ensureCanManageBug($request, $project, $bug);
         $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
@@ -311,7 +324,7 @@ class BugController extends Controller
 
     public function destroy(Request $request, Project $project, Bug $bug): RedirectResponse
     {
-        $this->ensureCanManage($request, $project);
+        $this->ensureCanManageBug($request, $project, $bug);
         $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
@@ -333,18 +346,11 @@ class BugController extends Controller
         );
     }
 
-    private function ensureCanManage(Request $request, Project $project): void
+    private function ensureCanManageBug(Request $request, Project $project, Bug $bug): void
     {
-        $user = $request->user();
-        if ($user->is_admin) {
-            return;
-        }
-
-        $managesBugs = $project->ranks()
-            ->where('manages_bugs', true)
-            ->whereHas('members', fn ($q) => $q->whereKey($user->id))
-            ->exists();
-
-        abort_unless($managesBugs, 403);
+        abort_unless(
+            BugVisibility::canManage($request->user(), $bug, $project),
+            403,
+        );
     }
 }

@@ -49,10 +49,10 @@ function openDetail(bug) {
         </h2>
         <p class="text-xs text-muted-foreground">
           <template v-if="canManage">
-            Gérez les bugs signalés par l'équipe
+            Gérez les bugs assignés à ce rank
           </template>
-          <template v-else>
-            Signalez un problème — il sera routé vers les ranks de gestion des bugs
+          <template v-else-if="canReport">
+            Les bugs non assignés sont visibles par tous. Une fois routés vers un rank, seul le rapporteur les voit ici.
           </template>
         </p>
       </div>
@@ -81,8 +81,8 @@ function openDetail(bug) {
       v-if="bugs.length === 0"
       class="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-border bg-card/30 px-6 py-10 text-center text-sm text-muted-foreground"
     >
-      <template v-if="canManage">Aucun bug signalé pour le moment.</template>
-      <template v-else-if="canReport">Vous n'avez pas encore signalé de bug.</template>
+      <template v-if="canManage">Aucun bug assigné à ce rank.</template>
+      <template v-else-if="canReport">Aucun bug en attente de routage.</template>
     </div>
 
     <div v-else class="flex flex-col gap-3">

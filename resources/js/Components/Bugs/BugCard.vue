@@ -14,6 +14,11 @@ const props = defineProps({
 
 const emits = defineEmits(["edit", "open"]);
 
+const canEdit = computed(
+  () => Boolean(props.bug.can_manage || props.bug.can_edit),
+);
+const canDelete = computed(() => Boolean(props.bug.can_manage));
+
 const priorityVariant = computed(() => ({
   low: "secondary",
   medium: "default",
@@ -106,16 +111,22 @@ function destroy() {
         <span v-if="bug.reporter">Par {{ bug.reporter.name }}</span>
         <span v-if="dateLabel">· {{ dateLabel }}</span>
         <span
-          v-if="bug.assignee"
+          v-if="bug.assigned_rank"
+          class="text-foreground"
+        >
+          · Rank {{ bug.assigned_rank.name }}
+        </span>
+        <span
+          v-else-if="bug.assignee"
           class="text-foreground"
         >
           · Assigné à {{ bug.assignee.name }}
         </span>
         <span
-          v-else
+          v-else-if="!bug.assigned_rank"
           class="text-amber-400"
         >
-          · Non assigné
+          · Non assigné à un rank
         </span>
       </div>
       <div class="flex items-center gap-1">
@@ -127,7 +138,7 @@ function destroy() {
         >
           <MessageSquare class="h-3.5 w-3.5" />
         </button>
-        <template v-if="canManage">
+        <template v-if="canEdit">
         <button
           type="button"
           class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -137,6 +148,7 @@ function destroy() {
           <Pencil class="h-3.5 w-3.5" />
         </button>
         <button
+          v-if="canDelete"
           type="button"
           class="inline-flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-500/10"
           title="Supprimer"
