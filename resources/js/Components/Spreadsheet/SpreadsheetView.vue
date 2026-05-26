@@ -256,6 +256,11 @@ function addSheet() {
 }
 
 function renameSheet({ id, name }) {
+  const sheet = localSheets.value.find((s) => s.id === id);
+  if (sheet) {
+    sheet.name = name;
+  }
+
   router.put(
     route("projects.sheets.update", [props.projectSlug, id]),
     { name },

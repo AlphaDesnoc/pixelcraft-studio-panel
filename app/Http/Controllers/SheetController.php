@@ -49,15 +49,15 @@ class SheetController extends Controller
         abort_unless($sheet->project_id === $project->id, 404);
 
         $validated = $request->validate([
-            'name' => ['nullable', 'string', 'max:120'],
-            'rows' => ['nullable', 'integer', 'min:1', 'max:1000'],
-            'cols' => ['nullable', 'integer', 'min:1', 'max:200'],
-            'data' => ['nullable', 'array'],
+            'name' => ['sometimes', 'required', 'string', 'max:120'],
+            'rows' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:1000'],
+            'cols' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:200'],
+            'data' => ['sometimes', 'nullable', 'array'],
         ]);
 
         $update = [];
-        if (array_key_exists('name', $validated) && $validated['name'] !== null) {
-            $update['name'] = $validated['name'];
+        if (array_key_exists('name', $validated)) {
+            $update['name'] = trim($validated['name']);
         }
         if (array_key_exists('rows', $validated) && $validated['rows'] !== null) {
             $update['rows'] = $validated['rows'];

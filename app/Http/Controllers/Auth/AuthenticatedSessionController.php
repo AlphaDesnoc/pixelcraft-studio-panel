@@ -31,7 +31,7 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
 
-        if ($user->is_admin && $user->two_factor_confirmed_at && $user->two_factor_secret) {
+        if ($user->two_factor_confirmed_at && $user->two_factor_secret) {
             $request->session()->put([
                 'login.id' => $user->id,
                 'login.remember' => $request->boolean('remember'),

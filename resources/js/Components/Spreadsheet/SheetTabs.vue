@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { nextTick, ref } from "vue";
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-vue-next";
 
 const props = defineProps({
@@ -11,14 +11,21 @@ const emits = defineEmits(["select", "rename", "move", "delete"]);
 
 const editingId = ref(null);
 const editingValue = ref("");
+const inputRef = ref(null);
+const ignoreBlur = ref(false);
 
-function startRename(sheet) {
+async function startRename(sheet) {
   editingId.value = sheet.id;
   editingValue.value = sheet.name;
+  ignoreBlur.value = true;
+  await nextTick();
+  inputRef.value?.focus();
+  inputRef.value?.select();
+  ignoreBlur.value = false;
 }
 
 function commitRename(sheet) {
-  if (editingId.value !== sheet.id) return;
+  if (ignoreBlur.value || editingId.value !== sheet.id) return;
   const value = editingValue.value.trim();
   editingId.value = null;
   if (value && value !== sheet.name) {
@@ -45,9 +52,9 @@ function cancelRename() {
     >
       <input
         v-if="editingId === sheet.id"
+        ref="inputRef"
         v-model="editingValue"
         class="h-6 w-[100px] rounded border border-input bg-background px-1 text-xs outline-none"
-        autofocus
         @keydown.enter.prevent="commitRename(sheet)"
         @keydown.escape="cancelRename"
         @blur="commitRename(sheet)"
@@ -57,7 +64,7 @@ function cancelRename() {
         type="button"
         class="text-xs font-medium"
         @click="emits('select', sheet.id)"
-        @dblclick="startRename(sheet)"
+        @dblclick.prevent="startRename(sheet)"
       >
         {{ sheet.name }}
       </button>
@@ -67,7 +74,8 @@ function cancelRename() {
           type="button"
           class="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/60 hover:text-foreground"
           title="Renommer"
-          @click="startRename(sheet)"
+          @mousedown.prevent
+          @click.stop="startRename(sheet)"
         >
           <Pencil class="h-3 w-3" />
         </button>
@@ -76,7 +84,8 @@ function cancelRename() {
           class="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-30"
           :disabled="idx === 0"
           title="Déplacer à gauche"
-          @click="emits('move', { id: sheet.id, dir: -1 })"
+          @mousedown.prevent
+          @click.stop="emits('move', { id: sheet.id, dir: -1 })"
         >
           <ChevronLeft class="h-3 w-3" />
         </button>
@@ -85,7 +94,8 @@ function cancelRename() {
           class="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-muted/60 hover:text-foreground disabled:opacity-30"
           :disabled="idx === sheets.length - 1"
           title="Déplacer à droite"
-          @click="emits('move', { id: sheet.id, dir: 1 })"
+          @mousedown.prevent
+          @click.stop="emits('move', { id: sheet.id, dir: 1 })"
         >
           <ChevronRight class="h-3 w-3" />
         </button>
@@ -94,7 +104,8 @@ function cancelRename() {
           class="inline-flex h-5 w-5 items-center justify-center rounded text-rose-400 hover:bg-rose-500/10 disabled:opacity-30"
           :disabled="sheets.length <= 1"
           title="Supprimer"
-          @click="emits('delete', sheet.id)"
+          @mousedown.prevent
+          @click.stop="emits('delete', sheet.id)"
         >
           <Trash2 class="h-3 w-3" />
         </button>

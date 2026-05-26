@@ -14,12 +14,6 @@ class ProfileTwoFactorController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->is_admin) {
-            return response()->json([
-                'message' => 'La double authentification est réservée aux administrateurs.',
-            ], 403);
-        }
-
         if ($user->two_factor_confirmed_at) {
             return response()->json([
                 'message' => 'La double authentification est déjà activée.',

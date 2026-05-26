@@ -106,7 +106,7 @@ const initials = computed(() => {
         </CardContent>
       </Card>
 
-      <div v-if="user?.is_admin" class="lg:col-span-2">
+      <div class="lg:col-span-2">
         <TwoFactorSetup :enabled="two_factor_enabled" />
       </div>
     </div>
