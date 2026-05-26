@@ -14,10 +14,30 @@ if [[ -f "${HOME}/.ssh/github_deploy" ]]; then
   export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/github_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 fi
 
-echo "==> git pull..."
+PANEL_CONF="docker/nginx-proxy/conf.d/panel.conf"
+PANEL_BACKUP=""
+
+# panel.conf est propre au serveur (domaine, SSL) — ne doit pas bloquer le déploiement.
+if [[ -f "$PANEL_CONF" ]]; then
+  PANEL_BACKUP="$(mktemp)"
+  cp "$PANEL_CONF" "$PANEL_BACKUP"
+  echo "==> panel.conf sauvegardé (config locale reverse-proxy)"
+fi
+
+echo "==> git fetch + reset..."
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
-git pull --ff-only origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
+
+if [[ -n "$PANEL_BACKUP" && -f "$PANEL_BACKUP" ]]; then
+  cp "$PANEL_BACKUP" "$PANEL_CONF"
+  rm -f "$PANEL_BACKUP"
+  echo "==> panel.conf local restauré"
+elif [[ ! -f "$PANEL_CONF" ]]; then
+  echo "==> panel.conf absent — copie depuis panel.http.conf.example"
+  cp docker/nginx-proxy/conf.d/panel.http.conf.example "$PANEL_CONF"
+  echo "    Édite server_name dans $PANEL_CONF si besoin."
+fi
 
 echo "==> docker compose up -d --build..."
 docker compose up -d --build

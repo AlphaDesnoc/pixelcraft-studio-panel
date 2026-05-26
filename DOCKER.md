@@ -220,7 +220,12 @@ Pointe `panel.tondomaine.fr` vers l'IP publique du serveur (enregistrement A).
 
 ### 7.2 Premier certificat
 
-La config `panel.conf` est en **HTTP** par défaut (nécessaire pour le challenge Let's Encrypt).
+La config `panel.conf` est **propre au serveur** (domaine, HTTP ou HTTPS) et n'est **pas versionnée** dans Git. Copie un exemple :
+
+```bash
+cp docker/nginx-proxy/conf.d/panel.http.conf.example docker/nginx-proxy/conf.d/panel.conf
+# Édite server_name si besoin
+```
 
 ```bash
 cd /opt/pixelcraft/pixelcraft-studio-panel
@@ -505,8 +510,9 @@ docker/
   nginx/default.conf            # Nginx interne du panel + proxy Reverb
   nginx-proxy/
     nginx.conf                  # Nginx reverse proxy public
-    conf.d/panel.conf           # Config HTTP (défaut)
-    conf.d/panel.ssl.conf.example  # Config HTTPS après Let's Encrypt
+    conf.d/panel.http.conf.example  # Modèle HTTP (avant SSL)
+    conf.d/panel.ssl.conf.example   # Modèle HTTPS après Let's Encrypt
+    conf.d/panel.conf               # Config active (gitignored, sur le serveur)
     init-letsencrypt.sh         # Script premier certificat
   php/entrypoint.sh             # Wait DB, migrate, cache
 docker-compose.yml              # Stack panel
