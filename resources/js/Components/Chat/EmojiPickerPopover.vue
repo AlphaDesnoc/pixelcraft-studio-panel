@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import "emoji-picker-element";
 
 const props = defineProps({
@@ -12,15 +12,40 @@ const emit = defineEmits(["update:open", "select"]);
 
 const rootRef = ref(null);
 const pickerRef = ref(null);
-const popoverStyle = ref({});
+const popoverStyle = ref({ visibility: "hidden" });
+let boundPicker = null;
+
+function bindPickerListener() {
+  unbindPickerListener();
+  const el = pickerRef.value;
+  if (!el) {
+    return;
+  }
+  boundPicker = el;
+  boundPicker.addEventListener("emoji-click", onEmojiClick);
+}
+
+function unbindPickerListener() {
+  if (!boundPicker) {
+    return;
+  }
+  boundPicker.removeEventListener("emoji-click", onEmojiClick);
+  boundPicker = null;
+}
+
+function resolveTrigger() {
+  const ref = props.triggerRef;
+  if (!ref) {
+    return null;
+  }
+  return ref instanceof HTMLElement ? ref : ref.value ?? null;
+}
 
 function recalcPosition() {
-  const el =
-    props.triggerRef instanceof HTMLElement
-      ? props.triggerRef
-      : props.triggerRef?.value;
+  const el = resolveTrigger();
 
   if (!el || typeof el.getBoundingClientRect !== "function") {
+    popoverStyle.value = { visibility: "hidden" };
     return;
   }
 
@@ -53,6 +78,7 @@ function recalcPosition() {
     top: `${top}px`,
     left: `${left}px`,
     zIndex: 90,
+    visibility: "visible",
   };
 }
 
@@ -65,18 +91,20 @@ function onEmojiClick(event) {
   emit("update:open", false);
 }
 
-function onDocPointer(event) {
+function eventPathIncludesPopover(event) {
+  const path = event.composedPath?.() ?? [];
+  if (rootRef.value && path.includes(rootRef.value)) {
+    return true;
+  }
+  const trigger = resolveTrigger();
+  return Boolean(trigger && path.includes(trigger));
+}
+
+function onDocClick(event) {
   if (!props.open) {
     return;
   }
-  if (rootRef.value?.contains(event.target)) {
-    return;
-  }
-  const el =
-    props.triggerRef instanceof HTMLElement
-      ? props.triggerRef
-      : props.triggerRef?.value;
-  if (el?.contains(event.target)) {
+  if (eventPathIncludesPopover(event)) {
     return;
   }
   emit("update:open", false);
@@ -90,24 +118,28 @@ function onKey(event) {
 
 watch(
   () => props.open,
-  (isOpen) => {
-    if (isOpen) {
-      requestAnimationFrame(recalcPosition);
+  async (isOpen) => {
+    if (!isOpen) {
+      unbindPickerListener();
+      return;
     }
+    popoverStyle.value = { visibility: "hidden" };
+    await nextTick();
+    bindPickerListener();
+    recalcPosition();
   },
 );
 
 onMounted(() => {
-  pickerRef.value?.addEventListener("emoji-click", onEmojiClick);
-  document.addEventListener("pointerdown", onDocPointer);
+  document.addEventListener("click", onDocClick, true);
   document.addEventListener("keydown", onKey);
   window.addEventListener("resize", recalcPosition);
   window.addEventListener("scroll", recalcPosition, true);
 });
 
 onBeforeUnmount(() => {
-  pickerRef.value?.removeEventListener("emoji-click", onEmojiClick);
-  document.removeEventListener("pointerdown", onDocPointer);
+  unbindPickerListener();
+  document.removeEventListener("click", onDocClick, true);
   document.removeEventListener("keydown", onKey);
   window.removeEventListener("resize", recalcPosition);
   window.removeEventListener("scroll", recalcPosition, true);
@@ -121,7 +153,7 @@ onBeforeUnmount(() => {
       ref="rootRef"
       :style="popoverStyle"
       class="emoji-picker-shell overflow-hidden rounded-xl border border-border shadow-2xl"
-      @pointerdown.stop
+      @click.stop
     >
       <emoji-picker
         ref="pickerRef"
@@ -133,6 +165,15 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
+@font-face {
+  font-family: "Twemoji Mozilla";
+  src: url("https://cdn.jsdelivr.net/gh/mozilla/twemoji-colr@v0.7.1/TwemojiMozilla.woff2")
+    format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 .emoji-picker-shell {
   background: hsl(var(--popover));
 }
@@ -140,6 +181,7 @@ onBeforeUnmount(() => {
 .emoji-picker-themed {
   --emoji-size: 1.375rem;
   --num-columns: 8;
+  --emoji-font-family: "Twemoji Mozilla", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
   --background: hsl(var(--popover));
   --border-color: hsl(var(--border));
   --button-active-background: hsl(var(--muted));
