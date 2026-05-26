@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\AuditLog;
 use App\Models\Bug;
 use App\Models\Project;
+use App\Support\BugVisibility;
 use App\Models\Task;
 use App\Support\ProjectAccess;
 use Illuminate\Http\Request;
@@ -77,10 +78,15 @@ class ExportController extends Controller
             403,
         );
 
-        $bugs = $project->bugs()
-            ->with(['reporter:id,name', 'assignee:id,name'])
-            ->orderByDesc('created_at')
-            ->get();
+        $user = $request->user();
+        $bugs = BugVisibility::filterAccessible(
+            $user,
+            $project->bugs()
+                ->with(['reporter:id,name', 'assignee:id,name'])
+                ->orderByDesc('created_at')
+                ->get(),
+            $project,
+        );
 
         return $this->csv("bugs-{$project->slug}.csv", [
             'Titre', 'Priorité', 'Statut', 'Rapporteur', 'Assigné', 'SLA', 'Créé le',

@@ -58,6 +58,16 @@ class GlobalSearchController extends Controller
         $bugs = Bug::query()
             ->whereIn('project_id', $projectIds)
             ->where('title', 'like', $like)
+            ->when(! $user->is_admin, function ($query) use ($user) {
+                $query->where(function ($q) use ($user) {
+                    $q->whereNull('assigned_rank_id')
+                        ->orWhere('reporter_id', $user->id)
+                        ->orWhereHas(
+                            'assignedRank.members',
+                            fn ($m) => $m->whereKey($user->id),
+                        );
+                });
+            })
             ->with('project:id,slug,name')
             ->limit(8)
             ->get()

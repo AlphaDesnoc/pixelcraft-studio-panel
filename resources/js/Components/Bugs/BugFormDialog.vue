@@ -28,6 +28,11 @@ const emits = defineEmits(["update:open"]);
 
 const isEdit = computed(() => Boolean(props.bug));
 
+const canFullManage = computed(
+  () => Boolean(props.bug?.can_manage ?? props.canManage),
+);
+const canEditReport = computed(() => Boolean(props.bug?.can_edit));
+
 const title = ref("");
 const description = ref("");
 const priority = ref("medium");
@@ -85,11 +90,13 @@ function submitForm() {
   form.append("priority", priority.value);
   screenshots.value.forEach((f) => form.append("screenshots[]", f));
 
-  if (isEdit.value && props.canManage) {
+  if (isEdit.value && (canFullManage.value || canEditReport.value)) {
     form.append("_method", "PUT");
-    form.append("status", status.value);
-    if (assigneeId.value) form.append("assignee_id", assigneeId.value);
-    if (assignedRankId.value) form.append("assigned_rank_id", assignedRankId.value);
+    if (canFullManage.value) {
+      form.append("status", status.value);
+      if (assigneeId.value) form.append("assignee_id", assigneeId.value);
+      if (assignedRankId.value) form.append("assigned_rank_id", assignedRankId.value);
+    }
     removeScreenshots.value.forEach((p) => form.append("remove_screenshots[]", p));
 
     router.post(route("projects.bugs.update", [props.projectSlug, props.bug.id]), form, {
@@ -165,7 +172,7 @@ function submitForm() {
           </Select>
         </div>
 
-        <template v-if="isEdit && canManage">
+        <template v-if="isEdit && canFullManage">
           <div class="flex flex-col gap-1">
             <label class="text-xs text-muted-foreground">Statut</label>
             <Select v-model="status">
