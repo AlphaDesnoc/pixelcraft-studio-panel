@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttachmentController extends Controller
 {
@@ -24,12 +25,13 @@ class AttachmentController extends Controller
 
         $file = $validated['file'];
         $path = $file->store("projects/{$project->id}/tasks/{$task->id}", 'public');
+        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
 
         $task->attachments()->create([
             'user_id' => $request->user()->id,
             'path' => $path,
             'original_name' => $file->getClientOriginalName(),
-            'mime_type' => $file->getClientMimeType(),
+            'mime_type' => $mimeType,
             'size' => $file->getSize(),
         ]);
 
@@ -47,19 +49,21 @@ class AttachmentController extends Controller
 
         $file = $validated['file'];
         $path = $file->store("projects/{$project->id}/chat", 'public');
+        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
+        $originalName = $file->getClientOriginalName();
 
         $message = ChatMessage::query()->create([
             'project_id' => $project->id,
             'user_id' => $request->user()->id,
             'space_key' => $validated['space'],
-            'body' => '📎 '.$file->getClientOriginalName(),
+            'body' => '',
         ]);
 
         $attachment = $message->attachments()->create([
             'user_id' => $request->user()->id,
             'path' => $path,
-            'original_name' => $file->getClientOriginalName(),
-            'mime_type' => $file->getClientMimeType(),
+            'original_name' => $originalName,
+            'mime_type' => $mimeType,
             'size' => $file->getSize(),
         ]);
 
@@ -69,6 +73,22 @@ class AttachmentController extends Controller
             'message' => $message->toPayload(),
             'attachment' => $attachment->toPayload(),
         ]);
+    }
+
+    public function show(Request $request, Project $project, Attachment $attachment): StreamedResponse
+    {
+        $this->ensureMember($request, $project);
+        abort_unless($this->attachmentBelongsToProject($attachment, $project), 404);
+        abort_unless(Storage::disk('public')->exists($attachment->path), 404);
+
+        return Storage::disk('public')->response(
+            $attachment->path,
+            $attachment->original_name,
+            [
+                'Content-Type' => $attachment->mime_type ?: 'application/octet-stream',
+                'Content-Disposition' => 'inline; filename="'.addslashes($attachment->original_name).'"',
+            ],
+        );
     }
 
     public function destroy(Request $request, Project $project, Attachment $attachment): RedirectResponse
@@ -86,5 +106,16 @@ class AttachmentController extends Controller
     {
         $user = $request->user();
         abort_unless($user->is_admin || $project->members()->whereKey($user->id)->exists(), 403);
+    }
+
+    private function attachmentBelongsToProject(Attachment $attachment, Project $project): bool
+    {
+        $attachment->loadMissing('attachable');
+
+        return match (true) {
+            $attachment->attachable instanceof ChatMessage => (int) $attachment->attachable->project_id === (int) $project->id,
+            $attachment->attachable instanceof Task => (int) $attachment->attachable->project_id === (int) $project->id,
+            default => false,
+        };
     }
 }

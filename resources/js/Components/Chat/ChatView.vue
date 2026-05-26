@@ -119,7 +119,21 @@ function initials(name) {
 }
 
 function isImageAttachment(attachment) {
-  return attachment.mime_type?.startsWith("image/");
+  if (attachment.mime_type?.startsWith("image/")) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.original_name ?? "");
+}
+
+function shouldShowMessageBody(message) {
+  const body = message.body?.trim() ?? "";
+  if (!body) {
+    return false;
+  }
+  if (message.attachments?.length && body.startsWith("📎 ")) {
+    return false;
+  }
+  return true;
 }
 
 async function submitMessage() {
@@ -308,11 +322,14 @@ async function onFileSelected(event) {
                 </div>
               </div>
               <div
-                v-else-if="message.body_html"
+                v-else-if="shouldShowMessageBody(message) && message.body_html"
                 class="chat-message-body mt-0.5 text-sm"
                 v-html="message.body_html"
               />
-              <p v-else class="mt-0.5 whitespace-pre-wrap text-sm">
+              <p
+                v-else-if="shouldShowMessageBody(message)"
+                class="mt-0.5 whitespace-pre-wrap text-sm"
+              >
                 {{ message.body }}
               </p>
 
@@ -326,6 +343,7 @@ async function onFileSelected(event) {
                     :href="attachment.url"
                     target="_blank"
                     rel="noopener noreferrer"
+                    download
                     class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                   >
                     <Paperclip class="h-3 w-3" />

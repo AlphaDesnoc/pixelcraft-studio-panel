@@ -84,6 +84,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/chat/messages/{message}', [ChatMessageController::class, 'update'])->name('chat.messages.update');
         Route::delete('/chat/messages/{message}', [ChatMessageController::class, 'destroy'])->name('chat.messages.destroy');
         Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])->name('chat.attachments.store');
+        Route::get('/attachments/{attachment}', [AttachmentController::class, 'show'])->name('attachments.show');
         Route::delete('/attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
 
         Route::post('/events', [CalendarEventController::class, 'store'])->name('events.store');
