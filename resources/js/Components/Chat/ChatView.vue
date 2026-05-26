@@ -17,9 +17,11 @@ import { Textarea } from "@/Components/ui/textarea";
 import ChatMembersPanel from "@/Components/Chat/ChatMembersPanel.vue";
 import EmojiPickerPopover from "@/Components/Chat/EmojiPickerPopover.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
+import TwemojiIcon from "@/Components/Chat/TwemojiIcon.vue";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
+import { renderMessageBody } from "@/lib/twemojiRender.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -445,17 +447,11 @@ async function onFileSelected(event) {
                 </div>
               </div>
               <div
-                v-else-if="shouldShowMessageBody(message) && message.body_html"
-                class="chat-message-body mt-0.5 text-sm"
-                v-html="message.body_html"
-              />
-              <p
                 v-else-if="shouldShowMessageBody(message)"
-                class="mt-0.5 whitespace-pre-wrap"
-                :class="isEmojiOnly(message.body) ? 'text-2xl leading-snug' : 'text-sm'"
-              >
-                {{ message.body }}
-              </p>
+                class="chat-message-body mt-0.5 text-left"
+                :class="isEmojiOnly(message.body) ? 'chat-message-body--emoji-only' : 'text-sm'"
+                v-html="renderMessageBody(message)"
+              />
 
               <div
                 v-if="message.attachments?.length"
@@ -506,7 +502,7 @@ async function onFileSelected(event) {
                   :title="reactionTitle(reaction)"
                   @click="onToggleReaction(message, reaction.emoji)"
                 >
-                  <span>{{ reaction.emoji }}</span>
+                  <TwemojiIcon :emoji="reaction.emoji" size="reaction" />
                   <span
                     v-if="(reaction.count ?? reaction.users?.length ?? 0) > 1"
                     class="text-[10px] font-semibold tabular-nums text-muted-foreground"
@@ -640,5 +636,14 @@ async function onFileSelected(event) {
 <style scoped>
 .chat-message-body :deep(span.rounded) {
   display: inline;
+}
+
+.chat-message-body :deep(.twemoji) {
+  margin: 0 0.05em;
+}
+
+.chat-message-body--emoji-only :deep(.twemoji) {
+  height: 2rem;
+  width: 2rem;
 }
 </style>

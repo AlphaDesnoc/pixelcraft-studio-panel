@@ -7,10 +7,12 @@ import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
 import EmojiPickerPopover from "@/Components/Chat/EmojiPickerPopover.vue";
+import TwemojiIcon from "@/Components/Chat/TwemojiIcon.vue";
 import NewMessageDialog from "@/Components/Messages/NewMessageDialog.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
+import { renderMessageBody } from "@/lib/twemojiRender.js";
 import {
   extractMentionUserIds,
   useDirectMessages,
@@ -639,17 +641,11 @@ const composeTargetName = computed(() => {
                     </button>
                   </div>
                   <div
-                    v-if="shouldShowMessageBody(message) && message.body_html"
-                    class="dm-message-body mt-0.5 text-left text-sm"
-                    v-html="message.body_html"
+                    v-if="shouldShowMessageBody(message)"
+                    class="dm-message-body mt-0.5 text-left"
+                    :class="isEmojiOnly(message.body) ? 'dm-message-body--emoji-only' : 'text-sm'"
+                    v-html="renderMessageBody(message)"
                   />
-                  <p
-                    v-else-if="shouldShowMessageBody(message)"
-                    class="mt-0.5 whitespace-pre-wrap text-left"
-                    :class="isEmojiOnly(message.body) ? 'text-2xl leading-snug' : 'text-sm'"
-                  >
-                    {{ message.body }}
-                  </p>
 
                   <div
                     v-if="message.attachments?.length"
@@ -851,6 +847,15 @@ const composeTargetName = computed(() => {
 
 .dm-message-body :deep(span.rounded) {
   display: inline;
+}
+
+.dm-message-body :deep(.twemoji) {
+  margin: 0 0.05em;
+}
+
+.dm-message-body--emoji-only :deep(.twemoji) {
+  height: 2rem;
+  width: 2rem;
 }
 
 .conv-item {

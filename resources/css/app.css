@@ -94,4 +94,12 @@
   *::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  img.twemoji {
+    display: inline-block;
+    height: 1.25em;
+    width: 1.25em;
+    margin: 0 0.05em;
+    vertical-align: -0.15em;
+  }
 }
