@@ -61,7 +61,7 @@ class MessageController extends Controller
                     ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
                     ->orderBy('created_at')
                     ->get()
-                    ->map(fn (DirectMessage $m) => $m->toPayload())
+                    ->map(fn (DirectMessage $m) => $m->toPayload($user))
                     ->values();
 
                 $conv->markReadFor($user);
@@ -86,7 +86,7 @@ class MessageController extends Controller
             ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
             ->orderBy('created_at')
             ->get()
-            ->map(fn (DirectMessage $m) => $m->toPayload())
+            ->map(fn (DirectMessage $m) => $m->toPayload($user))
             ->values();
 
         $conversation->markReadFor($user);
@@ -148,7 +148,7 @@ class MessageController extends Controller
         }
 
         return response()->json([
-            'message' => $message->toPayload(),
+            'message' => $message->toPayload($user),
             'conversation' => $this->serializeConversation(
                 $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
                 $user,
@@ -227,7 +227,7 @@ class MessageController extends Controller
         }
 
         return response()->json([
-            'message' => $message->toPayload(),
+            'message' => $message->toPayload($user),
             'conversation' => $this->serializeConversation(
                 $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
                 $user,

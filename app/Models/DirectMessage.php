@@ -46,9 +46,9 @@ class DirectMessage extends Model
         return $this->morphMany(Attachment::class, 'attachable');
     }
 
-    public function toPayload(): array
+    public function toPayload(?User $viewer = null): array
     {
-        $this->loadMissing('user:id,name', 'attachments', 'replyTo.user:id,name');
+        $this->loadMissing('user:id,name', 'attachments', 'replyTo.user:id,name', 'conversation');
 
         $replyPreview = null;
         if ($this->replyTo) {
@@ -59,7 +59,7 @@ class DirectMessage extends Model
             ];
         }
 
-        return [
+        $payload = [
             'id' => $this->id,
             'direct_conversation_id' => $this->direct_conversation_id,
             'body' => $this->body,
@@ -75,5 +75,17 @@ class DirectMessage extends Model
             ] : null,
             'attachments' => $this->attachments->map(fn (Attachment $a) => $a->toPayload())->values(),
         ];
+
+        if ($viewer && (int) $this->user_id === (int) $viewer->id && $this->conversation) {
+            $other = $this->conversation->otherParticipant($viewer);
+            $otherLastRead = $other ? $this->conversation->lastReadAtFor($other) : null;
+            $isRead = $otherLastRead && $this->created_at
+                && $otherLastRead->gte($this->created_at);
+
+            $payload['is_read'] = $isRead;
+            $payload['read_at'] = $isRead ? $otherLastRead->toIso8601String() : null;
+        }
+
+        return $payload;
     }
 }
