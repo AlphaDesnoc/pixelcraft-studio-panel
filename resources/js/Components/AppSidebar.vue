@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   LogOut,
   Folder,
+  CheckSquare,
 } from "lucide-vue-next";
 import ApplicationLogo from "@/Components/ApplicationLogo.vue";
 import SidebarItem from "@/Components/SidebarItem.vue";
@@ -75,6 +76,13 @@ const userInitials = computed(() => {
         >
           <template #icon><MessageSquare /></template>
           Messages
+        </SidebarItem>
+        <SidebarItem
+          :href="route('my-tasks.index')"
+          :active="isCurrent('my-tasks.*')"
+        >
+          <template #icon><CheckSquare /></template>
+          Mes tâches
         </SidebarItem>
         <SidebarItem
           :href="route('profile.edit')"

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DirectConversation;
 use App\Models\DirectMessage;
 use App\Models\UserPresence;
+use App\Support\PanelNotifier;
 use App\Support\PresenceUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -101,6 +102,7 @@ class RealtimeController extends Controller
         return response()->json([
             'server_time' => now()->toIso8601String(),
             'unread_count' => $unreadCount,
+            'unread_notifications' => PanelNotifier::unreadCount($user),
             'online_users' => $onlineUsers,
             'events' => $events,
             'echo_available' => config('broadcasting.default') === 'reverb',

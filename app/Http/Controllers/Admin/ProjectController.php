@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\Task;
+use App\Support\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -108,10 +109,20 @@ class ProjectController extends Controller
         return back()->with('success', 'Projet mis à jour.');
     }
 
-    public function destroy(Project $project): RedirectResponse
+    public function destroy(Request $request, Project $project): RedirectResponse
     {
+        $name = $project->name;
         $this->deleteStoredImage($project);
         $project->delete();
+
+        AuditLogger::log(
+            $request->user(),
+            'project_deleted',
+            sprintf('%s a supprimé le projet « %s »', $request->user()->name, $name),
+            null,
+            ['project_name' => $name],
+            $request,
+        );
 
         return back()->with('success', 'Projet supprimé.');
     }

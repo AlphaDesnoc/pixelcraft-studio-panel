@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
+use App\Models\UserNotification;
+use App\Support\PanelNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -101,6 +103,8 @@ class BugController extends Controller
             }
         }
 
+        $previousAssignee = $bug->assignee_id;
+
         $bug->update([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
@@ -112,6 +116,21 @@ class BugController extends Controller
                 : $bug->assigned_rank_id,
             'screenshots' => $screenshots ?: null,
         ]);
+
+        if (
+            $bug->assignee_id
+            && (int) $bug->assignee_id !== (int) $previousAssignee
+            && (int) $bug->assignee_id !== (int) $request->user()->id
+        ) {
+            PanelNotifier::send(
+                $bug->assignee_id,
+                UserNotification::TYPE_BUG_ASSIGNED,
+                'Bug assigné',
+                sprintf('« %s » vous a été assigné', $bug->title),
+                route('projects.show', $project->slug).'?tab=bugs',
+                ['project_id' => $project->id, 'bug_id' => $bug->id],
+            );
+        }
 
         return back();
     }

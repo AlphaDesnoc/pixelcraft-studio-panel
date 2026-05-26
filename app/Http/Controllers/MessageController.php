@@ -6,7 +6,9 @@ use App\Events\DirectMessageSent;
 use App\Models\DirectConversation;
 use App\Models\DirectMessage;
 use App\Models\User;
+use App\Models\UserNotification;
 use App\Support\DirectMessageAccess;
+use App\Support\PanelNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -131,6 +133,18 @@ class MessageController extends Controller
         $message->load('user:id,name');
 
         DirectMessageSent::dispatch($message);
+
+        $recipient = $conversation->otherParticipant($user);
+        if ($recipient && $recipient->id !== $user->id) {
+            PanelNotifier::send(
+                $recipient,
+                UserNotification::TYPE_DIRECT_MESSAGE,
+                'Nouveau message privé',
+                sprintf('%s : %s', $user->name, str($message->body)->limit(80)),
+                route('messages.index', ['c' => $conversation->id]),
+                ['conversation_id' => $conversation->id],
+            );
+        }
 
         return response()->json([
             'message' => $message->toPayload(),

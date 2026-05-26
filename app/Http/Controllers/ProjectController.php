@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
@@ -42,6 +43,8 @@ class ProjectController extends Controller
             'lists.tasks' => fn ($q) => $q->orderBy('position'),
             'lists.tasks.checklists' => fn ($q) => $q->orderBy('position'),
             'lists.tasks.checklists.items' => fn ($q) => $q->orderBy('position'),
+            'lists.tasks.comments' => fn ($q) => $q->with('user:id,name')->latest(),
+            'lists.tasks.attachments',
             'events' => fn ($q) => $featureScope($q)->orderBy('start_at'),
             'notes' => fn ($q) => $featureScope($q)->orderByDesc('pinned')->orderByDesc('pinned_at')->orderByDesc('created_at'),
             'notes.creator:id,name,email',
@@ -318,6 +321,13 @@ class ProjectController extends Controller
             'chatMembers' => $space->isFull
                 ? []
                 : SpaceChatAccess::membersWithPresence($project, $space->key, $user),
+            'activityLogs' => ActivityLog::query()
+                ->where('project_id', $project->id)
+                ->with('user:id,name')
+                ->latest()
+                ->limit(30)
+                ->get()
+                ->map(fn (ActivityLog $log) => $log->toPayload()),
             'members' => $members,
             'teamMembers' => $teamMembers,
             'teamCandidates' => $teamCandidates,
@@ -367,6 +377,8 @@ class ProjectController extends Controller
                 'list',
                 'checklists' => fn ($q) => $q->orderBy('position'),
                 'checklists.items' => fn ($q) => $q->orderBy('position'),
+                'comments' => fn ($q) => $q->with('user:id,name')->latest(),
+                'attachments',
             ])
             ->orderBy('position')
             ->get();
@@ -438,6 +450,7 @@ class ProjectController extends Controller
             'assignee_id' => $task->assignee_id,
             'start_date' => optional($task->start_date)?->toDateString(),
             'due_date' => optional($task->due_date)?->toDateString(),
+            'is_overdue' => $task->isOverdue(),
             'checklists' => $task->checklists->map(fn ($cl) => [
                 'id' => $cl->id,
                 'name' => $cl->name,
@@ -449,6 +462,8 @@ class ProjectController extends Controller
                     'position' => $it->position,
                 ])->values(),
             ])->values(),
+            'comments' => $task->comments->map(fn ($c) => $c->toPayload())->values(),
+            'attachments' => $task->attachments->map(fn ($a) => $a->toPayload())->values(),
         ];
     }
 }

@@ -4,6 +4,8 @@ import { sortPresenceUsers } from "@/lib/presence.js";
 
 const POLL_MS = 2000;
 const PRESENCE_POLL_MS = 10000;
+const TYPING_TTL_MS = 3000;
+const WHISPER_DEBOUNCE_MS = 400;
 
 function sortMessages(list) {
   return [...list].sort(
@@ -73,12 +75,16 @@ export function useSpaceChat(
   const chatMembers = ref([]);
   const loading = ref(false);
   const sending = ref(false);
+  const uploading = ref(false);
+  const typingUsers = ref([]);
   const listRef = ref(null);
   let pollTimer = null;
   let presenceTimer = null;
   let channel = null;
   let activeSpace = null;
   let echoOnlineUsers = [];
+  let whisperTimer = null;
+  const typingTimeouts = new Map();
 
   function scrollToBottom() {
     if (listRef.value) {
@@ -109,6 +115,66 @@ export function useSpaceChat(
     );
   }
 
+  function refreshTypingUsers() {
+    const currentUserId = currentUserIdRef?.value;
+    typingUsers.value = typingUsers.value.filter(
+      (user) => user.id !== currentUserId,
+    );
+  }
+
+  function addTypingUser(user) {
+    const currentUserId = currentUserIdRef?.value;
+    if (!user?.id || user.id === currentUserId) {
+      return;
+    }
+
+    typingUsers.value = [
+      ...typingUsers.value.filter((entry) => entry.id !== user.id),
+      { id: user.id, name: user.name ?? "Quelqu'un" },
+    ];
+
+    if (typingTimeouts.has(user.id)) {
+      clearTimeout(typingTimeouts.get(user.id));
+    }
+
+    typingTimeouts.set(
+      user.id,
+      setTimeout(() => {
+        typingUsers.value = typingUsers.value.filter(
+          (entry) => entry.id !== user.id,
+        );
+        typingTimeouts.delete(user.id);
+      }, TYPING_TTL_MS),
+    );
+  }
+
+  function whisperTyping() {
+    if (!channel || !currentUserIdRef?.value) {
+      return;
+    }
+
+    const member = chatMembers.value.find(
+      (entry) => entry.id === currentUserIdRef.value,
+    );
+
+    channel.whisper("typing", {
+      user: {
+        id: currentUserIdRef.value,
+        name: member?.name ?? "Utilisateur",
+      },
+    });
+  }
+
+  function notifyTyping() {
+    if (whisperTimer) {
+      clearTimeout(whisperTimer);
+    }
+    whisperTimer = setTimeout(() => {
+      whisperTyping();
+      whisperTimer = null;
+    }, WHISPER_DEBOUNCE_MS);
+  }
+
   function unsubscribe() {
     if (channel && window.Echo && activeSpace && projectId) {
       window.Echo.leave(`project-chat.${projectId}.${activeSpace}`);
@@ -122,9 +188,18 @@ export function useSpaceChat(
       clearInterval(presenceTimer);
       presenceTimer = null;
     }
+    if (whisperTimer) {
+      clearTimeout(whisperTimer);
+      whisperTimer = null;
+    }
+    for (const timeout of typingTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    typingTimeouts.clear();
     activeSpace = null;
     echoOnlineUsers = [];
     chatMembers.value = [];
+    typingUsers.value = [];
   }
 
   function appendMessage(message) {
@@ -136,9 +211,39 @@ export function useSpaceChat(
     return true;
   }
 
+  function replaceMessage(message) {
+    if (!message?.id) return;
+    const index = messages.value.findIndex((m) => m.id === message.id);
+    if (index === -1) {
+      appendMessage(message);
+      return;
+    }
+    messages.value = messages.value.map((m) =>
+      m.id === message.id ? message : m,
+    );
+  }
+
+  function removeMessage(messageId) {
+    messages.value = messages.value.filter((m) => m.id !== messageId);
+  }
+
   function handleIncoming(event) {
     const message = event?.message ?? event;
     appendMessage(message);
+  }
+
+  function handleUpdated(event) {
+    const message = event?.message;
+    if (message) {
+      replaceMessage(message);
+    }
+  }
+
+  function handleDeleted(event) {
+    const messageId = event?.message_id ?? event?.messageId;
+    if (messageId) {
+      removeMessage(messageId);
+    }
   }
 
   async function fetchMessages(spaceKey, { scroll = false } = {}) {
@@ -191,6 +296,13 @@ export function useSpaceChat(
       })
       .listen(".ChatMessageSent", handleIncoming)
       .listen("ChatMessageSent", handleIncoming)
+      .listen(".ChatMessageUpdated", handleUpdated)
+      .listen("ChatMessageUpdated", handleUpdated)
+      .listen(".ChatMessageDeleted", handleDeleted)
+      .listen("ChatMessageDeleted", handleDeleted)
+      .listenForWhisper("typing", (event) => {
+        addTypingUser(event?.user);
+      })
       .error((error) => {
         console.warn("[space-chat] Echo subscription error", error);
       });
@@ -244,6 +356,66 @@ export function useSpaceChat(
     }
   }
 
+  async function updateMessage(messageId, body) {
+    const trimmed = body?.trim();
+    if (!trimmed || !activeSpace || sending.value) {
+      return;
+    }
+
+    sending.value = true;
+    try {
+      const { data } = await axios.put(
+        route("projects.chat.messages.update", [projectSlug, messageId]),
+        { body: trimmed },
+        { params: { space: activeSpace } },
+      );
+      replaceMessage(data.message);
+    } finally {
+      sending.value = false;
+    }
+  }
+
+  async function deleteMessage(messageId) {
+    if (!activeSpace || sending.value) {
+      return;
+    }
+
+    sending.value = true;
+    try {
+      await axios.delete(
+        route("projects.chat.messages.destroy", [projectSlug, messageId]),
+        { params: { space: activeSpace } },
+      );
+      removeMessage(messageId);
+    } finally {
+      sending.value = false;
+    }
+  }
+
+  async function uploadAttachment(file) {
+    if (!file || !activeSpace || uploading.value) {
+      return;
+    }
+
+    uploading.value = true;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("space", activeSpace);
+
+      const { data } = await axios.post(
+        route("projects.chat.attachments.store", projectSlug),
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+      appendMessage(data.message);
+    } finally {
+      uploading.value = false;
+    }
+  }
+
   watch(
     initialMembersRef,
     (members) => {
@@ -274,5 +446,18 @@ export function useSpaceChat(
 
   onUnmounted(unsubscribe);
 
-  return { messages, chatMembers, loading, sending, send, listRef };
+  return {
+    messages,
+    chatMembers,
+    loading,
+    sending,
+    uploading,
+    typingUsers,
+    send,
+    updateMessage,
+    deleteMessage,
+    uploadAttachment,
+    notifyTyping,
+    listRef,
+  };
 }

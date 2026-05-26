@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
-import { router, useForm } from "@inertiajs/vue3";
+import { router, useForm, usePage } from "@inertiajs/vue3";
 import {
   AlignLeft,
   CalendarClock,
@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Clock,
   ListChecks,
+  Paperclip,
   Tag,
   Trash2,
   User as UserIcon,
@@ -22,6 +23,7 @@ import { Input } from "@/Components/ui/input";
 import { Select } from "@/Components/ui/select";
 import { Textarea } from "@/Components/ui/textarea";
 import Checklist from "./Checklist.vue";
+import TaskComments from "./TaskComments.vue";
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -33,6 +35,10 @@ const props = defineProps({
 });
 
 const emits = defineEmits(["update:open"]);
+
+const page = usePage();
+const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 
 const form = useForm({
   title: "",
@@ -46,6 +52,8 @@ const form = useForm({
 
 const editingDescription = ref(false);
 const titleEditing = ref(false);
+const uploading = ref(false);
+const fileInputRef = ref(null);
 
 const addingChecklist = ref(false);
 const checklistName = ref("");
@@ -67,6 +75,8 @@ function syncFromTask() {
 }
 
 const checklists = computed(() => props.task?.checklists ?? []);
+const comments = computed(() => props.task?.comments ?? []);
+const attachments = computed(() => props.task?.attachments ?? []);
 
 function openChecklistForm() {
   addingChecklist.value = true;
@@ -161,6 +171,64 @@ function destroyTask() {
     },
   );
 }
+
+function openFilePicker() {
+  fileInputRef.value?.click();
+}
+
+function onFileSelected(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file || !props.task || uploading.value) return;
+
+  uploading.value = true;
+  router.post(
+    route("projects.tasks.attachments.store", [
+      props.projectSlug,
+      props.task.id,
+    ]),
+    { file },
+    {
+      forceFormData: true,
+      preserveScroll: true,
+      preserveState: true,
+      only: ["lists"],
+      onFinish: () => {
+        uploading.value = false;
+      },
+    },
+  );
+}
+
+function deleteAttachment(attachment) {
+  if (!confirm(`Supprimer « ${attachment.original_name} » ?`)) return;
+  router.delete(
+    route("projects.attachments.destroy", [
+      props.projectSlug,
+      attachment.id,
+    ]),
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["lists"],
+    },
+  );
+}
+
+function canDeleteAttachment(attachment) {
+  if (isAdmin.value) return true;
+  if (attachment.user_id) {
+    return attachment.user_id === currentUserId.value;
+  }
+  return true;
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
 </script>
 
 <template>
@@ -207,9 +275,16 @@ function destroyTask() {
           <span
             v-if="dueLabel"
             class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+            :class="task.is_overdue ? 'bg-rose-500/15 text-rose-400' : ''"
           >
             <CalendarDays class="h-3 w-3" />
             {{ dueLabel }}
+          </span>
+          <span
+            v-if="task.is_overdue"
+            class="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-400"
+          >
+            En retard
           </span>
         </div>
 
@@ -237,6 +312,65 @@ function destroyTask() {
               Cliquer pour ajouter une description
             </span>
           </button>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <Paperclip class="h-4 w-4 text-muted-foreground" />
+            <h3 class="text-sm font-semibold">Pièces jointes</h3>
+          </div>
+
+          <ul v-if="attachments.length > 0" class="flex flex-col gap-1.5">
+            <li
+              v-for="attachment in attachments"
+              :key="attachment.id"
+              class="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2"
+            >
+              <a
+                :href="attachment.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="min-w-0 flex-1 truncate text-sm text-primary hover:underline"
+              >
+                {{ attachment.original_name }}
+              </a>
+              <span class="shrink-0 text-[11px] text-muted-foreground">
+                {{ formatFileSize(attachment.size) }}
+              </span>
+              <button
+                v-if="canDeleteAttachment(attachment)"
+                type="button"
+                class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-rose-400"
+                aria-label="Supprimer la pièce jointe"
+                @click="deleteAttachment(attachment)"
+              >
+                <Trash2 class="h-3.5 w-3.5" />
+              </button>
+            </li>
+          </ul>
+          <p v-else class="text-sm text-muted-foreground">
+            Aucune pièce jointe
+          </p>
+
+          <div>
+            <input
+              ref="fileInputRef"
+              type="file"
+              class="hidden"
+              @change="onFileSelected"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-8 gap-1.5 text-xs"
+              :disabled="uploading"
+              @click="openFilePicker"
+            >
+              <Paperclip class="h-3.5 w-3.5" />
+              {{ uploading ? "Envoi…" : "Ajouter un fichier" }}
+            </Button>
+          </div>
         </section>
 
         <Checklist
@@ -269,6 +403,12 @@ function destroyTask() {
             </button>
           </div>
         </section>
+
+        <TaskComments
+          :project-slug="projectSlug"
+          :task-id="task.id"
+          :comments="comments"
+        />
       </div>
 
       <aside v-if="task" class="flex flex-col gap-4 border-l border-border/60 md:pl-4">
@@ -283,6 +423,14 @@ function destroyTask() {
           >
             <ListChecks class="h-3.5 w-3.5" />
             Checklist
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted/60"
+            @click="openFilePicker"
+          >
+            <Paperclip class="h-3.5 w-3.5" />
+            Pièce jointe
           </button>
         </div>
 

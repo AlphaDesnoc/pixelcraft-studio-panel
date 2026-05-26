@@ -7,6 +7,7 @@ import KanbanCard from "./KanbanCard.vue";
 const props = defineProps({
   list: { type: Object, required: true },
   readonlyColumn: { type: Boolean, default: false },
+  disableTasksDrag: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -72,6 +73,7 @@ function onDragEnd() {
       class="flex h-full flex-col gap-2 overflow-y-auto p-2"
       ghost-class="kanban-ghost"
       :empty-insert-threshold="20"
+      :disabled="disableTasksDrag"
       @end="onDragEnd"
     >
       <KanbanCard

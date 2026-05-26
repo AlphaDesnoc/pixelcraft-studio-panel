@@ -13,6 +13,7 @@ const isCurrent = (name) => {
 const tabs = [
   { name: "Utilisateurs", route: "admin.users.index" },
   { name: "Projets", route: "admin.projects.index" },
+  { name: "Audit", route: "admin.audit.index" },
 ];
 </script>
 

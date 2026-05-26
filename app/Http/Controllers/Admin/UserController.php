@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -127,6 +128,8 @@ class UserController extends Controller
             ]);
         }
 
+        $previousRole = $user->role;
+
         $user->name = $validated['name'];
         $user->email = $email;
         $user->role = $validated['role'];
@@ -136,6 +139,23 @@ class UserController extends Controller
         }
 
         $user->save();
+
+        if ($previousRole !== $user->role) {
+            AuditLogger::log(
+                $request->user(),
+                'user_role_changed',
+                sprintf(
+                    '%s a changé le rôle de %s (%s → %s)',
+                    $request->user()->name,
+                    $user->name,
+                    $previousRole,
+                    $user->role,
+                ),
+                $user,
+                ['from' => $previousRole, 'to' => $user->role, 'email' => $user->email],
+                $request,
+            );
+        }
 
         return back()->with('success', 'Utilisateur mis à jour.');
     }
@@ -155,6 +175,20 @@ class UserController extends Controller
         $user->is_active = $validated['is_active'];
         $user->save();
 
+        AuditLogger::log(
+            $request->user(),
+            $validated['is_active'] ? 'user_activated' : 'user_deactivated',
+            sprintf(
+                '%s a %s le compte de %s',
+                $request->user()->name,
+                $validated['is_active'] ? 'réactivé' : 'désactivé',
+                $user->name,
+            ),
+            $user,
+            ['email' => $user->email],
+            $request,
+        );
+
         if (! $user->is_active) {
             DB::table('sessions')->where('user_id', $user->id)->delete();
         }
@@ -173,7 +207,18 @@ class UserController extends Controller
             ]);
         }
 
+        $name = $user->name;
+        $email = $user->email;
         $user->delete();
+
+        AuditLogger::log(
+            $request->user(),
+            'user_deleted',
+            sprintf('%s a supprimé le compte de %s', $request->user()->name, $name),
+            null,
+            ['email' => $email, 'name' => $name],
+            $request,
+        );
 
         return back()->with('success', 'Utilisateur supprimé.');
     }

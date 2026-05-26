@@ -78,4 +78,21 @@ class Task extends Model
     {
         return $this->hasMany(TaskChecklist::class)->orderBy('position');
     }
+
+    public function comments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(TaskComment::class)->latest();
+    }
+
+    public function attachments(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(Attachment::class, 'attachable');
+    }
+
+    public function isOverdue(): bool
+    {
+        return $this->due_date
+            && $this->due_date->isPast()
+            && $this->status !== self::STATUS_DONE;
+    }
 }

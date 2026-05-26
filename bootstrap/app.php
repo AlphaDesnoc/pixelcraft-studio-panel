@@ -27,4 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
+    })
+    ->withSchedule(function ($schedule): void {
+        $schedule->command('panel:due-reminders')->dailyAt('08:00');
     })->create();

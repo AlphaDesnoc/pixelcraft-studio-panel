@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskList;
+use App\Models\UserNotification;
+use App\Support\ActivityLogger;
+use App\Support\PanelNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +47,17 @@ class TaskController extends Controller
             'completed_at' => $list->status_kind === TaskList::STATUS_DONE ? now() : null,
         ]);
 
+        if (! empty($validated['assignee_id']) && (int) $validated['assignee_id'] !== (int) $request->user()->id) {
+            PanelNotifier::send(
+                (int) $validated['assignee_id'],
+                UserNotification::TYPE_TASK_ASSIGNED,
+                'Tâche assignée',
+                sprintf('%s vous a assigné « %s »', $request->user()->name, $validated['title']),
+                route('projects.show', $project->slug).'?tab=kanban',
+                ['project_id' => $project->id],
+            );
+        }
+
         return back();
     }
 
@@ -69,7 +83,24 @@ class TaskController extends Controller
             $validated['progress'] = $this->progressForList($project, $newList->id);
         }
 
+        $previousAssignee = $task->assignee_id;
         $task->update($validated);
+
+        if (
+            array_key_exists('assignee_id', $validated)
+            && $validated['assignee_id']
+            && (int) $validated['assignee_id'] !== (int) $previousAssignee
+            && (int) $validated['assignee_id'] !== (int) $request->user()->id
+        ) {
+            PanelNotifier::send(
+                (int) $validated['assignee_id'],
+                UserNotification::TYPE_TASK_ASSIGNED,
+                'Tâche assignée',
+                sprintf('%s vous a assigné « %s »', $request->user()->name, $task->title),
+                route('projects.show', $project->slug).'?tab=kanban',
+                ['project_id' => $project->id, 'task_id' => $task->id],
+            );
+        }
 
         return back();
     }
@@ -106,9 +137,11 @@ class TaskController extends Controller
             'order.*' => ['integer', 'distinct'],
         ]);
 
-        DB::transaction(function () use ($project, $task, $validated) {
+        DB::transaction(function () use ($project, $task, $validated, $request) {
             $newList = TaskList::findOrFail($validated['list_id']);
+            $task->loadMissing('list');
             $oldListId = $task->list_id;
+            $oldListName = $task->list?->name;
 
             $task->list_id = $newList->id;
             $task->status = $newList->status_kind;
@@ -118,6 +151,21 @@ class TaskController extends Controller
             $task->progress = $this->progressForList($project, $newList->id);
 
             $task->save();
+
+            ActivityLogger::log(
+                $project,
+                $request->user(),
+                'task_moved',
+                sprintf(
+                    '%s a déplacé « %s » de %s vers %s',
+                    $request->user()->name,
+                    $task->title,
+                    $oldListName ?? '—',
+                    $newList->name,
+                ),
+                $task,
+                ['from_list_id' => $oldListId, 'to_list_id' => $newList->id],
+            );
 
             foreach ($validated['order'] as $position => $id) {
                 Task::whereKey($id)

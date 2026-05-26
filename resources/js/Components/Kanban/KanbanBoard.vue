@@ -1,10 +1,11 @@
 <script setup>
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { router } from "@inertiajs/vue3";
 import { Plus } from "lucide-vue-next";
 import { VueDraggable } from "vue-draggable-plus";
 import { Button } from "@/Components/ui/button";
 import KanbanColumn from "./KanbanColumn.vue";
+import KanbanFilters from "./KanbanFilters.vue";
 import ColumnFormDialog from "./ColumnFormDialog.vue";
 import TaskFormDialog from "./TaskFormDialog.vue";
 import TaskDetailDialog from "./TaskDetailDialog.vue";
@@ -20,6 +21,56 @@ const props = defineProps({
 });
 
 const localLists = ref(cloneLists(props.lists));
+const activeFilters = ref({
+  assigneeId: "",
+  priority: "",
+  due: "all",
+  search: "",
+});
+
+function taskMatchesFilters(task, filters) {
+  if (filters.search) {
+    const query = filters.search.toLowerCase();
+    const haystack = `${task.title ?? ""} ${task.description ?? ""}`.toLowerCase();
+    if (!haystack.includes(query)) return false;
+  }
+
+  if (filters.assigneeId === "none") {
+    if (task.assignee_id) return false;
+  } else if (filters.assigneeId) {
+    if (String(task.assignee_id) !== String(filters.assigneeId)) return false;
+  }
+
+  if (filters.priority && task.priority !== filters.priority) {
+    return false;
+  }
+
+  if (filters.due === "overdue" && !task.is_overdue) {
+    return false;
+  }
+  if (filters.due === "none" && task.due_date) {
+    return false;
+  }
+
+  return true;
+}
+
+const filteredLists = computed(() =>
+  localLists.value.map((list) => ({
+    ...list,
+    tasks: list.tasks.filter((task) => taskMatchesFilters(task, activeFilters.value)),
+  })),
+);
+
+const hasActiveFilters = computed(() => {
+  const filters = activeFilters.value;
+  return Boolean(
+    filters.search ||
+      filters.assigneeId ||
+      filters.priority ||
+      filters.due !== "all",
+  );
+});
 
 function cloneLists(lists) {
   return lists.map((l) => ({
@@ -96,7 +147,15 @@ function onColumnsDragEnd() {
 
 function handleTasksReorder({ listId, tasks, sync }) {
   const list = localLists.value.find((l) => l.id === listId);
-  if (list) list.tasks = tasks;
+  if (!list) return;
+
+  if (hasActiveFilters.value) {
+    const visibleIds = new Set(tasks.map((t) => t.id));
+    const hidden = list.tasks.filter((t) => !visibleIds.has(t.id));
+    list.tasks = [...tasks, ...hidden];
+  } else {
+    list.tasks = tasks;
+  }
 
   if (!sync) return;
 
@@ -149,6 +208,12 @@ function handleTasksReorder({ listId, tasks, sync }) {
 
 <template>
   <div class="flex flex-col gap-3">
+    <KanbanFilters
+      :members="members"
+      :priorities="priorities"
+      @update:filters="activeFilters = $event"
+    />
+
     <div class="flex items-center justify-between gap-2">
       <p class="text-xs text-muted-foreground">
         <template v-if="globalKanban">
@@ -180,9 +245,10 @@ function handleTasksReorder({ listId, tasks, sync }) {
       @end="onColumnsDragEnd"
     >
       <KanbanColumn
-        v-for="list in localLists"
+        v-for="list in filteredLists"
         :key="list.id"
         :list="list"
+        :disable-tasks-drag="hasActiveFilters"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
         @add-card="openCreateTask"
@@ -196,10 +262,11 @@ function handleTasksReorder({ listId, tasks, sync }) {
       class="flex items-stretch gap-3 overflow-x-auto pb-3"
     >
       <KanbanColumn
-        v-for="list in localLists"
+        v-for="list in filteredLists"
         :key="list.id"
         :list="list"
         :readonly-column="globalKanban"
+        :disable-tasks-drag="hasActiveFilters"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
         @add-card="openCreateTask"

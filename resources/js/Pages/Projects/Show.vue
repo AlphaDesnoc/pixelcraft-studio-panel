@@ -37,6 +37,7 @@ import FilesView from "@/Components/Files/FilesView.vue";
 import BugsView from "@/Components/Bugs/BugsView.vue";
 import ChatView from "@/Components/Chat/ChatView.vue";
 import TeamView from "@/Components/Team/TeamView.vue";
+import ActivityFeed from "@/Components/Projects/ActivityFeed.vue";
 import { spaceOnlyProps } from "@/composables/useProjectSpace.js";
 
 const props = defineProps({
@@ -71,6 +72,7 @@ const props = defineProps({
   bugStatuses: { type: Object, default: () => ({}) },
   chatMessages: { type: Array, default: () => [] },
   chatMembers: { type: Array, default: () => [] },
+  activityLogs: { type: Array, default: () => [] },
 });
 
 const activeSpace = ref(props.activeSpace);
@@ -392,6 +394,8 @@ const totalStatusCount = computed(() =>
             </CardContent>
           </Card>
         </div>
+
+        <ActivityFeed :activity-logs="activityLogs" />
       </section>
 
       <section v-else-if="activeTab === 'kanban'">
