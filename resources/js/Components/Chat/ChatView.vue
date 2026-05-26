@@ -5,6 +5,8 @@ import {
   MessageSquare,
   Paperclip,
   Pencil,
+  Pin,
+  PinOff,
   Reply,
   Send,
   Smile,
@@ -21,7 +23,7 @@ import TwemojiIcon from "@/Components/Chat/TwemojiIcon.vue";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
-import { renderMessageBody } from "@/lib/twemojiRender.js";
+import { escapeHtml, parseEmojis, renderMessageBody } from "@/lib/twemojiRender.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -66,6 +68,7 @@ const {
   notifyTyping,
   listRef,
   toggleReaction,
+  pinMessage,
 } = useSpaceChat(
   props.projectSlug,
   props.projectId,
@@ -112,6 +115,20 @@ const typingLabel = computed(() => {
     return `${names[0]} et ${names[1]} sont en train d'écrire…`;
   }
   return `${names.length} personnes sont en train d'écrire…`;
+});
+
+const pinnedMessages = computed(() =>
+  messages.value.filter((message) => message.pinned_at),
+);
+
+const regularMessages = computed(() =>
+  messages.value.filter((message) => !message.pinned_at),
+);
+
+const draftPreviewHtml = computed(() => {
+  const text = draft.value.trim();
+  if (!text) return "";
+  return parseEmojis(escapeHtml(text).replace(/\n/g, "<br>"));
 });
 
 function formatTime(iso) {
@@ -204,6 +221,10 @@ async function onToggleReaction(message, emoji) {
   await toggleReaction(message.id, emoji);
 }
 
+async function onPinMessage(message) {
+  await pinMessage(message.id);
+}
+
 function openReactionPicker(message, event) {
   reactionPickerMessageId.value = message.id;
   reactionTriggerRef.value = event.currentTarget;
@@ -245,6 +266,11 @@ function onDraftKeydown(event) {
     return;
   }
   if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    submitMessage();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
     event.preventDefault();
     submitMessage();
   }
@@ -322,8 +348,57 @@ async function onFileSelected(event) {
           >
             Aucun message. Lancez la conversation avec votre équipe.
           </div>
+
+          <section
+            v-if="pinnedMessages.length"
+            class="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"
+          >
+            <p class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+              <Pin class="h-3 w-3" />
+              Messages épinglés
+            </p>
+            <div
+              v-for="message in pinnedMessages"
+              :key="`pinned-${message.id}`"
+              class="group flex gap-2.5"
+              :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+            >
+              <div
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
+              >
+                {{ initials(message.user?.name) }}
+              </div>
+              <div
+                class="relative max-w-[75%] rounded-xl px-3 py-2"
+                :class="
+                  message.user?.id === currentUserId
+                    ? 'bg-primary/15 text-foreground'
+                    : 'bg-muted/60 text-foreground'
+                "
+              >
+                <p class="text-[11px] font-medium text-muted-foreground">
+                  {{ message.user?.name }} · {{ formatTime(message.created_at) }}
+                </p>
+                <div
+                  v-if="shouldShowMessageBody(message)"
+                  class="chat-message-body mt-0.5 text-left text-sm"
+                  v-html="renderMessageBody(message)"
+                />
+                <button
+                  type="button"
+                  class="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                  title="Désépingler"
+                  @click="onPinMessage(message)"
+                >
+                  <PinOff class="h-3 w-3" />
+                  Désépingler
+                </button>
+              </div>
+            </div>
+          </section>
+
           <div
-            v-for="message in messages"
+            v-for="message in regularMessages"
             :key="message.id"
             class="group flex gap-2.5"
             :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
@@ -383,6 +458,16 @@ async function onFileSelected(event) {
                     @click="startReply(message)"
                   >
                     <Reply class="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    :aria-label="message.pinned_at ? 'Désépingler' : 'Épingler'"
+                    :title="message.pinned_at ? 'Désépingler' : 'Épingler'"
+                    @click="onPinMessage(message)"
+                  >
+                    <PinOff v-if="message.pinned_at" class="h-3 w-3" />
+                    <Pin v-else class="h-3 w-3" />
                   </button>
                   <template v-if="message.can_edit && editingMessageId !== message.id">
                     <button
@@ -587,11 +672,16 @@ async function onFileSelected(event) {
             <Textarea
               ref="draftTextareaRef"
               v-model="draft"
-              placeholder="Écrire un message à l'équipe… (@pseudo pour mentionner)"
+              placeholder="Écrire un message… Markdown (**gras**, *italique*) · @pseudo · Ctrl+Entrée pour envoyer"
               rows="2"
               class="min-h-[44px] w-full resize-none"
               @input="onDraftInput"
               @keydown="onDraftKeydown"
+            />
+            <div
+              v-if="draftPreviewHtml"
+              class="chat-draft-preview mt-1 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-left text-sm text-foreground"
+              v-html="draftPreviewHtml"
             />
             <MentionSuggestions
               v-if="draftMentionOpen && draftMentionSuggestions.length"
@@ -645,5 +735,9 @@ async function onFileSelected(event) {
 .chat-message-body--emoji-only :deep(.twemoji) {
   height: 2rem;
   width: 2rem;
+}
+
+.chat-draft-preview :deep(.twemoji) {
+  margin: 0 0.05em;
 }
 </style>

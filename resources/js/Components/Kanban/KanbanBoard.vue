@@ -19,19 +19,27 @@ const props = defineProps({
   rankId: { type: Number, default: null },
   globalKanban: { type: Boolean, default: false },
   tags: { type: Array, default: () => [] },
+  taskTemplates: { type: Array, default: () => [] },
+  swimlaneMode: { type: Boolean, default: false },
+  myPermissions: { type: Object, default: () => ({}) },
 });
 
+const emit = defineEmits(["update:swimlaneMode"]);
+
 const localLists = ref(cloneLists(props.lists));
+const showArchived = ref(false);
 const activeFilters = ref({
   assigneeId: "",
   priority: "",
   due: "all",
   search: "",
   tagIds: [],
+  showArchived: false,
+  swimlaneByAssignee: false,
 });
 
 function taskMatchesFilters(task, filters) {
-  if (task.archived_at) {
+  if (task.archived_at && !filters.showArchived) {
     return false;
   }
 
@@ -74,6 +82,29 @@ const filteredLists = computed(() =>
   })),
 );
 
+const effectiveSwimlaneMode = computed(
+  () => props.swimlaneMode || activeFilters.value.swimlaneByAssignee,
+);
+
+watch(
+  () => activeFilters.value.swimlaneByAssignee,
+  (value) => {
+    emit("update:swimlaneMode", value);
+  },
+);
+
+watch(
+  () => props.swimlaneMode,
+  (value) => {
+    if (value !== activeFilters.value.swimlaneByAssignee) {
+      activeFilters.value = {
+        ...activeFilters.value,
+        swimlaneByAssignee: value,
+      };
+    }
+  },
+);
+
 const hasActiveFilters = computed(() => {
   const filters = activeFilters.value;
   return Boolean(
@@ -81,6 +112,7 @@ const hasActiveFilters = computed(() => {
       filters.assigneeId ||
       filters.priority ||
       filters.due !== "all" ||
+      filters.showArchived ||
       (filters.tagIds?.length ?? 0) > 0,
   );
 });
@@ -217,6 +249,11 @@ function handleTasksReorder({ listId, tasks, sync }) {
     }
   }
 }
+
+function onFiltersUpdate(filters) {
+  activeFilters.value = filters;
+  showArchived.value = filters.showArchived;
+}
 </script>
 
 <template>
@@ -225,13 +262,23 @@ function handleTasksReorder({ listId, tasks, sync }) {
       :members="members"
       :priorities="priorities"
       :tags="tags"
-      @update:filters="activeFilters = $event"
+      :show-archived="showArchived"
+      :swimlane-by-assignee="effectiveSwimlaneMode"
+      @update:filters="onFiltersUpdate"
+      @update:show-archived="showArchived = $event"
+      @update:swimlane-by-assignee="emit('update:swimlaneMode', $event)"
     />
 
     <div class="flex items-center justify-between gap-2">
       <p class="text-xs text-muted-foreground">
         <template v-if="globalKanban">
           Toutes les équipes · 4 colonnes unifiées · Glissez les cartes entre colonnes
+        </template>
+        <template v-else-if="effectiveSwimlaneMode">
+          Swimlanes par assigné · Glissez les cartes entre colonnes
+        </template>
+        <template v-else-if="showArchived">
+          Affichage des cartes archivées inclus
         </template>
         <template v-else>
           Glissez les cartes et colonnes · Cliquez sur une carte pour l'ouvrir
@@ -262,6 +309,8 @@ function handleTasksReorder({ listId, tasks, sync }) {
         v-for="list in filteredLists"
         :key="list.id"
         :list="list"
+        :members="members"
+        :swimlane-mode="effectiveSwimlaneMode"
         :disable-tasks-drag="hasActiveFilters"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
@@ -279,6 +328,8 @@ function handleTasksReorder({ listId, tasks, sync }) {
         v-for="list in filteredLists"
         :key="list.id"
         :list="list"
+        :members="members"
+        :swimlane-mode="effectiveSwimlaneMode"
         :readonly-column="globalKanban"
         :disable-tasks-drag="hasActiveFilters"
         class="min-h-[420px]"
@@ -314,6 +365,8 @@ function handleTasksReorder({ listId, tasks, sync }) {
       :members="members"
       :priorities="priorities"
       :tags="tags"
+      :task-templates="taskTemplates"
+      :all-tasks="lists.flatMap((l) => l.tasks ?? [])"
     />
   </div>
 </template>

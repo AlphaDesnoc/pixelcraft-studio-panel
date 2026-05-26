@@ -33,7 +33,16 @@ class ProjectPermissions
         }
 
         $member = $project->members()->whereKey($user->id)->first();
-        $stored = is_array($member?->pivot?->permissions) ? $member->pivot->permissions : [];
+        $stored = $member?->pivot?->permissions ?? [];
+
+        if (is_string($stored)) {
+            $decoded = json_decode($stored, true);
+            $stored = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($stored)) {
+            $stored = [];
+        }
 
         return array_merge(self::defaults(), $stored);
     }

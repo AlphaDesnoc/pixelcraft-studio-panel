@@ -3,14 +3,17 @@ import { reactive, watch } from "vue";
 import { Search } from "lucide-vue-next";
 import { Input } from "@/Components/ui/input";
 import { Select } from "@/Components/ui/select";
+import { Switch } from "@/Components/ui/switch";
 
 const props = defineProps({
   members: { type: Array, default: () => [] },
   priorities: { type: Object, default: () => ({}) },
   tags: { type: Array, default: () => [] },
+  showArchived: { type: Boolean, default: false },
+  swimlaneByAssignee: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(["update:filters"]);
+const emit = defineEmits(["update:filters", "update:showArchived", "update:swimlaneByAssignee"]);
 
 const filters = reactive({
   assigneeId: "",
@@ -18,6 +21,8 @@ const filters = reactive({
   due: "all",
   search: "",
   tagIds: [],
+  showArchived: props.showArchived,
+  swimlaneByAssignee: props.swimlaneByAssignee,
 });
 
 function toggleTag(id) {
@@ -35,9 +40,25 @@ function tagActive(id) {
 }
 
 watch(
+  () => props.showArchived,
+  (value) => {
+    filters.showArchived = value;
+  },
+);
+
+watch(
+  () => props.swimlaneByAssignee,
+  (value) => {
+    filters.swimlaneByAssignee = value;
+  },
+);
+
+watch(
   filters,
   (value) => {
     emit("update:filters", { ...value });
+    emit("update:showArchived", value.showArchived);
+    emit("update:swimlaneByAssignee", value.swimlaneByAssignee);
   },
   { deep: true, immediate: true },
 );
@@ -96,6 +117,20 @@ watch(
         <option value="overdue">En retard</option>
         <option value="none">Sans échéance</option>
       </Select>
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <label class="text-[11px] font-medium text-muted-foreground">
+        Archivées
+      </label>
+      <Switch v-model="filters.showArchived" />
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <label class="text-[11px] font-medium text-muted-foreground">
+        Swimlanes
+      </label>
+      <Switch v-model="filters.swimlaneByAssignee" />
     </div>
 
     <div v-if="tags.length" class="w-full min-w-[200px] md:flex-1">

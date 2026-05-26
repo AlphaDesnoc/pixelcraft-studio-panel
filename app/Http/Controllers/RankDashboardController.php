@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Task;
@@ -17,11 +18,13 @@ class RankDashboardController extends Controller
     {
         ProjectAccess::ensureAccess($request->user(), $project);
 
+        $since = now()->subDays(14);
+
         $ranks = $project->ranks()
             ->with(['responsible:id,name', 'members:id,name'])
             ->orderBy('position')
             ->get()
-            ->map(function ($rank) use ($project) {
+            ->map(function ($rank) use ($project, $since) {
                 $memberIds = $rank->members->pluck('id');
 
                 $tasksQuery = Task::query()
@@ -36,13 +39,45 @@ class RankDashboardController extends Controller
                     ->whereDate('due_date', '<', now())
                     ->count();
 
+                $completedRecently = Task::query()
+                    ->where('project_id', $project->id)
+                    ->where('status', Task::STATUS_DONE)
+                    ->where('updated_at', '>=', $since)
+                    ->whereHas('list', fn ($q) => $q->where('rank_id', $rank->id))
+                    ->count();
+
+                $velocity = round($completedRecently / 2, 1);
+
                 $openBugs = 0;
+                $slaBreached = 0;
+                $avgResolutionHours = null;
+
                 if ($rank->manages_bugs) {
-                    $openBugs = Bug::query()
+                    $bugsQuery = Bug::query()
                         ->where('project_id', $project->id)
-                        ->where('assigned_rank_id', $rank->id)
+                        ->where('assigned_rank_id', $rank->id);
+
+                    $openBugs = (clone $bugsQuery)
                         ->where('status', '!=', Bug::STATUS_CLOSED)
                         ->count();
+
+                    $slaBreached = (clone $bugsQuery)
+                        ->where('status', '!=', Bug::STATUS_CLOSED)
+                        ->whereNotNull('sla_due_at')
+                        ->where('sla_due_at', '<', now())
+                        ->count();
+
+                    $resolved = (clone $bugsQuery)
+                        ->where('status', Bug::STATUS_CLOSED)
+                        ->where('updated_at', '>=', $since)
+                        ->get(['created_at', 'updated_at']);
+
+                    if ($resolved->isNotEmpty()) {
+                        $avgResolutionHours = round(
+                            $resolved->avg(fn (Bug $b) => $b->created_at->diffInHours($b->updated_at)),
+                            1,
+                        );
+                    }
                 }
 
                 return [
@@ -61,6 +96,9 @@ class RankDashboardController extends Controller
                         'overdue_tasks' => $overdueTasks,
                         'open_bugs' => $openBugs,
                         'active_members' => $memberIds->count(),
+                        'velocity' => $velocity,
+                        'sla_breached' => $slaBreached,
+                        'avg_bug_resolution_hours' => $avgResolutionHours,
                     ],
                 ];
             });

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\CalendarEvent;
 use App\Models\Project;
 use Illuminate\Http\RedirectResponse;
@@ -10,8 +11,11 @@ use Illuminate\Validation\Rule;
 
 class CalendarEventController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'calendar');
         $this->ensureCanEdit($request, $project);
 
         $validated = $this->validateData($request);
@@ -32,6 +36,7 @@ class CalendarEventController extends Controller
 
     public function update(Request $request, Project $project, CalendarEvent $event): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'calendar');
         $this->ensureCanEdit($request, $project);
         abort_unless($event->project_id === $project->id, 404);
 
@@ -51,6 +56,7 @@ class CalendarEventController extends Controller
 
     public function destroy(Request $request, Project $project, CalendarEvent $event): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'calendar');
         $this->ensureCanEdit($request, $project);
         abort_unless($event->project_id === $project->id, 404);
 

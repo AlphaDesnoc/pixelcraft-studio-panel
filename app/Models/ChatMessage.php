@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Http\Controllers\ChatReactionController;
+use App\Support\ChatBodyFormatter;
 use App\Support\MentionParser;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -20,6 +21,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'mentions',
     'reply_to_id',
     'edited_at',
+    'pinned_at',
+    'pinned_by',
 ])]
 class ChatMessage extends Model
 {
@@ -32,6 +35,7 @@ class ChatMessage extends Model
         return [
             'mentions' => 'array',
             'edited_at' => 'datetime',
+            'pinned_at' => 'datetime',
         ];
     }
 
@@ -90,12 +94,14 @@ class ChatMessage extends Model
         return [
             'id' => $this->id,
             'body' => $this->body,
-            'body_html' => MentionParser::highlightHtml($this->body ?? ''),
+            'body_html' => ChatBodyFormatter::toHtml($this->body ?? ''),
             'space_key' => $this->space_key,
             'mentions' => $this->mentions ?? [],
             'reply_to_id' => $this->reply_to_id,
             'reply_preview' => $replyPreview,
             'reactions' => ChatReactionController::groupedReactions($this),
+            'pinned_at' => $this->pinned_at?->toIso8601String(),
+            'is_pinned' => (bool) $this->pinned_at,
             'edited_at' => $this->edited_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
             'user' => $this->user ? [

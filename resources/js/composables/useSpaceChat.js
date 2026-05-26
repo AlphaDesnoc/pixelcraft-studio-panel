@@ -398,6 +398,47 @@ export function useSpaceChat(
     }
   }
 
+  async function toggleReaction(messageId, emoji) {
+    if (!activeSpace || !emoji || !messageId) {
+      return;
+    }
+
+    try {
+      const { data } = await axios.post(
+        route("projects.chat.reactions.toggle", [projectSlug, messageId]),
+        { emoji },
+        { params: { space: activeSpace } },
+      );
+      if (data?.reactions) {
+        const prev = messages.value.find((m) => m.id === messageId);
+        if (prev) {
+          replaceMessage({ ...prev, reactions: data.reactions });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function pinMessage(messageId) {
+    if (!activeSpace || !messageId) {
+      return;
+    }
+
+    try {
+      const { data } = await axios.post(
+        route("projects.chat.messages.pin", [projectSlug, messageId]),
+        {},
+        { params: { space: activeSpace } },
+      );
+      if (data?.message) {
+        replaceMessage(data.message);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function updateMessage(messageId, body) {
     const trimmed = body?.trim();
     if (!trimmed || !activeSpace || sending.value) {
@@ -497,6 +538,7 @@ export function useSpaceChat(
     typingUsers,
     send,
     toggleReaction,
+    pinMessage,
     updateMessage,
     deleteMessage,
     uploadAttachment,

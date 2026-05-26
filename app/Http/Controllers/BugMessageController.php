@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Events\BugMessageSent;
 use App\Models\Bug;
 use App\Models\Project;
@@ -11,6 +12,8 @@ use Illuminate\Http\Request;
 
 class BugMessageController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function index(Request $request, Project $project, Bug $bug): JsonResponse
     {
         $this->authorizeAccess($request, $project, $bug);
@@ -48,6 +51,7 @@ class BugMessageController extends Controller
     private function authorizeAccess(Request $request, Project $project, Bug $bug): void
     {
         abort_unless($bug->project_id === $project->id, 404);
+        $this->ensureFeature($request, $project, 'bugs');
 
         $user = $request->user();
         abort_unless(

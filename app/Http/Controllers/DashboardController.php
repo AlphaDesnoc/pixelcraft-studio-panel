@@ -41,6 +41,11 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard', [
             'stats' => $stats,
             'projects' => $projects,
+            'dashboardWidgets' => array_merge(
+                ProfileDashboardWidgetsController::defaults(),
+                $user->dashboard_widgets ?? [],
+            ),
+            'availableWidgets' => ProfileDashboardWidgetsController::WIDGETS,
         ]);
     }
 }

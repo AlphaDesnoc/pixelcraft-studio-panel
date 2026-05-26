@@ -4,14 +4,18 @@ import { router, useForm, usePage } from "@inertiajs/vue3";
 import {
   AlignLeft,
   Archive,
+  ArchiveRestore,
   Bug,
   CalendarClock,
   CalendarDays,
   CheckSquare,
   Clock,
   Copy,
+  GitBranch,
+  LayoutTemplate,
   ListChecks,
   Paperclip,
+  Repeat,
   Tag,
   Trash2,
   User as UserIcon,
@@ -37,6 +41,8 @@ const props = defineProps({
   members: { type: Array, required: true },
   priorities: { type: Object, required: true },
   tags: { type: Array, default: () => [] },
+  taskTemplates: { type: Array, default: () => [] },
+  allTasks: { type: Array, default: () => [] },
 });
 
 const emits = defineEmits(["update:open"]);
@@ -53,7 +59,21 @@ const form = useForm({
   assignee_id: "",
   start_date: "",
   due_date: "",
+  recurrence_rule: "",
+  estimated_minutes: "",
+  logged_minutes: "",
+  auto_archive_at: "",
 });
+
+const selectedTemplateId = ref("");
+const selectedDependencyIds = ref([]);
+
+const recurrenceOptions = [
+  { value: "", label: "Aucune" },
+  { value: "daily", label: "Quotidienne" },
+  { value: "weekly", label: "Hebdomadaire" },
+  { value: "monthly", label: "Mensuelle" },
+];
 
 const editingDescription = ref(false);
 const titleEditing = ref(false);
@@ -72,6 +92,16 @@ function syncFromTask() {
   form.assignee_id = props.task.assignee_id ?? "";
   form.start_date = props.task.start_date ?? "";
   form.due_date = props.task.due_date ?? "";
+  form.recurrence_rule = props.task.recurrence_rule ?? "";
+  form.estimated_minutes = props.task.estimated_minutes ?? "";
+  form.logged_minutes = props.task.logged_minutes ?? "";
+  form.auto_archive_at = props.task.auto_archive_at
+    ? String(props.task.auto_archive_at).slice(0, 10)
+    : "";
+  selectedDependencyIds.value = (props.task.dependencies ?? []).map(
+    (dep) => dep.id ?? dep.depends_on_task_id ?? dep.task_id,
+  );
+  selectedTemplateId.value = "";
   form.clearErrors();
   editingDescription.value = false;
   titleEditing.value = false;
@@ -146,11 +176,17 @@ function patch(field, value) {
   if (!props.task) return;
   form[field] = value;
   form
-    .transform((data) => ({ [field]: data[field] }))
+    .transform((data) => ({ [field]: data[field] === "" ? null : data[field] }))
     .put(route("projects.tasks.update", [props.projectSlug, props.task.id]), {
       preserveScroll: true,
       preserveState: true,
+      only: ["lists"],
     });
+}
+
+function patchNumber(field, raw) {
+  const value = raw === "" || raw == null ? null : Number(raw);
+  patch(field, value);
 }
 
 function saveTitle() {
@@ -179,6 +215,58 @@ function archiveTask() {
     },
   );
 }
+
+function unarchiveTask() {
+  if (!props.task) return;
+  router.post(
+    route("projects.tasks.unarchive", [props.projectSlug, props.task.id]),
+    {},
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["lists"],
+    },
+  );
+}
+
+function applyTemplate() {
+  if (!props.task || !selectedTemplateId.value) return;
+  router.post(
+    route("projects.tasks.templates.apply", [props.projectSlug, props.task.id]),
+    { template_id: Number(selectedTemplateId.value) },
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["lists"],
+    },
+  );
+}
+
+function saveDependencies() {
+  if (!props.task) return;
+  router.put(route("projects.tasks.update", [props.projectSlug, props.task.id]), {
+    dependency_ids: selectedDependencyIds.value.map(Number),
+  }, {
+    preserveScroll: true,
+    preserveState: true,
+    only: ["lists"],
+  });
+}
+
+function toggleDependency(taskId) {
+  const id = Number(taskId);
+  const index = selectedDependencyIds.value.indexOf(id);
+  if (index >= 0) {
+    selectedDependencyIds.value.splice(index, 1);
+  } else {
+    selectedDependencyIds.value.push(id);
+  }
+  saveDependencies();
+}
+
+const dependencyOptions = computed(() =>
+  props.allTasks.filter((t) => t.id !== props.task?.id),
+);
 
 function duplicateTask() {
   if (!props.task) return;
@@ -565,6 +653,108 @@ function formatFileSize(bytes) {
               @change="patch('start_date', form.start_date || null)"
             />
           </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Repeat class="h-3 w-3" /> Récurrence
+            </label>
+            <Select
+              v-model="form.recurrence_rule"
+              class="h-8 text-xs"
+              @change="patch('recurrence_rule', form.recurrence_rule || null)"
+            >
+              <option
+                v-for="option in recurrenceOptions"
+                :key="option.value || 'none'"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </Select>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Clock class="h-3 w-3" /> Temps estimé (min)
+            </label>
+            <Input
+              v-model="form.estimated_minutes"
+              type="number"
+              min="0"
+              class="h-8 text-xs"
+              @change="patchNumber('estimated_minutes', form.estimated_minutes)"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Clock class="h-3 w-3" /> Temps enregistré (min)
+            </label>
+            <Input
+              v-model="form.logged_minutes"
+              type="number"
+              min="0"
+              class="h-8 text-xs"
+              @change="patchNumber('logged_minutes', form.logged_minutes)"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Archive class="h-3 w-3" /> Auto-archivage
+            </label>
+            <Input
+              v-model="form.auto_archive_at"
+              type="date"
+              class="h-8 text-xs"
+              @change="patch('auto_archive_at', form.auto_archive_at || null)"
+            />
+          </div>
+
+          <div v-if="taskTemplates.length" class="flex flex-col gap-1">
+            <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <LayoutTemplate class="h-3 w-3" /> Modèle
+            </label>
+            <div class="flex gap-1">
+              <Select v-model="selectedTemplateId" class="h-8 flex-1 text-xs">
+                <option value="">Choisir…</option>
+                <option v-for="tpl in taskTemplates" :key="tpl.id" :value="String(tpl.id)">
+                  {{ tpl.name }}
+                </option>
+              </Select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                class="h-8 shrink-0 px-2 text-xs"
+                :disabled="!selectedTemplateId"
+                @click="applyTemplate"
+              >
+                Appliquer
+              </Button>
+            </div>
+          </div>
+
+          <div v-if="dependencyOptions.length" class="flex flex-col gap-1.5">
+            <label class="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <GitBranch class="h-3 w-3" /> Dépendances
+            </label>
+            <div class="max-h-32 space-y-1 overflow-y-auto rounded-md border border-border/60 bg-muted/10 p-2">
+              <label
+                v-for="candidate in dependencyOptions"
+                :key="candidate.id"
+                class="flex cursor-pointer items-center gap-2 text-[11px]"
+              >
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5 rounded border-input text-primary"
+                  :checked="selectedDependencyIds.includes(candidate.id)"
+                  @change="toggleDependency(candidate.id)"
+                />
+                <span class="truncate">{{ candidate.title }}</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="flex flex-col gap-1.5">
@@ -579,6 +769,16 @@ function formatFileSize(bytes) {
           >
             <Copy class="h-3.5 w-3.5" />
             Dupliquer
+          </Button>
+          <Button
+            v-if="task.archived_at"
+            type="button"
+            variant="outline"
+            class="h-8 justify-start gap-1.5 text-xs"
+            @click="unarchiveTask"
+          >
+            <ArchiveRestore class="h-3.5 w-3.5" />
+            Désarchiver
           </Button>
           <Button
             v-if="!task.archived_at"

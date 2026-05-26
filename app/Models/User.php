@@ -23,6 +23,8 @@ use Illuminate\Support\Str;
     'two_factor_secret',
     'two_factor_recovery_codes',
     'two_factor_confirmed_at',
+    'theme_preference',
+    'dashboard_widgets',
 ])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable
@@ -50,6 +52,8 @@ class User extends Authenticatable
             'notification_preferences' => 'array',
             'two_factor_confirmed_at' => 'datetime',
             'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'dashboard_widgets' => 'array',
         ];
     }
 

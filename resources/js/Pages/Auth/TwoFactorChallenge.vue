@@ -32,22 +32,23 @@ const submit = () => {
       <CardHeader>
         <CardTitle>Double authentification</CardTitle>
         <CardDescription>
-          Saisissez le code à six chiffres de votre application d'authentification.
+          Saisissez le code à six chiffres de votre application d'authentification,
+          ou un code de récupération.
         </CardDescription>
       </CardHeader>
 
       <CardContent>
         <form class="flex flex-col gap-4" @submit.prevent="submit">
           <div class="flex flex-col gap-2">
-            <Label for="code">Code</Label>
+            <Label for="code">Code ou code de récupération</Label>
             <Input
               id="code"
               v-model="form.code"
               type="text"
-              maxlength="10"
-              inputmode="numeric"
+              maxlength="32"
               autocomplete="one-time-code"
-              placeholder="123456"
+              placeholder="123456 ou xxxx-xxxx-xxxx"
+              class="font-mono"
               required
               autofocus
             />

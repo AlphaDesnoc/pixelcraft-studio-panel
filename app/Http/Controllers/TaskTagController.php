@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskTag;
@@ -10,8 +11,11 @@ use Illuminate\Http\Request;
 
 class TaskTagController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         $user = $request->user();
         abort_unless(
             $user->is_admin || $project->members()->whereKey($user->id)->exists(),
@@ -34,6 +38,7 @@ class TaskTagController extends Controller
 
     public function sync(Request $request, Project $project, Task $task): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         abort_unless($task->project_id === $project->id, 404);
 
         $validated = $request->validate([

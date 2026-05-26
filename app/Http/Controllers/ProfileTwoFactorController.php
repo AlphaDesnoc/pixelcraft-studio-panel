@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\TwoFactorRecovery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -60,17 +61,22 @@ class ProfileTwoFactorController extends Controller
         }
 
         $user = $request->user();
+        $plainCodes = TwoFactorRecovery::generatePlainCodes();
+        $hashedCodes = TwoFactorRecovery::hashCodes($plainCodes);
 
         $user->forceFill([
             'two_factor_secret' => $secret,
-            'two_factor_recovery_codes' => null,
+            'two_factor_recovery_codes' => $hashedCodes,
             'two_factor_confirmed_at' => now(),
         ]);
         $user->save();
 
         $request->session()->forget('two_factor_pending');
 
-        return response()->json(['ok' => true]);
+        return response()->json([
+            'ok' => true,
+            'recovery_codes' => $plainCodes,
+        ]);
     }
 
     public function destroy(Request $request): JsonResponse

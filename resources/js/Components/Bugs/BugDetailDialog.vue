@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, toRef, watch } from "vue";
 import { router, usePage } from "@inertiajs/vue3";
-import { ClipboardPlus, Link2, MessageSquare, Send } from "lucide-vue-next";
+import { ClipboardPlus, History, Link2, MessageSquare, Send } from "lucide-vue-next";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import {
@@ -232,6 +232,27 @@ function createTaskFromBug() {
           </template>
         </div>
       </DialogHeader>
+
+      <section
+        v-if="bug?.activity?.length"
+        class="border-b border-border px-5 py-3"
+      >
+        <div class="mb-2 flex items-center gap-2">
+          <History class="h-4 w-4 text-muted-foreground" />
+          <span class="text-sm font-medium text-foreground">Historique</span>
+        </div>
+        <ol class="max-h-36 space-y-2 overflow-y-auto">
+          <li
+            v-for="entry in bug.activity"
+            :key="entry.id"
+            class="text-xs text-muted-foreground"
+          >
+            <span class="text-foreground">{{ entry.message }}</span>
+            <span v-if="entry.user?.name"> · {{ entry.user.name }}</span>
+            <span v-if="entry.created_at"> · {{ formatTime(entry.created_at) }}</span>
+          </li>
+        </ol>
+      </section>
 
       <section class="flex min-h-0 flex-1 flex-col">
         <div class="flex items-center gap-2 border-b border-border px-5 py-2.5">

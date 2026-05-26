@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskComment;
@@ -11,8 +12,11 @@ use Illuminate\Http\Request;
 
 class TaskCommentController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project, Task $task): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         $this->ensureCanEdit($request, $project);
         abort_unless($task->project_id === $project->id, 404);
 
@@ -40,6 +44,7 @@ class TaskCommentController extends Controller
 
     public function destroy(Request $request, Project $project, Task $task, TaskComment $comment): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         $this->ensureCanEdit($request, $project);
         abort_unless($task->project_id === $project->id && $comment->task_id === $task->id, 404);
         abort_unless(

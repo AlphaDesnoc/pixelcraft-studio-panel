@@ -24,6 +24,12 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
     'start_date',
     'completed_at',
     'archived_at',
+    'recurrence_rule',
+    'recurrence_source_id',
+    'next_recurrence_at',
+    'estimated_minutes',
+    'logged_minutes',
+    'auto_archive_at',
 ])]
 class Task extends Model
 {
@@ -62,6 +68,10 @@ class Task extends Model
             'completed_at' => 'datetime',
             'progress' => 'integer',
             'archived_at' => 'datetime',
+            'next_recurrence_at' => 'datetime',
+            'auto_archive_at' => 'datetime',
+            'estimated_minutes' => 'integer',
+            'logged_minutes' => 'integer',
         ];
     }
 
@@ -103,6 +113,22 @@ class Task extends Model
     public function linkedBug(): HasOne
     {
         return $this->hasOne(Bug::class, 'task_id');
+    }
+
+    public function dependencies(): BelongsToMany
+    {
+        return $this->belongsToMany(Task::class, 'task_dependencies', 'task_id', 'depends_on_task_id');
+    }
+
+    public function isBlocked(): bool
+    {
+        if (! $this->relationLoaded('dependencies')) {
+            $this->load('dependencies:id,status');
+        }
+
+        return $this->dependencies->contains(
+            fn (Task $dep) => $dep->status !== self::STATUS_DONE,
+        );
     }
 
     public function isOverdue(): bool

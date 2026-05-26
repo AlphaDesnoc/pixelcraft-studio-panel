@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Models\ProjectTemplate;
 use App\Models\Task;
 use App\Support\AuditLogger;
+use App\Support\ProjectTemplateApplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -38,6 +40,7 @@ class ProjectController extends Controller
         return Inertia::render('Admin/Projects/Index', [
             'projects' => $projects,
             'statuses' => Project::STATUSES,
+            'projectTemplates' => ProjectTemplate::query()->orderBy('name')->get()->map->toPayload(),
         ]);
     }
 
@@ -49,6 +52,7 @@ class ProjectController extends Controller
             'image' => ['nullable', 'image', 'mimes:jpeg,png,gif,webp', 'max:5120'],
             'status' => ['required', Rule::in(array_keys(Project::STATUSES))],
             'start_date' => ['nullable', 'date'],
+            'template_id' => ['nullable', 'integer', 'exists:project_templates,id'],
         ]);
 
         $slug = $this->uniqueSlug($validated['name']);
@@ -72,6 +76,13 @@ class ProjectController extends Controller
         $project->members()->syncWithoutDetaching([
             $request->user()->id => ['role' => 'owner', 'joined_at' => now()],
         ]);
+
+        if (! empty($validated['template_id'])) {
+            $template = ProjectTemplate::query()->find($validated['template_id']);
+            if ($template) {
+                ProjectTemplateApplier::apply($project, $template);
+            }
+        }
 
         AuditLogger::log(
             $request->user(),

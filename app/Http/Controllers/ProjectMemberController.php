@@ -2,18 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\AuditLogger;
 use App\Support\ProjectAccess;
+use App\Support\ProjectPermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class ProjectMemberController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
 
         $validated = $request->validate([
@@ -63,6 +68,7 @@ class ProjectMemberController extends Controller
 
     public function update(Request $request, Project $project, User $user): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
 
         abort_unless($project->members()->whereKey($user->id)->exists(), 404);
@@ -117,6 +123,7 @@ class ProjectMemberController extends Controller
 
     public function permissions(Request $request, Project $project, User $user): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'team');
         abort_unless($request->user()->is_admin, 403);
         abort_unless($project->members()->whereKey($user->id)->exists(), 404);
 
@@ -126,7 +133,7 @@ class ProjectMemberController extends Controller
         ]);
 
         $project->members()->updateExistingPivot($user->id, [
-            'permissions' => $validated['permissions'],
+            'permissions' => ProjectPermissions::sanitize($validated['permissions']),
         ]);
 
         return back();
@@ -134,6 +141,7 @@ class ProjectMemberController extends Controller
 
     public function destroy(Request $request, Project $project, User $user): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
 
         abort_unless($project->members()->whereKey($user->id)->exists(), 404);

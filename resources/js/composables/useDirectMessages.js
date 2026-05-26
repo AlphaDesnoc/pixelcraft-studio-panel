@@ -384,6 +384,27 @@ export function useDirectMessages({
     }
   }
 
+  async function toggleReaction(messageId, emoji) {
+    if (!activeConversationId || !emoji || !messageId) {
+      return;
+    }
+
+    try {
+      const { data } = await axios.post(
+        route("messages.reactions.toggle", messageId),
+        { emoji },
+      );
+      const prev = messages.value.find((m) => m.id === messageId);
+      if (prev && data?.reactions) {
+        const byId = new Map(messages.value.map((m) => [m.id, m]));
+        byId.set(messageId, { ...prev, reactions: data.reactions });
+        messages.value = sortMessages([...byId.values()]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function uploadAttachment(conversationId, file) {
     if (!conversationId || !file || uploading.value) {
       return null;
@@ -449,6 +470,7 @@ export function useDirectMessages({
     live,
     highlightedIds,
     send,
+    toggleReaction,
     uploadAttachment,
     uploading,
     notifyTyping,

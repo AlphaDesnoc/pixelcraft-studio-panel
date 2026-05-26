@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, toRef, watch } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
-import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, Smile, X } from "lucide-vue-next";
+import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, Smile, SmilePlus, X } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -44,6 +44,9 @@ const draftTextareaRef = ref(null);
 const fileInputRef = ref(null);
 const draftEmojiOpen = ref(false);
 const draftEmojiTriggerRef = ref(null);
+const reactionPickerOpen = ref(false);
+const reactionPickerMessageId = ref(null);
+const reactionTriggerRef = ref(null);
 const replyingTo = ref(null);
 const newDialogOpen = ref(false);
 const pendingRecipientId = ref(null);
@@ -80,6 +83,7 @@ const {
   listRef,
   start,
   leaveConversation,
+  toggleReaction,
 } = useDirectMessages({
   conversationIdRef,
   currentUserIdRef,
@@ -189,7 +193,49 @@ function onDraftKeydown(event) {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     submitMessage();
+    return;
   }
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    submitMessage();
+  }
+}
+
+function reactionActive(reaction) {
+  if (reaction.me !== undefined) {
+    return Boolean(reaction.me);
+  }
+  const name = currentUserName.value;
+  return Boolean(name && reaction.users?.includes(name));
+}
+
+function reactionTitle(reaction) {
+  const users = reaction.users ?? [];
+  if (users.length === 0) {
+    return `Réagir avec ${reaction.emoji}`;
+  }
+  if (users.length <= 3) {
+    return `${users.join(", ")} · ${reaction.emoji}`;
+  }
+  return `${users.slice(0, 3).join(", ")} et ${users.length - 3} autres · ${reaction.emoji}`;
+}
+
+async function onToggleReaction(message, emoji) {
+  await toggleReaction(message.id, emoji);
+}
+
+function openReactionPicker(message, event) {
+  reactionPickerMessageId.value = message.id;
+  reactionTriggerRef.value = event.currentTarget;
+  reactionPickerOpen.value = true;
+}
+
+async function onReactionEmojiSelected(emoji) {
+  if (!reactionPickerMessageId.value) {
+    return;
+  }
+  await toggleReaction(reactionPickerMessageId.value, emoji);
+  reactionPickerMessageId.value = null;
 }
 
 function isEmojiOnly(body) {
@@ -634,6 +680,16 @@ const composeTargetName = computed(() => {
                       v-if="selectedId"
                       type="button"
                       class="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover:opacity-100"
+                      title="Ajouter une réaction"
+                      aria-label="Ajouter une réaction"
+                      @click.stop="openReactionPicker(message, $event)"
+                    >
+                      <SmilePlus class="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      v-if="selectedId"
+                      type="button"
+                      class="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover:opacity-100"
                       title="Répondre"
                       @click.stop="startReply(message)"
                     >
@@ -677,6 +733,42 @@ const composeTargetName = computed(() => {
                         />
                       </a>
                     </template>
+                  </div>
+
+                  <div
+                    v-if="selectedId"
+                    class="mt-1.5 flex flex-wrap items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100"
+                  >
+                    <button
+                      v-for="reaction in message.reactions ?? []"
+                      :key="`${message.id}-${reaction.emoji}`"
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm leading-none transition-colors hover:bg-muted/80"
+                      :class="
+                        reactionActive(reaction)
+                          ? 'border-primary/40 bg-primary/15'
+                          : 'border-border/60 bg-background/40'
+                      "
+                      :title="reactionTitle(reaction)"
+                      @click="onToggleReaction(message, reaction.emoji)"
+                    >
+                      <TwemojiIcon :emoji="reaction.emoji" size="reaction" />
+                      <span
+                        v-if="(reaction.count ?? reaction.users?.length ?? 0) > 1"
+                        class="text-[10px] font-semibold tabular-nums text-muted-foreground"
+                      >
+                        {{ reaction.count ?? reaction.users?.length }}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border/70 text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"
+                      aria-label="Ajouter une réaction"
+                      title="Ajouter une réaction"
+                      @click="openReactionPicker(message, $event)"
+                    >
+                      <SmilePlus class="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -809,6 +901,12 @@ const composeTargetName = computed(() => {
       :trigger-ref="draftEmojiTriggerRef"
       placement="top"
       @select="onDraftEmojiSelected"
+    />
+    <EmojiPickerPopover
+      v-model:open="reactionPickerOpen"
+      :trigger-ref="reactionTriggerRef"
+      placement="top"
+      @select="onReactionEmojiSelected"
     />
   </AuthenticatedLayout>
 </template>

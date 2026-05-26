@@ -19,6 +19,7 @@ class ActivityLogger
     ): ActivityLog {
         return ActivityLog::query()->create([
             'project_id' => $project->id,
+            'bug_id' => $subject instanceof \App\Models\Bug ? $subject->id : null,
             'user_id' => $user?->id,
             'action' => $action,
             'message' => $message,

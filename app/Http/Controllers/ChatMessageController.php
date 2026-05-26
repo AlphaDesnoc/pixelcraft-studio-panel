@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Events\ChatMessageDeleted;
 use App\Events\ChatMessageSent;
 use App\Events\ChatMessageUpdated;
@@ -11,6 +12,7 @@ use App\Models\UserNotification;
 use App\Support\MentionParser;
 use App\Support\PanelNotifier;
 use App\Support\ProjectAccess;
+use App\Support\ProjectPermissions;
 use App\Support\ProjectSpace;
 use App\Support\SpaceChatAccess;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +20,8 @@ use Illuminate\Http\Request;
 
 class ChatMessageController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function index(Request $request, Project $project): JsonResponse
     {
         $user = $request->user();
@@ -27,6 +31,7 @@ class ChatMessageController extends Controller
         $messages = $project->chatMessages()
             ->where('space_key', $space->key)
             ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
+            ->orderByDesc('pinned_at')
             ->orderBy('created_at')
             ->get()
             ->map(fn ($m) => $m->toPayload())
@@ -130,6 +135,24 @@ class ChatMessageController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function pin(Request $request, Project $project, ChatMessage $message): JsonResponse
+    {
+        $user = $request->user();
+        $space = ProjectSpace::resolve($request, $project, $user);
+        $this->authorizeSpace($user, $project, $space);
+        abort_unless($message->project_id === $project->id, 404);
+
+        if ($message->pinned_at) {
+            $message->update(['pinned_at' => null, 'pinned_by' => null]);
+        } else {
+            $message->update(['pinned_at' => now(), 'pinned_by' => $user->id]);
+        }
+
+        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+
+        return response()->json(['message' => $message->toPayload()]);
+    }
+
     public function presence(Request $request, Project $project): JsonResponse
     {
         $user = $request->user();
@@ -147,6 +170,7 @@ class ChatMessageController extends Controller
     private function authorizeSpace($user, Project $project, ProjectSpace $space): void
     {
         ProjectAccess::ensureAccess($user, $project);
+        abort_unless(ProjectPermissions::can($user, $project, 'chat'), 403);
         abort_unless(SpaceChatAccess::canAccess($user, $project, $space->key), 403);
         abort_if($space->isFull, 403);
     }

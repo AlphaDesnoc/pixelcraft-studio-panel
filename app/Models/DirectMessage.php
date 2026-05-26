@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Http\Controllers\DirectMessageReactionController;
+use App\Support\ChatBodyFormatter;
 use App\Support\MentionParser;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -61,10 +63,11 @@ class DirectMessage extends Model
             'id' => $this->id,
             'direct_conversation_id' => $this->direct_conversation_id,
             'body' => $this->body,
-            'body_html' => MentionParser::highlightHtml($this->body ?? ''),
+            'body_html' => ChatBodyFormatter::toHtml($this->body ?? ''),
             'mentions' => $this->mentions ?? [],
             'reply_to_id' => $this->reply_to_id,
             'reply_preview' => $replyPreview,
+            'reactions' => DirectMessageReactionController::groupedReactions($this),
             'created_at' => $this->created_at?->toIso8601String(),
             'user' => $this->user ? [
                 'id' => $this->user->id,

@@ -9,8 +9,10 @@ use App\Models\Rank;
 use App\Models\Task;
 use App\Models\TaskList;
 use App\Models\TaskTag;
+use App\Models\TaskTemplate;
 use App\Models\User;
 use App\Support\ProjectAccess;
+use App\Support\ProjectPermissions;
 use App\Support\ProjectSpace;
 use App\Support\SpaceChatAccess;
 use Illuminate\Http\Request;
@@ -48,14 +50,18 @@ class ProjectController extends Controller
             'lists.tasks.attachments',
             'lists.tasks.tags',
             'lists.tasks.linkedBug',
+            'lists.tasks.dependencies:id,status,title',
             'events' => fn ($q) => $featureScope($q)->orderBy('start_at'),
             'notes' => fn ($q) => $featureScope($q)->orderByDesc('pinned')->orderByDesc('pinned_at')->orderByDesc('created_at'),
             'notes.creator:id,name,email',
             'sheets' => fn ($q) => $featureScope($q)->orderBy('position'),
             'fileNodes' => fn ($q) => $featureScope($q)->orderByRaw("CASE WHEN type = 'folder' THEN 0 ELSE 1 END")->orderBy('name'),
             'fileNodes.uploader:id,name',
-            'chatMessages' => fn ($q) => $q->where('space_key', $space->key)->orderBy('created_at'),
+            'chatMessages' => fn ($q) => $q->where('space_key', $space->key)->orderByDesc('pinned_at')->orderBy('created_at'),
             'chatMessages.user:id,name',
+            'chatMessages.attachments',
+            'chatMessages.replyTo.user:id,name',
+            'chatMessages.reactions',
             'ranks' => fn ($q) => $q->orderBy('position'),
             'ranks.members:id',
         ]);
@@ -115,13 +121,7 @@ class ProjectController extends Controller
 
         $chatMessages = $space->isFull
             ? collect()
-            : $project->chatMessages->map(fn ($m) => [
-                'id' => $m->id,
-                'body' => $m->body,
-                'space_key' => $m->space_key,
-                'created_at' => optional($m->created_at)?->toIso8601String(),
-                'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name] : null,
-            ])->values();
+            : $project->chatMessages->map(fn ($m) => $m->toPayload())->values();
 
         $lists = ($space->isGlobal || $space->isFull)
             ? $this->buildMergedKanbanLists($project)
@@ -236,6 +236,13 @@ class ProjectController extends Controller
             $bugsCollection = collect();
         }
 
+        $bugActivities = ActivityLog::query()
+            ->whereIn('bug_id', $bugsCollection->pluck('id'))
+            ->with('user:id,name')
+            ->orderByDesc('created_at')
+            ->get()
+            ->groupBy('bug_id');
+
         $bugs = $bugsCollection->map(fn ($b) => [
             'id' => $b->id,
             'title' => $b->title,
@@ -252,6 +259,10 @@ class ProjectController extends Controller
             'assignee' => $b->assignee ? ['id' => $b->assignee->id, 'name' => $b->assignee->name] : null,
             'assigned_rank' => $b->assignedRank ? ['id' => $b->assignedRank->id, 'name' => $b->assignedRank->name] : null,
             'screenshots' => collect($b->screenshots ?? [])->map(fn ($p) => '/storage/'.ltrim($p, '/'))->values(),
+            'activity' => ($bugActivities[$b->id] ?? collect())
+                ->take(30)
+                ->map(fn (ActivityLog $log) => $log->toPayload())
+                ->values(),
         ])->values();
 
         $bugRanks = $project->ranks
@@ -359,7 +370,14 @@ class ProjectController extends Controller
             'teamMembers' => $teamMembers,
             'teamCandidates' => $teamCandidates,
             'canManageTeam' => $canManageTeam,
+            'myPermissions' => ProjectPermissions::forMember($user, $project),
             'memberRoles' => ProjectAccess::ROLES,
+            'taskTemplates' => TaskTemplate::query()
+                ->where('project_id', $project->id)
+                ->orderBy('name')
+                ->get()
+                ->map(fn (TaskTemplate $t) => $t->toPayload())
+                ->values(),
             'priorities' => Task::PRIORITIES,
             'statusKinds' => [
                 TaskList::STATUS_TODO => 'À faire',
@@ -406,6 +424,7 @@ class ProjectController extends Controller
                 'checklists.items' => fn ($q) => $q->orderBy('position'),
                 'comments' => fn ($q) => $q->with('user:id,name')->latest(),
                 'attachments',
+                'dependencies:id,status,title',
             ])
             ->orderBy('position')
             ->get();
@@ -481,6 +500,14 @@ class ProjectController extends Controller
             'due_date' => optional($task->due_date)?->toDateString(),
             'is_overdue' => $task->isOverdue(),
             'archived_at' => optional($task->archived_at)?->toIso8601String(),
+            'recurrence_rule' => $task->recurrence_rule,
+            'estimated_minutes' => $task->estimated_minutes,
+            'logged_minutes' => (int) ($task->logged_minutes ?? 0),
+            'auto_archive_at' => optional($task->auto_archive_at)?->toDateString(),
+            'dependency_ids' => $task->relationLoaded('dependencies')
+                ? $task->dependencies->pluck('id')->values()->all()
+                : [],
+            'is_blocked' => $task->isBlocked(),
             'tags' => $task->tags->map(fn (TaskTag $tg) => $tg->toPayload())->values(),
             'checklist_progress' => $this->taskChecklistProgress($task),
             'linked_bug' => $linked ? [
