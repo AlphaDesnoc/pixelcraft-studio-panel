@@ -17,6 +17,8 @@ return new class extends Migration
         }
 
         if ($this->indexExists('task_tags', 'task_tags_project_id_name_unique')) {
+            $this->ensureProjectIdIndex();
+
             Schema::table('task_tags', function (Blueprint $table) {
                 $table->dropUnique(['project_id', 'name']);
             });
@@ -28,6 +30,12 @@ return new class extends Migration
         if (! $this->indexExists('task_tags', 'task_tags_project_id_rank_id_name_unique')) {
             Schema::table('task_tags', function (Blueprint $table) {
                 $table->unique(['project_id', 'rank_id', 'name']);
+            });
+        }
+
+        if ($this->indexExists('task_tags', 'task_tags_project_id_index')) {
+            Schema::table('task_tags', function (Blueprint $table) {
+                $table->dropIndex('task_tags_project_id_index');
             });
         }
     }
@@ -164,6 +172,34 @@ return new class extends Migration
                 TaskTag::query()->where('id', $duplicateId)->delete();
             }
         }
+    }
+
+    private function ensureProjectIdIndex(): void
+    {
+        if ($this->indexExists('task_tags', 'task_tags_project_id_index')) {
+            return;
+        }
+
+        $connection = Schema::getConnection();
+        $database = $connection->getDatabaseName();
+
+        $indexes = $connection->select(
+            'SELECT index_name, GROUP_CONCAT(column_name ORDER BY seq_in_index) AS columns
+             FROM information_schema.statistics
+             WHERE table_schema = ? AND table_name = ? AND index_name != ?
+             GROUP BY index_name',
+            [$database, 'task_tags', 'PRIMARY']
+        );
+
+        foreach ($indexes as $index) {
+            if ($index->columns === 'project_id') {
+                return;
+            }
+        }
+
+        Schema::table('task_tags', function (Blueprint $table) {
+            $table->index('project_id', 'task_tags_project_id_index');
+        });
     }
 
     private function indexExists(string $table, string $indexName): bool
