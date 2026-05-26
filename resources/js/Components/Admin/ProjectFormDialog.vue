@@ -20,6 +20,7 @@ const props = defineProps({
   open: { type: Boolean, required: true },
   project: { type: Object, default: null },
   statuses: { type: Object, required: true },
+  projectTemplates: { type: Array, default: () => [] },
 });
 
 const emits = defineEmits(["update:open", "saved"]);
@@ -36,6 +37,7 @@ const form = useForm({
   remove_image: false,
   status: "active",
   start_date: "",
+  template_id: "",
 });
 
 const reset = () => {
@@ -58,6 +60,7 @@ const reset = () => {
     form.remove_image = false;
     form.status = "active";
     form.start_date = "";
+    form.template_id = "";
   }
   form.clearErrors();
 };
@@ -225,6 +228,23 @@ const removeImage = () => {
             type="date"
           />
           <InputError :message="form.errors.start_date" />
+        </div>
+
+        <div v-if="!isEdit && projectTemplates.length" class="flex flex-col gap-1.5">
+          <Label for="project-template" class="text-xs text-muted-foreground">
+            Modèle (optionnel)
+          </Label>
+          <Select id="project-template" v-model="form.template_id">
+            <option value="">Aucun modèle</option>
+            <option
+              v-for="tpl in projectTemplates"
+              :key="tpl.id"
+              :value="String(tpl.id)"
+            >
+              {{ tpl.name }}
+            </option>
+          </Select>
+          <InputError :message="form.errors.template_id" />
         </div>
 
         <Button

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
 use App\Models\Task;
 use App\Models\TaskList;
+use App\Models\ActivityLog;
 use App\Models\UserNotification;
+use App\Support\ActivityLogger;
 use App\Support\PanelNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,9 +19,12 @@ use Illuminate\Validation\Rule;
 
 class BugController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
         $this->ensureMember($request, $project);
+        $this->ensureFeature($request, $project, 'bugs');
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -49,12 +55,39 @@ class BugController extends Controller
 
         $bug->update(['sla_due_at' => \App\Support\BugSla::dueAt($bug)]);
 
+        ActivityLogger::log(
+            $project,
+            $request->user(),
+            'bug_created',
+            sprintf('%s a signalé le bug « %s »', $request->user()->name, $bug->title),
+            $bug,
+            ['priority' => $bug->priority],
+        );
+
+        if ($bug->priority === Bug::PRIORITY_URGENT && $defaultRank) {
+            $rankMembers = $defaultRank->members()->pluck('users.id');
+            foreach ($rankMembers as $memberId) {
+                if ((int) $memberId === (int) $request->user()->id) {
+                    continue;
+                }
+                PanelNotifier::send(
+                    (int) $memberId,
+                    UserNotification::TYPE_BUG_ASSIGNED,
+                    'Bug urgent signalé',
+                    sprintf('Bug urgent : %s', $bug->title),
+                    route('projects.show', $project->slug).'?tab=bugs',
+                    ['project_id' => $project->id, 'bug_id' => $bug->id],
+                );
+            }
+        }
+
         return back();
     }
 
     public function update(Request $request, Project $project, Bug $bug): RedirectResponse
     {
         $this->ensureCanManage($request, $project);
+        $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -108,6 +141,8 @@ class BugController extends Controller
         }
 
         $previousAssignee = $bug->assignee_id;
+        $previousStatus = $bug->status;
+        $previousPriority = $bug->priority;
 
         $bug->fill([
             'title' => $validated['title'],
@@ -123,6 +158,70 @@ class BugController extends Controller
 
         $bug->sla_due_at = \App\Support\BugSla::dueAt($bug);
         $bug->save();
+
+        if ($bug->wasChanged('status')) {
+            ActivityLogger::log(
+                $project,
+                $request->user(),
+                'bug_status_changed',
+                sprintf(
+                    '%s a changé le statut de « %s » : %s → %s',
+                    $request->user()->name,
+                    $bug->title,
+                    Bug::STATUSES[$previousStatus] ?? $previousStatus,
+                    Bug::STATUSES[$bug->status] ?? $bug->status,
+                ),
+                $bug,
+                ['from' => $previousStatus, 'to' => $bug->status],
+            );
+        }
+
+        if ($bug->wasChanged('priority')) {
+            ActivityLogger::log(
+                $project,
+                $request->user(),
+                'bug_priority_changed',
+                sprintf(
+                    '%s a changé la priorité de « %s » : %s → %s',
+                    $request->user()->name,
+                    $bug->title,
+                    Bug::PRIORITIES[$previousPriority] ?? $previousPriority,
+                    Bug::PRIORITIES[$bug->priority] ?? $bug->priority,
+                ),
+                $bug,
+                ['from' => $previousPriority, 'to' => $bug->priority],
+            );
+
+            if ($bug->priority === Bug::PRIORITY_URGENT) {
+                $rank = $bug->assignedRank ?? Rank::find($bug->assigned_rank_id);
+                if ($rank) {
+                    foreach ($rank->members()->pluck('users.id') as $memberId) {
+                        if ((int) $memberId === (int) $request->user()->id) {
+                            continue;
+                        }
+                        PanelNotifier::send(
+                            (int) $memberId,
+                            UserNotification::TYPE_BUG_ASSIGNED,
+                            'Bug urgent',
+                            sprintf('Priorité urgente : %s', $bug->title),
+                            route('projects.show', $project->slug).'?tab=bugs',
+                            ['project_id' => $project->id, 'bug_id' => $bug->id],
+                        );
+                    }
+                }
+            }
+        }
+
+        if ($bug->wasChanged('assignee_id') && $bug->assignee_id) {
+            ActivityLogger::log(
+                $project,
+                $request->user(),
+                'bug_assigned',
+                sprintf('%s a assigné « %s »', $request->user()->name, $bug->title),
+                $bug,
+                ['assignee_id' => $bug->assignee_id],
+            );
+        }
 
         if (
             $bug->assignee_id
@@ -145,6 +244,7 @@ class BugController extends Controller
     public function linkTask(Request $request, Project $project, Bug $bug): RedirectResponse
     {
         $this->ensureCanManage($request, $project);
+        $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -162,6 +262,7 @@ class BugController extends Controller
     public function createTaskFromBug(Request $request, Project $project, Bug $bug): RedirectResponse
     {
         $this->ensureCanManage($request, $project);
+        $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
         $list = $project->lists()
@@ -211,6 +312,7 @@ class BugController extends Controller
     public function destroy(Request $request, Project $project, Bug $bug): RedirectResponse
     {
         $this->ensureCanManage($request, $project);
+        $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
         foreach ($bug->screenshots ?? [] as $path) {

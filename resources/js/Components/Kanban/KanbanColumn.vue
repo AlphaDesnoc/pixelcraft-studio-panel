@@ -6,6 +6,8 @@ import KanbanCard from "./KanbanCard.vue";
 
 const props = defineProps({
   list: { type: Object, required: true },
+  members: { type: Array, default: () => [] },
+  swimlaneMode: { type: Boolean, default: false },
   readonlyColumn: { type: Boolean, default: false },
   disableTasksDrag: { type: Boolean, default: false },
 });
@@ -22,8 +24,71 @@ const tasks = computed({
   set: (value) => emit("tasksReorder", { listId: props.list.id, tasks: value }),
 });
 
+const memberNameById = computed(() => {
+  const map = new Map();
+  for (const member of props.members) {
+    map.set(member.id, member.name);
+  }
+  return map;
+});
+
+const swimlaneGroups = computed(() => {
+  if (!props.swimlaneMode) {
+    return null;
+  }
+
+  const groups = new Map();
+  for (const task of props.list.tasks) {
+    const key = task.assignee_id ?? "none";
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(task);
+  }
+
+  const ordered = [];
+  if (groups.has("none")) {
+    ordered.push({ key: "none", label: "Non assigné", tasks: groups.get("none") });
+    groups.delete("none");
+  }
+
+  const memberIds = props.members.map((m) => m.id);
+  for (const id of memberIds) {
+    if (groups.has(id)) {
+      ordered.push({
+        key: id,
+        label: memberNameById.value.get(id) ?? `Membre #${id}`,
+        tasks: groups.get(id),
+      });
+      groups.delete(id);
+    }
+  }
+
+  for (const [key, laneTasks] of groups.entries()) {
+    ordered.push({
+      key,
+      label: memberNameById.value.get(key) ?? `Membre #${key}`,
+      tasks: laneTasks,
+    });
+  }
+
+  return ordered;
+});
+
 function onDragEnd() {
   emit("tasksReorder", { listId: props.list.id, tasks: tasks.value, sync: true });
+}
+
+function onSwimlaneDragEnd(groupKey, laneTasks) {
+  const other = props.list.tasks.filter((task) => {
+    const key = task.assignee_id ?? "none";
+    return key !== groupKey;
+  });
+  emit("tasksReorder", {
+    listId: props.list.id,
+    tasks: [...other, ...laneTasks],
+    sync: true,
+  });
 }
 </script>
 
@@ -65,7 +130,39 @@ function onDragEnd() {
       </button>
     </header>
 
+    <div v-if="swimlaneMode" class="flex h-full flex-col gap-2 overflow-y-auto p-2">
+      <div
+        v-for="group in swimlaneGroups"
+        :key="group.key"
+        class="rounded-md border border-border/50 bg-background/20"
+      >
+        <div class="border-b border-border/40 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {{ group.label }}
+          <span class="ml-1 font-normal">({{ group.tasks.length }})</span>
+        </div>
+        <VueDraggable
+          :model-value="group.tasks"
+          group="kanban-cards"
+          :animation="180"
+          handle=".kanban-card-handle"
+          class="flex flex-col gap-2 p-2"
+          ghost-class="kanban-ghost"
+          :empty-insert-threshold="20"
+          :disabled="disableTasksDrag"
+          @update:model-value="(value) => onSwimlaneDragEnd(group.key, value)"
+        >
+          <KanbanCard
+            v-for="task in group.tasks"
+            :key="task.id"
+            :task="task"
+            @click="emit('openCard', task)"
+          />
+        </VueDraggable>
+      </div>
+    </div>
+
     <VueDraggable
+      v-else
       v-model="tasks"
       group="kanban-cards"
       :animation="180"

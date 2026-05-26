@@ -74,9 +74,12 @@ const props = defineProps({
   chatMembers: { type: Array, default: () => [] },
   activityLogs: { type: Array, default: () => [] },
   tags: { type: Array, default: () => [] },
+  myPermissions: { type: Object, default: () => ({}) },
+  taskTemplates: { type: Array, default: () => [] },
 });
 
 const activeSpace = ref(props.activeSpace);
+const swimlaneMode = ref(false);
 
 watch(
   () => props.activeSpace,
@@ -135,6 +138,27 @@ const baseTabs = [
   { key: "team", label: "Équipe" },
 ];
 
+const tabPermissionKey = {
+  overview: null,
+  kanban: "kanban",
+  calendar: "calendar",
+  gantt: "gantt",
+  notes: "notes",
+  spreadsheet: "spreadsheet",
+  files: "files",
+  chat: "chat",
+  team: "team",
+  bugs: "bugs",
+};
+
+function tabAllowed(tabKey) {
+  const permKey = tabPermissionKey[tabKey];
+  if (!permKey) return true;
+  const perms = props.myPermissions;
+  if (!perms || Object.keys(perms).length === 0) return true;
+  return perms[permKey] !== false;
+}
+
 const tabs = computed(() => {
   let result = [...baseTabs];
   if (activeSpace.value === "full") {
@@ -143,7 +167,8 @@ const tabs = computed(() => {
   if (activeSpace.value !== "global") {
     result = result.filter((t) => t.key !== "team");
   }
-  if (bugsAccess.value.show) {
+  result = result.filter((t) => tabAllowed(t.key));
+  if (bugsAccess.value.show && tabAllowed("bugs")) {
     const chatIndex = result.findIndex((t) => t.key === "chat");
     result.splice(chatIndex, 0, {
       key: "bugs",
@@ -158,6 +183,15 @@ watch(
   (show) => {
     if (activeTab.value === "bugs" && !show) {
       activeTab.value = "overview";
+    }
+  },
+);
+
+watch(
+  tabs,
+  (next) => {
+    if (!next.some((t) => t.key === activeTab.value)) {
+      activeTab.value = next[0]?.key ?? "overview";
     }
   },
 );
@@ -422,6 +456,10 @@ const kanbanBugLinkTasks = computed(() =>
           :rank-id="activeRankId"
           :global-kanban="activeSpace === 'global' || activeSpace === 'full'"
           :tags="tags"
+          :task-templates="taskTemplates"
+          :swimlane-mode="swimlaneMode"
+          :my-permissions="myPermissions"
+          @update:swimlane-mode="swimlaneMode = $event"
         />
       </section>
 

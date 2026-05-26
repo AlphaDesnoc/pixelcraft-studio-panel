@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Sheet;
 use Illuminate\Http\RedirectResponse;
@@ -10,8 +11,11 @@ use Illuminate\Validation\Rule;
 
 class SheetController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'spreadsheet');
         $this->ensureCanEdit($request, $project);
 
         $validated = $request->validate([
@@ -42,6 +46,7 @@ class SheetController extends Controller
 
     public function update(Request $request, Project $project, Sheet $sheet): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'spreadsheet');
         $this->ensureCanEdit($request, $project);
         abort_unless($sheet->project_id === $project->id, 404);
 
@@ -75,6 +80,7 @@ class SheetController extends Controller
 
     public function destroy(Request $request, Project $project, Sheet $sheet): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'spreadsheet');
         $this->ensureCanEdit($request, $project);
         abort_unless($sheet->project_id === $project->id, 404);
 
@@ -95,6 +101,7 @@ class SheetController extends Controller
 
     public function reorder(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'spreadsheet');
         $this->ensureCanEdit($request, $project);
 
         $validated = $request->validate([

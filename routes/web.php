@@ -31,6 +31,10 @@ use App\Http\Controllers\TaskCommentController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TaskTagController;
+use App\Http\Controllers\DirectMessageReactionController;
+use App\Http\Controllers\ProfileThemeController;
+use App\Http\Controllers\ProfileDashboardWidgetsController;
+use App\Http\Controllers\TaskTemplateController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -64,6 +68,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/messages', [MessageController::class, 'store'])
         ->middleware('throttle:panel-chat')
         ->name('messages.store');
+    Route::post('/messages/{message}/reactions', [DirectMessageReactionController::class, 'toggle'])
+        ->name('messages.reactions.toggle');
 
     Route::prefix('projects/{project:slug}')->name('projects.')->middleware('project.member')->group(function () {
         Route::get('/', [ProjectController::class, 'show'])->name('show');
@@ -85,6 +91,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
         Route::post('/tasks/{task}/duplicate', [TaskController::class, 'duplicate'])->name('tasks.duplicate');
         Route::post('/tasks/{task}/archive', [TaskController::class, 'archive'])->name('tasks.archive');
+        Route::post('/tasks/{task}/unarchive', [TaskController::class, 'unarchive'])->name('tasks.unarchive');
+        Route::post('/tasks/templates', [TaskTemplateController::class, 'store'])->name('tasks.templates.store');
+        Route::post('/tasks/{task}/templates/apply', [TaskTemplateController::class, 'apply'])->name('tasks.templates.apply');
         Route::put('/tasks/{task}/tags', [TaskTagController::class, 'sync'])->name('tasks.tags.sync');
 
         Route::post('/tags', [TaskTagController::class, 'store'])->name('tags.store');
@@ -108,6 +117,7 @@ Route::middleware(['auth', 'active'])->group(function () {
             ->name('chat.messages.store');
         Route::put('/chat/messages/{message}', [ChatMessageController::class, 'update'])->name('chat.messages.update');
         Route::delete('/chat/messages/{message}', [ChatMessageController::class, 'destroy'])->name('chat.messages.destroy');
+        Route::post('/chat/messages/{message}/pin', [ChatMessageController::class, 'pin'])->name('chat.messages.pin');
         Route::post('/chat/messages/{message}/reactions', [ChatReactionController::class, 'toggle'])->name('chat.reactions.toggle');
         Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])
             ->middleware('throttle:panel-uploads')
@@ -161,6 +171,10 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile/notifications', [NotificationPreferenceController::class, 'update'])
         ->name('profile.notifications.update');
+    Route::put('/profile/theme', [ProfileThemeController::class, 'update'])
+        ->name('profile.theme');
+    Route::put('/profile/dashboard-widgets', [ProfileDashboardWidgetsController::class, 'update'])
+        ->name('profile.dashboard-widgets');
     Route::post('/profile/two-factor/setup', [ProfileTwoFactorController::class, 'setup'])
         ->name('profile.two-factor.setup');
     Route::post('/profile/two-factor/confirm', [ProfileTwoFactorController::class, 'confirm'])

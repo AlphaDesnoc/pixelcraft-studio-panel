@@ -1,6 +1,13 @@
 <script setup>
 import { computed } from "vue";
-import { AlignLeft, CalendarDays, GripVertical, ListTodo } from "lucide-vue-next";
+import {
+  AlignLeft,
+  Ban,
+  CalendarDays,
+  Clock3,
+  GripVertical,
+  ListTodo,
+} from "lucide-vue-next";
 import { Progress } from "@/Components/ui/progress";
 
 const props = defineProps({
@@ -34,6 +41,24 @@ const dueLabel = computed(() => {
     year: "numeric",
   }).format(d);
 });
+
+const isBlocked = computed(() => {
+  if (props.task.is_blocked != null) {
+    return Boolean(props.task.is_blocked);
+  }
+  const deps = props.task.dependencies ?? [];
+  return deps.some((dep) => dep.is_complete === false || dep.completed === false);
+});
+
+const timeLabel = computed(() => {
+  const logged = props.task.logged_minutes ?? 0;
+  const estimated = props.task.estimated_minutes;
+  if (!logged && !estimated) return null;
+  if (estimated) {
+    return `${logged}/${estimated} min`;
+  }
+  return `${logged} min`;
+});
 </script>
 
 <template>
@@ -51,9 +76,19 @@ const dueLabel = computed(() => {
         class="kanban-card-handle mt-0.5 h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground/40 active:cursor-grabbing"
       />
       <div class="min-w-0 flex-1">
-        <h4 class="text-[13px] font-medium leading-snug text-foreground">
-          {{ task.title }}
-        </h4>
+        <div class="flex items-start gap-1">
+          <h4 class="flex-1 text-[13px] font-medium leading-snug text-foreground">
+            {{ task.title }}
+          </h4>
+          <span
+            v-if="isBlocked"
+            class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400"
+            title="Dépendances incomplètes"
+          >
+            <Ban class="h-2.5 w-2.5" />
+            Bloquée
+          </span>
+        </div>
 
         <div
           v-if="tagPreview.length"
@@ -95,7 +130,7 @@ const dueLabel = computed(() => {
         </div>
 
         <div
-          v-if="task.description || dueLabel || task.progress > 0"
+          v-if="task.description || dueLabel || task.progress > 0 || timeLabel"
           class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground"
         >
           <AlignLeft v-if="task.description" class="h-3 w-3" />
@@ -110,6 +145,13 @@ const dueLabel = computed(() => {
             class="inline-flex items-center rounded-full bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-400"
           >
             En retard
+          </span>
+          <span
+            v-if="timeLabel"
+            class="inline-flex items-center gap-0.5 rounded-full bg-muted px-1.5 py-0.5"
+          >
+            <Clock3 class="h-3 w-3" />
+            {{ timeLabel }}
           </span>
           <span
             v-if="task.progress > 0"

@@ -19,6 +19,7 @@ const props = defineProps({
 
 const otpauthUri = ref("");
 const code = ref("");
+const recoveryCodes = ref([]);
 const loadingSetup = ref(false);
 const confirming = ref(false);
 const disabling = ref(false);
@@ -54,10 +55,13 @@ async function confirm() {
   error.value = "";
   confirming.value = true;
   try {
-    await axios.post(route("profile.two-factor.confirm"), {
+    const { data } = await axios.post(route("profile.two-factor.confirm"), {
       code: code.value.trim(),
     });
-    await router.reload();
+    recoveryCodes.value = data.recovery_codes ?? [];
+    if (!recoveryCodes.value.length) {
+      await router.reload();
+    }
   } catch (e) {
     error.value = e.response?.data?.message ?? "Code invalide.";
   } finally {
@@ -155,6 +159,27 @@ async function disable2fa() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div v-if="recoveryCodes.length" class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+        <p class="text-sm font-medium text-emerald-400">
+          A2F activée — conservez ces codes de récupération
+        </p>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Chaque code ne peut être utilisé qu'une seule fois si vous perdez l'accès à votre app.
+        </p>
+        <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+          <li
+            v-for="recoveryCode in recoveryCodes"
+            :key="recoveryCode"
+            class="rounded-md border border-border/60 bg-background/60 px-3 py-2 font-mono text-sm"
+          >
+            {{ recoveryCode }}
+          </li>
+        </ul>
+        <Button type="button" class="mt-4" @click="router.reload()">
+          Terminer
+        </Button>
       </div>
 
       <Button

@@ -1,6 +1,13 @@
 <script setup>
 import { Head, Link } from "@inertiajs/vue3";
-import { ArrowLeft, Shield, TriangleAlert, Users as UsersIcon } from "lucide-vue-next";
+import {
+  ArrowLeft,
+  Gauge,
+  Shield,
+  Timer,
+  TriangleAlert,
+  Users as UsersIcon,
+} from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import {
@@ -21,6 +28,17 @@ defineProps({
     default: () => [],
   },
 });
+
+function formatHours(value) {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "—";
+  }
+  const hours = Number(value);
+  if (hours < 1) {
+    return `${Math.round(hours * 60)} min`;
+  }
+  return `${hours.toFixed(1)} h`;
+}
 </script>
 
 <template>
@@ -102,6 +120,47 @@ defineProps({
                 :class="rank.stats.overdue_tasks > 0 ? 'text-rose-400' : ''"
               >
                 {{ rank.stats.overdue_tasks }}
+              </p>
+            </div>
+            <div
+              v-if="rank.stats.velocity != null"
+              class="rounded-lg bg-muted/30 px-3 py-2"
+            >
+              <p class="flex items-center gap-1 text-[10px] uppercase text-muted-foreground">
+                <Gauge class="h-3 w-3" />
+                Vélocité (7j)
+              </p>
+              <p class="mt-1 text-lg font-semibold">{{ rank.stats.velocity }}</p>
+            </div>
+            <div
+              v-if="rank.stats.avg_bug_resolution_hours != null"
+              class="rounded-lg bg-muted/30 px-3 py-2"
+            >
+              <p class="flex items-center gap-1 text-[10px] uppercase text-muted-foreground">
+                <Timer class="h-3 w-3" />
+                Résolution bugs
+              </p>
+              <p class="mt-1 text-lg font-semibold">
+                {{ formatHours(rank.stats.avg_bug_resolution_hours) }}
+              </p>
+            </div>
+            <div
+              v-if="rank.stats.sla_breached != null"
+              class="rounded-lg px-3 py-2"
+              :class="rank.stats.sla_breached > 0 ? 'bg-rose-500/15' : 'bg-muted/30'"
+            >
+              <p class="flex items-center gap-1 text-[10px] uppercase text-muted-foreground">
+                <TriangleAlert
+                  class="h-3 w-3"
+                  :class="rank.stats.sla_breached > 0 ? 'text-rose-400' : ''"
+                />
+                SLA dépassés
+              </p>
+              <p
+                class="mt-1 text-lg font-semibold"
+                :class="rank.stats.sla_breached > 0 ? 'text-rose-400' : ''"
+              >
+                {{ rank.stats.sla_breached }}
               </p>
             </div>
             <div v-if="rank.manages_bugs" class="col-span-2 rounded-lg bg-muted/30 px-3 py-2">

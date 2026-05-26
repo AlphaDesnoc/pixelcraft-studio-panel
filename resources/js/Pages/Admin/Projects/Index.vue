@@ -22,6 +22,7 @@ import { Card } from "@/Components/ui/card";
 const props = defineProps({
   projects: { type: Array, required: true },
   statuses: { type: Object, required: true },
+  projectTemplates: { type: Array, default: () => [] },
 });
 
 const dialogOpen = ref(false);
@@ -172,6 +173,7 @@ const initials = (name) =>
       v-model:open="dialogOpen"
       :project="editingProject"
       :statuses="statuses"
+      :project-templates="projectTemplates"
     />
   </AuthenticatedLayout>
 </template>

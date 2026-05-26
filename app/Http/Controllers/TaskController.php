@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskList;
@@ -15,8 +16,11 @@ use Illuminate\Validation\Rule;
 
 class TaskController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         $this->ensureCanEdit($request, $project);
 
         $validated = $request->validate([
@@ -63,6 +67,7 @@ class TaskController extends Controller
 
     public function update(Request $request, Project $project, Task $task): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         $this->ensureCanEdit($request, $project);
         $this->ensureBelongs($project, $task);
 
@@ -74,7 +79,24 @@ class TaskController extends Controller
             'assignee_id' => ['sometimes', 'nullable', 'integer', Rule::exists('users', 'id')],
             'start_date' => ['sometimes', 'nullable', 'date'],
             'due_date' => ['sometimes', 'nullable', 'date'],
+            'recurrence_rule' => ['sometimes', 'nullable', 'string', Rule::in(['weekly', 'monthly'])],
+            'estimated_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:60000'],
+            'logged_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:60000'],
+            'auto_archive_at' => ['sometimes', 'nullable', 'date'],
+            'dependency_ids' => ['sometimes', 'array'],
+            'dependency_ids.*' => ['integer', Rule::exists('tasks', 'id')->where('project_id', $project->id)],
         ]);
+
+        if (array_key_exists('dependency_ids', $validated)) {
+            $ids = collect($validated['dependency_ids'])
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id !== $task->id)
+                ->unique()
+                ->values()
+                ->all();
+            $task->dependencies()->sync($ids);
+            unset($validated['dependency_ids']);
+        }
 
         if (array_key_exists('list_id', $validated) && $validated['list_id'] !== $task->list_id) {
             $newList = TaskList::findOrFail($validated['list_id']);
@@ -83,8 +105,12 @@ class TaskController extends Controller
             $validated['progress'] = $this->progressForList($project, $newList->id);
         }
 
+        if (array_key_exists('recurrence_rule', $validated) && $validated['recurrence_rule']) {
+            $task->next_recurrence_at = $task->next_recurrence_at ?? now()->addWeek();
+        }
+
         $previousAssignee = $task->assignee_id;
-        $task->update($validated);
+        $task->update(collect($validated)->except('dependency_ids')->all());
 
         if (
             array_key_exists('assignee_id', $validated)
@@ -129,10 +155,22 @@ class TaskController extends Controller
 
     public function archive(Request $request, Project $project, Task $task): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'kanban');
         $this->ensureCanEdit($request, $project);
         $this->ensureBelongs($project, $task);
 
-        $task->update(['archived_at' => $task->archived_at ? null : now()]);
+        $task->update(['archived_at' => now()]);
+
+        return back();
+    }
+
+    public function unarchive(Request $request, Project $project, Task $task): RedirectResponse
+    {
+        $this->ensureFeature($request, $project, 'kanban');
+        $this->ensureCanEdit($request, $project);
+        $this->ensureBelongs($project, $task);
+
+        $task->update(['archived_at' => null]);
 
         return back();
     }

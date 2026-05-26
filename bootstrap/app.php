@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'project.member' => \App\Http\Middleware\EnsureProjectMember::class,
+            'project.feature' => \App\Http\Middleware\EnsureProjectFeature::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -30,4 +31,6 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function ($schedule): void {
         $schedule->command('panel:due-reminders')->dailyAt('08:00');
+        $schedule->command('panel:recurring-tasks')->dailyAt('07:00');
+        $schedule->command('panel:auto-archive-tasks')->dailyAt('03:00');
     })->create();

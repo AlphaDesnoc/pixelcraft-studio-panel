@@ -1,5 +1,6 @@
 import '../css/app.css';
 import './bootstrap';
+import { initTheme } from './composables/useTheme.js';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -16,6 +17,9 @@ createInertiaApp({
             import.meta.glob('./Pages/**/*.vue'),
         ),
     setup({ el, App, props, plugin }) {
+        const userPref = props.initialPage?.props?.auth?.user?.theme_preference;
+        initTheme(userPref);
+
         return createApp({ render: () => h(App, props) })
             .use(plugin)
             .use(ZiggyVue)

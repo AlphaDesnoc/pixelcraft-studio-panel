@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Note;
 use App\Models\Project;
 use Illuminate\Http\RedirectResponse;
@@ -10,8 +11,11 @@ use Illuminate\Validation\Rule;
 
 class NoteController extends Controller
 {
+    use EnsuresProjectFeature;
+
     public function store(Request $request, Project $project): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'notes');
         $this->ensureCanEdit($request, $project);
 
         $validated = $request->validate([
@@ -38,6 +42,7 @@ class NoteController extends Controller
 
     public function update(Request $request, Project $project, Note $note): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'notes');
         $this->ensureCanEdit($request, $project);
         abort_unless($note->project_id === $project->id, 404);
 
@@ -58,6 +63,7 @@ class NoteController extends Controller
 
     public function destroy(Request $request, Project $project, Note $note): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'notes');
         $this->ensureCanEdit($request, $project);
         abort_unless($note->project_id === $project->id, 404);
 
@@ -68,6 +74,7 @@ class NoteController extends Controller
 
     public function togglePin(Request $request, Project $project, Note $note): RedirectResponse
     {
+        $this->ensureFeature($request, $project, 'notes');
         $this->ensureCanEdit($request, $project);
         abort_unless($note->project_id === $project->id, 404);
 

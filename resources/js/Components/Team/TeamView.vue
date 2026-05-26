@@ -22,10 +22,14 @@ const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
 /** Granular overrides; empty object → all caps allowed (backward compatible). */
 const MEMBER_PERM_KEYS = Object.freeze([
   { key: "kanban", label: "Kanban" },
-  { key: "bugs", label: "Bugs" },
-  { key: "chat", label: "Chat" },
-  { key: "files", label: "Fichiers" },
+  { key: "calendar", label: "Calendrier" },
+  { key: "gantt", label: "Gantt" },
   { key: "notes", label: "Notes" },
+  { key: "spreadsheet", label: "Tableur" },
+  { key: "files", label: "Fichiers" },
+  { key: "chat", label: "Chat" },
+  { key: "bugs", label: "Bugs" },
+  { key: "team", label: "Équipe" },
 ]);
 
 function memberPermState(member) {
