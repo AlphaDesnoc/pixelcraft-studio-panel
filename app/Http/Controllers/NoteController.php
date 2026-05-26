@@ -15,8 +15,7 @@ class NoteController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'notes');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'notes');
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -42,8 +41,7 @@ class NoteController extends Controller
 
     public function update(Request $request, Project $project, Note $note): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'notes');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'notes');
         abort_unless($note->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -63,8 +61,7 @@ class NoteController extends Controller
 
     public function destroy(Request $request, Project $project, Note $note): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'notes');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'notes');
         abort_unless($note->project_id === $project->id, 404);
 
         $note->delete();
@@ -74,8 +71,7 @@ class NoteController extends Controller
 
     public function togglePin(Request $request, Project $project, Note $note): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'notes');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'notes');
         abort_unless($note->project_id === $project->id, 404);
 
         $willPin = ! $note->pinned;

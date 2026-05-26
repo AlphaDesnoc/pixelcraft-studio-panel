@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
+import { canWriteFeature } from "@/lib/projectPermissions.js";
 import { Head, Link, router } from "@inertiajs/vue3";
 import {
   BarChart3,
@@ -195,6 +196,9 @@ watch(
     }
   },
 );
+
+const canWriteKanban = computed(() => canWriteFeature(props.myPermissions, "kanban"));
+const canWriteGantt = computed(() => canWriteFeature(props.myPermissions, "gantt"));
 
 const activeTab = ref("overview");
 
@@ -449,6 +453,7 @@ const kanbanBugLinkTasks = computed(() =>
       <section v-else-if="activeTab === 'kanban'">
         <KanbanBoard
           :project-slug="project.slug"
+          :project-id="project.id"
           :lists="lists"
           :members="members"
           :priorities="priorities"
@@ -474,8 +479,10 @@ const kanbanBugLinkTasks = computed(() =>
       <section v-else-if="activeTab === 'gantt'">
         <Gantt
           :project-slug="project.slug"
+          :project-id="project.id"
           :lists="lists"
           :priorities="priorities"
+          :can-write="canWriteGantt"
         />
       </section>
 

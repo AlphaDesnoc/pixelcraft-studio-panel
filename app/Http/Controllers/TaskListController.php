@@ -18,8 +18,7 @@ class TaskListController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -47,8 +46,7 @@ class TaskListController extends Controller
 
     public function update(Request $request, Project $project, TaskList $list): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $list);
 
         $validated = $request->validate([
@@ -68,8 +66,7 @@ class TaskListController extends Controller
 
     public function destroy(Request $request, Project $project, TaskList $list): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $list);
 
         DB::transaction(function () use ($project, $list) {
@@ -89,8 +86,7 @@ class TaskListController extends Controller
 
     public function reorder(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
 
         $validated = $request->validate([
             'order' => ['required', 'array'],

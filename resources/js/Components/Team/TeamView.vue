@@ -6,6 +6,7 @@ import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import ProjectMemberPickerDialog from "@/Components/Team/ProjectMemberPickerDialog.vue";
+import { writeKeyFor } from "@/lib/projectPermissions.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -33,10 +34,20 @@ const MEMBER_PERM_KEYS = Object.freeze([
 ]);
 
 function memberPermState(member) {
-  const base = Object.fromEntries(MEMBER_PERM_KEYS.map(({ key }) => [key, true]));
+  const base = Object.fromEntries(
+    MEMBER_PERM_KEYS.flatMap(({ key }) => [
+      [key, true],
+      [writeKeyFor(key), true],
+    ]),
+  );
   const p = member.permissions;
   if (p && typeof p === "object" && Object.keys(p).length > 0) {
     Object.assign(base, p);
+    for (const { key } of MEMBER_PERM_KEYS) {
+      if (base[key] === false) {
+        base[writeKeyFor(key)] = false;
+      }
+    }
   }
   return base;
 }
@@ -45,6 +56,12 @@ function updatePermission(member, key, checked) {
   if (!isAdmin.value || member.is_owner) return;
   const state = memberPermState(member);
   state[key] = checked;
+  if (key.endsWith("_write") && checked) {
+    state[key.replace(/_write$/, "")] = true;
+  }
+  if (!key.endsWith("_write") && !checked) {
+    state[writeKeyFor(key)] = false;
+  }
   router.put(
     route("projects.members.permissions", [props.projectSlug, member.id]),
     { permissions: state },
@@ -54,6 +71,10 @@ function updatePermission(member, key, checked) {
       only: ["teamMembers", "members"],
     },
   );
+}
+
+function updateWritePermission(member, feature, checked) {
+  updatePermission(member, writeKeyFor(feature), checked);
 }
 
 const pickerOpen = ref(false);
@@ -186,19 +207,32 @@ function removeMember(member) {
               Overrides (admins système uniquement)
             </p>
             <div class="flex flex-wrap gap-x-4 gap-y-2">
-              <label
+              <div
                 v-for="row in MEMBER_PERM_KEYS"
                 :key="row.key"
-                class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-foreground"
+                class="inline-flex items-center gap-3 text-[11px] text-foreground"
               >
-                <input
-                  type="checkbox"
-                  class="h-3.5 w-3.5 rounded border-input text-primary"
-                  :checked="memberPermState(member)[row.key]"
-                  @change="updatePermission(member, row.key, $event.target.checked)"
-                />
-                {{ row.label }}
-              </label>
+                <span class="min-w-[72px] font-medium">{{ row.label }}</span>
+                <label class="inline-flex cursor-pointer items-center gap-1">
+                  <input
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-input text-primary"
+                    :checked="memberPermState(member)[row.key]"
+                    @change="updatePermission(member, row.key, $event.target.checked)"
+                  />
+                  Voir
+                </label>
+                <label class="inline-flex cursor-pointer items-center gap-1">
+                  <input
+                    type="checkbox"
+                    class="h-3.5 w-3.5 rounded border-input text-primary"
+                    :checked="memberPermState(member)[writeKeyFor(row.key)]"
+                    :disabled="!memberPermState(member)[row.key]"
+                    @change="updateWritePermission(member, row.key, $event.target.checked)"
+                  />
+                  Modifier
+                </label>
+              </div>
             </div>
           </div>
         </div>

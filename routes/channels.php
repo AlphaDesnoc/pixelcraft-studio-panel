@@ -7,6 +7,7 @@ use App\Support\BugChatAccess;
 use App\Support\DirectMessageAccess;
 use App\Support\PresenceUser;
 use App\Support\SpaceChatAccess;
+use App\Support\ProjectPermissions;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::routes(['middleware' => ['web', 'auth']]);
@@ -52,5 +53,19 @@ Broadcast::channel('direct.{conversationId}', function ($user, $conversationId) 
 });
 
 Broadcast::channel('site-presence', function ($user) {
+    return PresenceUser::payload($user);
+});
+
+Broadcast::channel('project-kanban.{projectId}', function ($user, $projectId) {
+    $project = Project::query()->find($projectId);
+
+    if (! $project) {
+        return false;
+    }
+
+    if (! ProjectPermissions::canRead($user, $project, 'kanban')) {
+        return false;
+    }
+
     return PresenceUser::payload($user);
 });

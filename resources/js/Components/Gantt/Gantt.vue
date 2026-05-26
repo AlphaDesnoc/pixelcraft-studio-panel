@@ -1,13 +1,16 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from "vue";
 import { router } from "@inertiajs/vue3";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
+import { useKanbanRealtime } from "@/composables/useKanbanRealtime.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
+  projectId: { type: Number, required: true },
   lists: { type: Array, required: true },
   priorities: { type: Object, default: () => ({}) },
+  canWrite: { type: Boolean, default: true },
 });
 
 const MONTH_LABELS = [
@@ -53,10 +56,26 @@ function isoDate(d) {
 const today = computed(() => startOfDay(new Date()));
 
 const localOverrides = ref(new Map());
+const localLists = ref(props.lists.map((l) => ({ ...l, tasks: [...(l.tasks ?? [])] })));
+const projectIdRef = toRef(props, "projectId");
+
+useKanbanRealtime(projectIdRef, localLists, {
+  onApplied: () => {
+    localOverrides.value = new Map();
+  },
+});
+
+watch(
+  () => props.lists,
+  (next) => {
+    localLists.value = next.map((l) => ({ ...l, tasks: [...(l.tasks ?? [])] }));
+  },
+  { deep: true },
+);
 
 const allTasks = computed(() => {
   const out = [];
-  for (const list of props.lists) {
+  for (const list of localLists.value) {
     for (const task of list.tasks) {
       const override = localOverrides.value.get(task.id) ?? {};
       out.push({
@@ -216,23 +235,29 @@ watch(pxPerDay, () => {
 const dragging = ref(null);
 
 function startDrag(task, mode, event) {
+  if (!props.canWrite) return;
   event.preventDefault();
   event.stopPropagation();
+  const clientX = event.clientX ?? event.touches?.[0]?.clientX ?? 0;
   dragging.value = {
     id: task.id,
     mode,
-    startMouseX: event.clientX,
+    startMouseX: clientX,
     origStart: startOfDay(new Date(task.start_date)),
     origEnd: startOfDay(new Date(task.due_date)),
   };
   document.addEventListener("mousemove", onDragMove);
   document.addEventListener("mouseup", onDragEnd);
+  document.addEventListener("touchmove", onDragMove, { passive: false });
+  document.addEventListener("touchend", onDragEnd);
   document.body.style.userSelect = "none";
 }
 
 function onDragMove(event) {
   if (!dragging.value) return;
-  const dx = event.clientX - dragging.value.startMouseX;
+  const clientX = event.clientX ?? event.touches?.[0]?.clientX ?? dragging.value.startMouseX;
+  if (event.cancelable) event.preventDefault();
+  const dx = clientX - dragging.value.startMouseX;
   const deltaDays = Math.round(dx / pxPerDay.value);
 
   let newStart = new Date(dragging.value.origStart);
@@ -263,11 +288,13 @@ function onDragEnd() {
 
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
+  document.removeEventListener("touchmove", onDragMove);
+  document.removeEventListener("touchend", onDragEnd);
   document.body.style.userSelect = "";
 
   dragging.value = null;
 
-  if (!override) return;
+  if (!override || !props.canWrite) return;
 
   router.put(
     route("projects.tasks.update", [props.projectSlug, id]),
@@ -290,7 +317,20 @@ function onDragEnd() {
 onBeforeUnmount(() => {
   document.removeEventListener("mousemove", onDragMove);
   document.removeEventListener("mouseup", onDragEnd);
+  document.removeEventListener("touchmove", onDragMove);
+  document.removeEventListener("touchend", onDragEnd);
 });
+
+function scheduleTask(task) {
+  if (!props.canWrite) return;
+  const start = startOfDay(new Date());
+  const end = addDays(start, 6);
+  router.put(
+    route("projects.tasks.update", [props.projectSlug, task.id]),
+    { start_date: isoDate(start), due_date: isoDate(end) },
+    { preserveScroll: true, preserveState: true, only: ["lists"] },
+  );
+}
 
 function formatDate(iso) {
   if (!iso) return "";
@@ -312,7 +352,10 @@ function formatDate(iso) {
       <div class="min-w-0">
         <h2 class="text-base font-semibold tracking-tight">Diagramme de Gantt</h2>
         <p class="text-xs text-muted-foreground">
-          S'ouvre sur aujourd'hui · Flèches ou scroll pour voir le passé · Glissez les barres
+          <template v-if="!canWrite">Lecture seule</template>
+          <template v-else>
+            S'ouvre sur aujourd'hui · Flèches ou scroll pour voir le passé · Glissez les barres
+          </template>
         </p>
       </div>
       <div class="flex items-center gap-1.5">
@@ -468,8 +511,11 @@ function formatDate(iso) {
               :style="{ height: `${ROW_HEIGHT}px` }"
             >
               <div
-                class="absolute top-1/2 z-10 flex h-8 -translate-y-1/2 cursor-grab items-center overflow-hidden rounded-md border shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
-                :class="dragging?.id === task.id ? 'ring-2 ring-foreground/40' : ''"
+                class="absolute top-1/2 z-10 flex h-8 -translate-y-1/2 items-center overflow-hidden rounded-md border shadow-sm transition-shadow"
+                :class="[
+                  dragging?.id === task.id ? 'ring-2 ring-foreground/40' : '',
+                  canWrite ? 'cursor-grab hover:shadow-md active:cursor-grabbing' : 'cursor-default opacity-90',
+                ]"
                 :style="{
                   left: `${barFor(task).left}px`,
                   width: `${barFor(task).width}px`,
@@ -478,10 +524,13 @@ function formatDate(iso) {
                 }"
                 :title="`${formatDate(task.start_date)} → ${formatDate(task.due_date)}`"
                 @mousedown="startDrag(task, 'move', $event)"
+                @touchstart.passive="startDrag(task, 'move', $event)"
               >
                 <div
+                  v-if="canWrite"
                   class="absolute left-0 top-0 z-20 h-full w-1.5 cursor-ew-resize hover:bg-white/10"
                   @mousedown.stop="startDrag(task, 'left', $event)"
+                  @touchstart.stop="startDrag(task, 'left', $event)"
                 />
                 <div
                   class="pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-200"
@@ -496,8 +545,10 @@ function formatDate(iso) {
                   {{ task.progress }}%
                 </span>
                 <div
+                  v-if="canWrite"
                   class="absolute right-0 top-0 z-20 h-full w-1.5 cursor-ew-resize hover:bg-white/10"
                   @mousedown.stop="startDrag(task, 'right', $event)"
+                  @touchstart.stop="startDrag(task, 'right', $event)"
                 />
               </div>
             </div>
@@ -507,11 +558,31 @@ function formatDate(iso) {
 
       <div
         v-if="undatedTasks.length > 0"
-        class="border-t border-border bg-card/30 px-4 py-2 text-xs text-muted-foreground"
+        class="border-t border-border bg-card/30 px-4 py-3"
       >
-        <span class="font-medium text-foreground">{{ undatedTasks.length }}</span>
-        tâche{{ undatedTasks.length > 1 ? "s" : "" }} sans dates ·
-        ouvrez-les dans le Kanban pour leur ajouter une période.
+        <p class="mb-2 text-xs text-muted-foreground">
+          <span class="font-medium text-foreground">{{ undatedTasks.length }}</span>
+          tâche{{ undatedTasks.length > 1 ? "s" : "" }} sans dates
+        </p>
+        <ul class="flex flex-wrap gap-2">
+          <li
+            v-for="task in undatedTasks.slice(0, 12)"
+            :key="task.id"
+            class="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-xs"
+          >
+            <span class="max-w-[180px] truncate">{{ task.title }}</span>
+            <Button
+              v-if="canWrite"
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-7 px-2 text-[10px]"
+              @click="scheduleTask(task)"
+            >
+              Planifier 7j
+            </Button>
+          </li>
+        </ul>
       </div>
     </div>
 

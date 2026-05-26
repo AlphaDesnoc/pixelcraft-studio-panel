@@ -17,8 +17,7 @@ class FileNodeController extends Controller
 
     public function storeFolder(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'files');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'files');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:191'],
@@ -51,8 +50,7 @@ class FileNodeController extends Controller
 
     public function upload(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'files');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'files');
 
         $request->validate([
             'files' => ['required', 'array'],
@@ -99,8 +97,7 @@ class FileNodeController extends Controller
 
     public function update(Request $request, Project $project, FileNode $node): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'files');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -114,8 +111,7 @@ class FileNodeController extends Controller
 
     public function move(Request $request, Project $project, FileNode $node): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'files');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -148,8 +144,7 @@ class FileNodeController extends Controller
 
     public function destroy(Request $request, Project $project, FileNode $node): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'files');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
 
         $paths = [];
@@ -166,8 +161,7 @@ class FileNodeController extends Controller
 
     public function download(Request $request, Project $project, FileNode $node): BinaryFileResponse
     {
-        $this->ensureFeature($request, $project, 'files');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
         abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
         abort_unless(Storage::disk('public')->exists($node->path), 404);

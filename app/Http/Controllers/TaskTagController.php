@@ -15,8 +15,7 @@ class TaskTagController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $user = $request->user();
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         abort_unless(
             $user->is_admin || $project->members()->whereKey($user->id)->exists(),
             403,
@@ -38,7 +37,7 @@ class TaskTagController extends Controller
 
     public function sync(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         abort_unless($task->project_id === $project->id, 404);
 
         $validated = $request->validate([

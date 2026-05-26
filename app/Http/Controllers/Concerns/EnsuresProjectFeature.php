@@ -11,9 +11,20 @@ trait EnsuresProjectFeature
     protected function ensureFeature(Request $request, Project $project, string $feature): void
     {
         abort_unless(
-            ProjectPermissions::can($request->user(), $project, $feature),
+            ProjectPermissions::canRead($request->user(), $project, $feature),
             403,
             'Accès refusé à cette fonctionnalité du projet.',
+        );
+    }
+
+    protected function ensureFeatureWrite(Request $request, Project $project, string $feature): void
+    {
+        $this->ensureFeature($request, $project, $feature);
+
+        abort_unless(
+            ProjectPermissions::canWrite($request->user(), $project, $feature),
+            403,
+            'Modification refusée sur cette fonctionnalité du projet.',
         );
     }
 }

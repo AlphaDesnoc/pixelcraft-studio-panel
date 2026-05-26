@@ -1,6 +1,7 @@
 import '../css/app.css';
 import './bootstrap';
 import { initTheme } from './composables/useTheme.js';
+import { flushPendingMessages } from './lib/flushPendingMessages.js';
 
 import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -37,3 +38,7 @@ if (isProd && 'serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
 }
+
+window.addEventListener('online', () => {
+    flushPendingMessages().catch(() => {});
+});

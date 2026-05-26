@@ -3,6 +3,11 @@ import axios from "axios";
 import { bindPresenceHandlers } from "@/lib/presence.js";
 import { onDirectMessage } from "@/composables/useSiteRealtime.js";
 import { memberPseudo } from "@/composables/useMentionAutocomplete.js";
+import {
+  enqueuePendingMessage,
+  isOfflineError,
+  listPendingMessages,
+} from "@/lib/offlineMessageQueue.js";
 
 const POLL_MS = 2000;
 const HIGHLIGHT_MS = 2600;
@@ -87,6 +92,7 @@ export function useDirectMessages({
   const uploading = ref(false);
   const live = ref(false);
   const highlightedIds = ref(new Set());
+  const pendingOutbound = ref([]);
   const listRef = ref(null);
   let pollTimer = null;
   let channel = null;
@@ -344,6 +350,10 @@ export function useDirectMessages({
     }
   }
 
+  async function refreshPendingOutbound() {
+    pendingOutbound.value = await listPendingMessages();
+  }
+
   async function send(body, conversationId, recipientId = null, extras = {}) {
     const trimmed = body?.trim();
     if (!trimmed || sending.value) {
@@ -378,7 +388,24 @@ export function useDirectMessages({
           participant: data.conversation.participant,
         });
       }
+      await refreshPendingOutbound();
       return data;
+    } catch (error) {
+      if (isOfflineError(error)) {
+        const queued = {
+          id: crypto.randomUUID(),
+          body: trimmed,
+          conversation_id: conversationId,
+          recipient_id: recipientId,
+          reply_to_id: extras.reply_to_id ?? null,
+          mentions: extras.mentions ?? [],
+          created_at: new Date().toISOString(),
+        };
+        await enqueuePendingMessage(queued);
+        pendingOutbound.value = await listPendingMessages();
+        return { queued: true, pending: queued };
+      }
+      throw error;
     } finally {
       sending.value = false;
     }
@@ -452,6 +479,7 @@ export function useDirectMessages({
     unsubscribeInbox = onDirectMessage((event, opts) =>
       handleIncoming(event, { fromInbox: true, skipUnreadIncrement: opts?.skipUnreadIncrement }),
     );
+    refreshPendingOutbound().catch(() => {});
   });
 
   onUnmounted(() => {
@@ -475,6 +503,8 @@ export function useDirectMessages({
     uploading,
     notifyTyping,
     listRef,
+    pendingOutbound,
+    refreshPendingOutbound,
     start,
     leaveConversation,
     markRead,

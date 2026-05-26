@@ -43,6 +43,7 @@ const props = defineProps({
   tags: { type: Array, default: () => [] },
   taskTemplates: { type: Array, default: () => [] },
   allTasks: { type: Array, default: () => [] },
+  readOnly: { type: Boolean, default: false },
 });
 
 const emits = defineEmits(["update:open"]);
@@ -173,7 +174,7 @@ const dueLabel = computed(() => {
 });
 
 function patch(field, value) {
-  if (!props.task) return;
+  if (props.readOnly || !props.task) return;
   form[field] = value;
   form
     .transform((data) => ({ [field]: data[field] === "" ? null : data[field] }))
@@ -358,6 +359,12 @@ function formatFileSize(bytes) {
       class="grid max-h-[85vh] w-full max-w-3xl grid-cols-1 gap-5 overflow-y-auto p-6 md:grid-cols-[1fr_220px]"
     >
       <div v-if="task" class="flex flex-col gap-5">
+        <p
+          v-if="readOnly"
+          class="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          Consultation seule — vous n'avez pas la permission de modifier le Kanban.
+        </p>
         <header class="flex items-start gap-2">
           <CheckSquare class="mt-1 h-5 w-5 text-muted-foreground" />
           <div class="min-w-0 flex-1">
@@ -372,8 +379,9 @@ function formatFileSize(bytes) {
             />
             <h2
               v-else
-              class="cursor-text text-lg font-semibold leading-tight"
-              @click="titleEditing = true"
+              class="text-lg font-semibold leading-tight"
+              :class="readOnly ? '' : 'cursor-text'"
+              @click="!readOnly && (titleEditing = true)"
             >
               {{ form.title }}
             </h2>
@@ -757,7 +765,7 @@ function formatFileSize(bytes) {
           </div>
         </div>
 
-        <div class="flex flex-col gap-1.5">
+        <div v-if="!readOnly" class="flex flex-col gap-1.5">
           <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Actions
           </p>

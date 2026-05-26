@@ -15,8 +15,7 @@ class CalendarEventController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'calendar');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'calendar');
 
         $validated = $this->validateData($request);
 
@@ -36,8 +35,7 @@ class CalendarEventController extends Controller
 
     public function update(Request $request, Project $project, CalendarEvent $event): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'calendar');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'calendar');
         abort_unless($event->project_id === $project->id, 404);
 
         $validated = $this->validateData($request);
@@ -56,8 +54,7 @@ class CalendarEventController extends Controller
 
     public function destroy(Request $request, Project $project, CalendarEvent $event): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'calendar');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'calendar');
         abort_unless($event->project_id === $project->id, 404);
 
         $event->delete();

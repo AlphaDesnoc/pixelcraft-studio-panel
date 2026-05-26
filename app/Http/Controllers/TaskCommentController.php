@@ -16,8 +16,7 @@ class TaskCommentController extends Controller
 
     public function store(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         abort_unless($task->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -44,8 +43,7 @@ class TaskCommentController extends Controller
 
     public function destroy(Request $request, Project $project, Task $task, TaskComment $comment): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         abort_unless($task->project_id === $project->id && $comment->task_id === $task->id, 404);
         abort_unless(
             $comment->user_id === $request->user()->id || $request->user()->is_admin,
