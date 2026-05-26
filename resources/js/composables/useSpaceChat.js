@@ -37,6 +37,7 @@ function normalizeMembers(members) {
     (members ?? []).map((member) => ({
       id: member.id,
       name: member.name,
+      pseudo: member.pseudo ?? member.email?.split("@")[0] ?? "",
       is_online: Boolean(member.is_online),
     })),
   );

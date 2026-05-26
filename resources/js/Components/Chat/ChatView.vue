@@ -12,6 +12,8 @@ import {
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
 import ChatMembersPanel from "@/Components/Chat/ChatMembersPanel.vue";
+import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
+import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
 
 const props = defineProps({
@@ -33,6 +35,8 @@ const draft = ref("");
 const editingMessageId = ref(null);
 const editDraft = ref("");
 const fileInputRef = ref(null);
+const draftTextareaRef = ref(null);
+const editTextareaRef = ref(null);
 
 const {
   messages,
@@ -55,6 +59,35 @@ const {
   initialMembersRef,
   currentUserId,
 );
+
+const chatMembersRef = computed(() => chatMembers.value);
+
+const {
+  open: draftMentionOpen,
+  suggestions: draftMentionSuggestions,
+  activeIndex: draftMentionIndex,
+  handleInput: handleDraftMentionInput,
+  handleKeydown: handleDraftMentionKeydown,
+  insertMention: insertDraftMention,
+} = useMentionAutocomplete({
+  textRef: draft,
+  textareaRef: draftTextareaRef,
+  candidatesRef: chatMembersRef,
+  onInput: notifyTyping,
+});
+
+const {
+  open: editMentionOpen,
+  suggestions: editMentionSuggestions,
+  activeIndex: editMentionIndex,
+  handleInput: handleEditMentionInput,
+  handleKeydown: handleEditMentionKeydown,
+  insertMention: insertEditMention,
+} = useMentionAutocomplete({
+  textRef: editDraft,
+  textareaRef: editTextareaRef,
+  candidatesRef: chatMembersRef,
+});
 
 const typingLabel = computed(() => {
   const names = typingUsers.value.map((user) => user.name).filter(Boolean);
@@ -97,7 +130,23 @@ async function submitMessage() {
 }
 
 function onDraftInput() {
-  notifyTyping();
+  handleDraftMentionInput();
+}
+
+function onDraftKeydown(event) {
+  if (handleDraftMentionKeydown(event)) {
+    return;
+  }
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    submitMessage();
+  }
+}
+
+function onEditKeydown(event) {
+  if (handleEditMentionKeydown(event)) {
+    return;
+  }
 }
 
 function startEdit(message) {
@@ -218,11 +267,26 @@ async function onFileSelected(event) {
               </div>
 
               <div v-if="editingMessageId === message.id" class="mt-1 space-y-2">
-                <Textarea
-                  v-model="editDraft"
-                  rows="2"
-                  class="min-h-[44px] resize-none text-sm"
-                />
+                <div class="relative">
+                  <Textarea
+                    :ref="
+                      editingMessageId === message.id
+                        ? (el) => (editTextareaRef = el)
+                        : undefined
+                    "
+                    v-model="editDraft"
+                    rows="2"
+                    class="min-h-[44px] resize-none text-sm"
+                    @input="handleEditMentionInput"
+                    @keydown="onEditKeydown"
+                  />
+                  <MentionSuggestions
+                    v-if="editMentionOpen && editMentionSuggestions.length"
+                    :suggestions="editMentionSuggestions"
+                    :active-index="editMentionIndex"
+                    @select="insertEditMention"
+                  />
+                </div>
                 <div class="flex items-center gap-2">
                   <Button
                     type="button"
@@ -314,14 +378,23 @@ async function onFileSelected(event) {
           >
             <Paperclip class="h-4 w-4" />
           </Button>
-          <Textarea
-            v-model="draft"
-            placeholder="Écrire un message à l'équipe…"
-            rows="2"
-            class="min-h-[44px] flex-1 resize-none"
-            @input="onDraftInput"
-            @keydown.enter.exact.prevent="submitMessage"
-          />
+          <div class="relative min-w-0 flex-1">
+            <Textarea
+              ref="draftTextareaRef"
+              v-model="draft"
+              placeholder="Écrire un message à l'équipe… (@pseudo pour mentionner)"
+              rows="2"
+              class="min-h-[44px] w-full resize-none"
+              @input="onDraftInput"
+              @keydown="onDraftKeydown"
+            />
+            <MentionSuggestions
+              v-if="draftMentionOpen && draftMentionSuggestions.length"
+              :suggestions="draftMentionSuggestions"
+              :active-index="draftMentionIndex"
+              @select="insertDraftMention"
+            />
+          </div>
           <Button
             type="submit"
             size="icon"
