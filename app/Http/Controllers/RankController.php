@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\Rank;
 use App\Models\Task;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -34,7 +35,9 @@ class RankController extends Controller
             'email' => $m->email,
         ])->values();
 
-        $ranks = $project->ranks->map(fn ($rank) => $this->serializeRank($rank))->values();
+        $ranks = $project->ranks
+            ->map(fn ($rank) => $this->serializeRank($rank, $user))
+            ->values();
 
         return Inertia::render('Projects/Ranks', [
             'project' => [
@@ -124,7 +127,7 @@ class RankController extends Controller
 
     public function addMember(Request $request, Project $project, Rank $rank): RedirectResponse
     {
-        $this->ensureCanEdit($request, $project);
+        $this->ensureCanManageRankMembers($request, $project, $rank);
         abort_unless($rank->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -144,8 +147,12 @@ class RankController extends Controller
 
     public function removeMember(Request $request, Project $project, Rank $rank, int $userId): RedirectResponse
     {
-        $this->ensureCanEdit($request, $project);
+        $this->ensureCanManageRankMembers($request, $project, $rank);
         abort_unless($rank->project_id === $project->id, 404);
+
+        if ($rank->responsible_id === $userId && ! $request->user()->is_admin) {
+            abort(403, 'Le responsable ne peut pas se retirer lui-même du rank.');
+        }
 
         $rank->members()->detach($userId);
         if ($rank->responsible_id === $userId) {
@@ -201,12 +208,25 @@ class RankController extends Controller
 
     private function ensureCanEdit(Request $request, Project $project): void
     {
-        $user = $request->user();
-        $isAdmin = $user->is_admin;
-        abort_unless($isAdmin, 403);
+        abort_unless($request->user()->is_admin, 403);
     }
 
-    private function serializeRank(Rank $rank): array
+    private function ensureCanManageRankMembers(Request $request, Project $project, Rank $rank): void
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $user->is_admin || $this->userManagesRank($user, $rank),
+            403,
+        );
+    }
+
+    private function userManagesRank(User $user, Rank $rank): bool
+    {
+        return $rank->responsible_id === $user->id;
+    }
+
+    private function serializeRank(Rank $rank, User $user): array
     {
         return [
             'id' => $rank->id,
@@ -232,6 +252,7 @@ class RankController extends Controller
                     ->count(),
                 'notes' => $rank->notes()->count(),
             ],
+            'can_manage_members' => $user->is_admin || $this->userManagesRank($user, $rank),
         ];
     }
 }

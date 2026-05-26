@@ -27,6 +27,7 @@ const props = defineProps({
 
 const page = usePage();
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+const currentUserName = computed(() => page.props.auth?.user?.name ?? "Utilisateur");
 
 const search = ref("");
 const draft = ref("");
@@ -49,6 +50,7 @@ watch(
 
 const conversationIdRef = toRef(selectedId);
 const currentUserIdRef = toRef(currentUserId);
+const currentUserNameRef = toRef(currentUserName);
 
 const {
   messages: threadMessages,
@@ -56,13 +58,16 @@ const {
   sending,
   live,
   highlightedIds,
+  typingUsers,
   send,
+  notifyTyping,
   listRef,
   start,
   leaveConversation,
 } = useDirectMessages({
   conversationIdRef,
   currentUserIdRef,
+  currentUserNameRef,
   conversationsRef: localConversations,
 });
 
@@ -130,6 +135,17 @@ const onlineCount = computed(() => {
 const isOtherOnline = computed(() =>
   isUserOnline(activeConversation.value?.participant?.id),
 );
+
+const typingLabel = computed(() => {
+  const names = typingUsers.value.map((user) => user.name).filter(Boolean);
+  if (names.length === 0) return "";
+  if (names.length === 1) return `${names[0]} est en train d'écrire…`;
+  return `${names.join(", ")} sont en train d'écrire…`;
+});
+
+function onDraftInput() {
+  notifyTyping();
+}
 
 function initials(name) {
   return (name ?? "?")
@@ -470,6 +486,13 @@ const composeTargetName = computed(() => {
               </div>
             </div>
 
+            <p
+              v-if="typingLabel && selectedId"
+              class="shrink-0 px-4 pb-1 text-xs italic text-muted-foreground"
+            >
+              {{ typingLabel }}
+            </p>
+
             <form
               class="flex items-end gap-2 border-t border-border px-4 py-3"
               @submit.prevent="submitMessage"
@@ -479,6 +502,7 @@ const composeTargetName = computed(() => {
                 placeholder="Écrire un message…"
                 rows="2"
                 class="min-h-[44px] flex-1 resize-none"
+                @input="onDraftInput"
                 @keydown.enter.exact.prevent="submitMessage"
               />
               <Button

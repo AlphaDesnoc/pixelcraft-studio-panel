@@ -115,8 +115,8 @@ const memberCandidates = computed(() => {
           <div>
             <h2 class="text-base font-semibold">Gestion des ranks</h2>
             <p class="text-xs text-muted-foreground">
-              Chaque rank a un responsable qui gère son équipe, plus son propre
-              Kanban, Gantt, notes et calendrier
+              Chaque rank a un responsable qui gère son équipe (ajout / retrait
+              de membres), plus son propre Kanban, Gantt, notes et calendrier
             </p>
           </div>
           <Button v-if="canEdit" size="sm" class="gap-1.5" @click="openCreate">

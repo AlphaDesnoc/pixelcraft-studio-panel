@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\User;
+use App\Support\AuditLogger;
 use App\Support\ProjectAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,27 @@ class ProjectMemberController extends Controller
             'joined_at' => now(),
         ]);
 
+        $member = User::query()->findOrFail($validated['user_id']);
+
+        AuditLogger::log(
+            $request->user(),
+            'project_member_added',
+            sprintf(
+                '%s a ajouté %s au projet « %s » (%s)',
+                $request->user()->name,
+                $member->name,
+                $project->name,
+                ProjectAccess::ROLES[$role] ?? $role,
+            ),
+            $project,
+            [
+                'user_id' => $member->id,
+                'user_email' => $member->email,
+                'role' => $role,
+            ],
+            $request,
+        );
+
         return back();
     }
 
@@ -57,12 +79,37 @@ class ProjectMemberController extends Controller
             abort(403, 'Seul un administrateur peut nommer un propriétaire.');
         }
 
+        $previousRole = ProjectAccess::memberRole($user, $project);
+
         $project->members()->updateExistingPivot($user->id, [
             'role' => $validated['role'],
         ]);
 
         if ($validated['role'] === ProjectAccess::ROLE_OWNER) {
             $project->update(['owner_id' => $user->id]);
+        }
+
+        if ($previousRole !== $validated['role']) {
+            AuditLogger::log(
+                $request->user(),
+                'project_member_updated',
+                sprintf(
+                    '%s a modifié le rôle de %s sur « %s » (%s → %s)',
+                    $request->user()->name,
+                    $user->name,
+                    $project->name,
+                    ProjectAccess::ROLES[$previousRole] ?? $previousRole,
+                    ProjectAccess::ROLES[$validated['role']] ?? $validated['role'],
+                ),
+                $project,
+                [
+                    'user_id' => $user->id,
+                    'user_email' => $user->email,
+                    'from' => $previousRole,
+                    'to' => $validated['role'],
+                ],
+                $request,
+            );
         }
 
         return back();
@@ -78,6 +125,8 @@ class ProjectMemberController extends Controller
             abort(422, 'Le propriétaire du projet ne peut pas être retiré.');
         }
 
+        $memberRole = ProjectAccess::memberRole($user, $project);
+
         $project->members()->detach($user->id);
 
         foreach ($project->ranks as $rank) {
@@ -86,6 +135,24 @@ class ProjectMemberController extends Controller
                 $rank->update(['responsible_id' => null]);
             }
         }
+
+        AuditLogger::log(
+            $request->user(),
+            'project_member_removed',
+            sprintf(
+                '%s a retiré %s du projet « %s »',
+                $request->user()->name,
+                $user->name,
+                $project->name,
+            ),
+            $project,
+            [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+                'role' => $memberRole,
+            ],
+            $request,
+        );
 
         return back();
     }

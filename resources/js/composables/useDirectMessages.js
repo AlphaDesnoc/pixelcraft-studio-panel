@@ -5,6 +5,8 @@ import { onDirectMessage } from "@/composables/useSiteRealtime.js";
 
 const POLL_MS = 2000;
 const HIGHLIGHT_MS = 2600;
+const TYPING_TTL_MS = 3000;
+const WHISPER_DEBOUNCE_MS = 400;
 
 function sortMessages(list) {
   return [...list].sort(
@@ -50,10 +52,12 @@ function participantFromInbox(inbox, currentUserId) {
 export function useDirectMessages({
   conversationIdRef,
   currentUserIdRef,
+  currentUserNameRef,
   conversationsRef,
 }) {
   const messages = ref([]);
   const onlineUsers = ref([]);
+  const typingUsers = ref([]);
   const loading = ref(false);
   const sending = ref(false);
   const live = ref(false);
@@ -63,7 +67,9 @@ export function useDirectMessages({
   let channel = null;
   let activeConversationId = null;
   let unsubscribeInbox = null;
+  let whisperTimer = null;
   const highlightTimers = new Map();
+  const typingTimeouts = new Map();
 
   function scrollToBottom(smooth = true) {
     if (!listRef.value) return;
@@ -90,6 +96,70 @@ export function useDirectMessages({
     );
   }
 
+  function clearTypingState() {
+    if (whisperTimer) {
+      clearTimeout(whisperTimer);
+      whisperTimer = null;
+    }
+    for (const timeout of typingTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    typingTimeouts.clear();
+    typingUsers.value = [];
+  }
+
+  function addTypingUser(user) {
+    const currentUserId = currentUserIdRef.value;
+    if (!user?.id || user.id === currentUserId) {
+      return;
+    }
+
+    typingUsers.value = [
+      ...typingUsers.value.filter((entry) => entry.id !== user.id),
+      { id: user.id, name: user.name ?? "Quelqu'un" },
+    ];
+
+    if (typingTimeouts.has(user.id)) {
+      clearTimeout(typingTimeouts.get(user.id));
+    }
+
+    typingTimeouts.set(
+      user.id,
+      setTimeout(() => {
+        typingUsers.value = typingUsers.value.filter(
+          (entry) => entry.id !== user.id,
+        );
+        typingTimeouts.delete(user.id);
+      }, TYPING_TTL_MS),
+    );
+  }
+
+  function whisperTyping() {
+    if (!channel || !currentUserIdRef?.value) {
+      return;
+    }
+
+    channel.whisper("typing", {
+      user: {
+        id: currentUserIdRef.value,
+        name: currentUserNameRef?.value ?? "Utilisateur",
+      },
+    });
+  }
+
+  function notifyTyping() {
+    if (!activeConversationId) {
+      return;
+    }
+    if (whisperTimer) {
+      clearTimeout(whisperTimer);
+    }
+    whisperTimer = setTimeout(() => {
+      whisperTyping();
+      whisperTimer = null;
+    }, WHISPER_DEBOUNCE_MS);
+  }
+
   function leaveConversation() {
     if (channel && window.Echo && activeConversationId) {
       window.Echo.leave(`direct.${activeConversationId}`);
@@ -101,6 +171,7 @@ export function useDirectMessages({
     }
     activeConversationId = null;
     onlineUsers.value = [];
+    clearTypingState();
   }
 
   function upsertConversation(inbox, { incrementUnread = false } = {}) {
@@ -217,6 +288,9 @@ export function useDirectMessages({
     channel
       .listen(".DirectMessageSent", (event) => handleIncoming(event, { fromInbox: false }))
       .listen("DirectMessageSent", (event) => handleIncoming(event, { fromInbox: false }))
+      .listenForWhisper("typing", (event) => {
+        addTypingUser(event?.user);
+      })
       .error((error) => {
         console.warn("[direct-messages] Echo subscription error", error);
       });
@@ -310,11 +384,13 @@ export function useDirectMessages({
   return {
     messages,
     onlineUsers,
+    typingUsers,
     loading,
     sending,
     live,
     highlightedIds,
     send,
+    notifyTyping,
     listRef,
     start,
     leaveConversation,
