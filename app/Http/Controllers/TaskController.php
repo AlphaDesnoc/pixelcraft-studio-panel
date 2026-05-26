@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskList;
+use App\Models\User;
 use App\Models\UserNotification;
 use App\Support\ActivityLogger;
 use App\Support\PanelNotifier;
@@ -51,6 +52,14 @@ class TaskController extends Controller
             'due_date' => $validated['due_date'] ?? null,
             'completed_at' => $list->status_kind === TaskList::STATUS_DONE ? now() : null,
         ]);
+
+        $this->logTask(
+            $project,
+            $request->user(),
+            'task_created',
+            sprintf('%s a créé « %s »', $request->user()->name, $task->title),
+            $task,
+        );
 
         if (! empty($validated['assignee_id']) && (int) $validated['assignee_id'] !== (int) $request->user()->id) {
             PanelNotifier::send(
@@ -117,6 +126,17 @@ class TaskController extends Controller
         $previousAssignee = $task->assignee_id;
         $task->update(collect($validated)->except('dependency_ids')->all());
 
+        if (! empty($validated)) {
+            $this->logTask(
+                $project,
+                $request->user(),
+                'task_updated',
+                sprintf('%s a modifié « %s »', $request->user()->name, $task->title),
+                $task,
+                ['fields' => array_keys($validated)],
+            );
+        }
+
         if (
             array_key_exists('assignee_id', $validated)
             && $validated['assignee_id']
@@ -163,6 +183,15 @@ class TaskController extends Controller
         });
 
         if ($clone) {
+            $this->logTask(
+                $project,
+                $request->user(),
+                'task_duplicated',
+                sprintf('%s a dupliqué « %s »', $request->user()->name, $task->title),
+                $clone,
+                ['source_task_id' => $task->id],
+            );
+
             $this->broadcastKanban($project, 'created', [
                 'task' => TaskKanbanPayload::from($clone->fresh()),
                 'list_id' => $clone->list_id,
@@ -179,6 +208,14 @@ class TaskController extends Controller
 
         $task->update(['archived_at' => now()]);
 
+        $this->logTask(
+            $project,
+            $request->user(),
+            'task_archived',
+            sprintf('%s a archivé « %s »', $request->user()->name, $task->title),
+            $task,
+        );
+
         $this->broadcastKanban($project, 'archived', [
             'task_id' => $task->id,
             'list_id' => $task->list_id,
@@ -193,6 +230,14 @@ class TaskController extends Controller
         $this->ensureBelongs($project, $task);
 
         $task->update(['archived_at' => null]);
+
+        $this->logTask(
+            $project,
+            $request->user(),
+            'task_unarchived',
+            sprintf('%s a désarchivé « %s »', $request->user()->name, $task->title),
+            $task,
+        );
 
         $this->broadcastKanban($project, 'updated', [
             'task' => TaskKanbanPayload::from($task->fresh()),
@@ -209,6 +254,15 @@ class TaskController extends Controller
 
         $taskId = $task->id;
         $listId = $task->list_id;
+        $taskTitle = $task->title;
+
+        $this->logTask(
+            $project,
+            $request->user(),
+            'task_deleted',
+            sprintf('%s a supprimé « %s »', $request->user()->name, $taskTitle),
+            $task,
+        );
 
         DB::transaction(function () use ($task) {
             $listId = $task->list_id;
@@ -259,7 +313,7 @@ class TaskController extends Controller
 
             $task->save();
 
-            ActivityLogger::log(
+            $this->logTask(
                 $project,
                 $request->user(),
                 'task_moved',
@@ -300,6 +354,29 @@ class TaskController extends Controller
         ], $request->user()->id);
 
         return back();
+    }
+
+    private function logTask(
+        Project $project,
+        User $user,
+        string $action,
+        string $message,
+        Task $task,
+        array $meta = [],
+    ): void {
+        $task->loadMissing('list:id,rank_id');
+
+        ActivityLogger::log(
+            $project,
+            $user,
+            $action,
+            $message,
+            $task,
+            array_merge($meta, [
+                'rank_id' => $task->list?->rank_id,
+                'task_title' => $task->title,
+            ]),
+        );
     }
 
     private function broadcastKanban(Project $project, string $action, array $payload, ?int $actorId): void
