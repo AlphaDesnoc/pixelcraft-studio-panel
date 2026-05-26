@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserPresence;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class SpaceChatAccess
 {
@@ -64,7 +65,7 @@ class SpaceChatAccess
                     $q->whereIn('id', $memberIds)
                         ->orWhere('role', User::ROLE_ADMIN);
                 })
-                ->get(['id', 'name']);
+                ->get(['id', 'name', 'email']);
         }
 
         $rank = $project->ranks()->where('slug', $spaceKey)->first();
@@ -79,10 +80,10 @@ class SpaceChatAccess
                 $q->whereIn('id', $rankMemberIds)
                     ->orWhere('role', User::ROLE_ADMIN);
             })
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'email']);
     }
 
-    /** @return array<int, array{id: int, name: string, is_online: bool}> */
+    /** @return array<int, array{id: int, name: string, pseudo: string, is_online: bool}> */
     public static function membersWithPresence(Project $project, string $spaceKey, ?User $viewer = null): array
     {
         if ($viewer) {
@@ -108,6 +109,7 @@ class SpaceChatAccess
             ->map(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
+                'pseudo' => Str::before($user->email, '@'),
                 'is_online' => $onlineIds->has($user->id)
                     || ($viewer && (int) $viewer->id === (int) $user->id),
             ])
