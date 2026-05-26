@@ -50,7 +50,15 @@ class TaskActivityFeed
     /** @return array<int, array<string, mixed>> */
     private static function visibleRanks(ProjectSpace $space, Collection $ranks): array
     {
-        if ($space->isFull || $space->isGlobal) {
+        if ($space->isGlobal) {
+            return [[
+                'id' => null,
+                'name' => 'Global',
+                'color' => '#6366f1',
+            ]];
+        }
+
+        if ($space->isFull) {
             $items = [[
                 'id' => null,
                 'name' => 'Global',
