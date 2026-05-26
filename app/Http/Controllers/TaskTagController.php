@@ -16,10 +16,6 @@ class TaskTagController extends Controller
     public function store(Request $request, Project $project): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
-        abort_unless(
-            $user->is_admin || $project->members()->whereKey($user->id)->exists(),
-            403,
-        );
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:40'],
