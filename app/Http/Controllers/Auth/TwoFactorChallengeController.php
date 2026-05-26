@@ -38,7 +38,7 @@ class TwoFactorChallengeController extends Controller
 
         $user = User::query()->find($userId);
 
-        if (! $user || ! $user->is_active || ! $user->is_admin || ! $user->two_factor_confirmed_at || ! $user->two_factor_secret) {
+        if (! $user || ! $user->is_active || ! $user->two_factor_confirmed_at || ! $user->two_factor_secret) {
             $request->session()->forget(['login.id', 'login.remember']);
 
             throw ValidationException::withMessages([
