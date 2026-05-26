@@ -1,14 +1,46 @@
 <script setup>
-defineProps({
+import { nextTick, ref, watch } from "vue";
+
+const props = defineProps({
   suggestions: { type: Array, default: () => [] },
   activeIndex: { type: Number, default: 0 },
 });
 
 const emits = defineEmits(["select"]);
+
+const listRef = ref(null);
+
+function scrollActiveIntoView() {
+  const list = listRef.value;
+  if (!list) {
+    return;
+  }
+
+  const activeItem = list.querySelector(
+    `[data-mention-index="${props.activeIndex}"]`,
+  );
+  activeItem?.scrollIntoView({ block: "nearest" });
+}
+
+watch(
+  () => props.activeIndex,
+  () => {
+    nextTick(scrollActiveIntoView);
+  },
+);
+
+watch(
+  () => props.suggestions,
+  () => {
+    nextTick(scrollActiveIntoView);
+  },
+  { deep: true },
+);
 </script>
 
 <template>
   <ul
+    ref="listRef"
     class="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-lg"
     role="listbox"
   >
@@ -16,6 +48,7 @@ const emits = defineEmits(["select"]);
       v-for="(member, index) in suggestions"
       :key="member.id"
       role="option"
+      :data-mention-index="index"
       :aria-selected="index === activeIndex"
     >
       <button
