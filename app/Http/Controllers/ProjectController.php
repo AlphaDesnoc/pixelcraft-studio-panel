@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
 use App\Support\ProjectSpace;
+use App\Support\SpaceChatAccess;
 use App\Support\TaskActivityFeed;
 use App\Support\BugVisibility;
 use Illuminate\Http\Request;
