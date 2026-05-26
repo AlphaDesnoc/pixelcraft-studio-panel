@@ -8,11 +8,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class TaskTag extends Model
 {
-    protected $fillable = ['project_id', 'name', 'color'];
+    protected $fillable = ['project_id', 'rank_id', 'name', 'color'];
 
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function rank(): BelongsTo
+    {
+        return $this->belongsTo(Rank::class);
     }
 
     public function tasks(): BelongsToMany
@@ -24,6 +29,7 @@ class TaskTag extends Model
     {
         return [
             'id' => $this->id,
+            'rank_id' => $this->rank_id,
             'name' => $this->name,
             'color' => $this->color,
         ];

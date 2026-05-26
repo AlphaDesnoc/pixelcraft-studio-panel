@@ -97,6 +97,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/tasks/{task}/tags', [TaskTagController::class, 'sync'])->name('tasks.tags.sync');
 
         Route::post('/tags', [TaskTagController::class, 'store'])->name('tags.store');
+        Route::delete('/tags/{tag}', [TaskTagController::class, 'destroy'])->name('tags.destroy');
 
         Route::post('/tasks/{task}/comments', [TaskCommentController::class, 'store'])->name('tasks.comments.store');
         Route::delete('/tasks/{task}/comments/{comment}', [TaskCommentController::class, 'destroy'])->name('tasks.comments.destroy');
