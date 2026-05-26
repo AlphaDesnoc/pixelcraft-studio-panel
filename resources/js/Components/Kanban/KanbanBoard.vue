@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, ref, toRef, watch } from "vue";
 import { router } from "@inertiajs/vue3";
 import { Plus } from "lucide-vue-next";
 import { VueDraggable } from "vue-draggable-plus";
@@ -9,9 +9,12 @@ import KanbanFilters from "./KanbanFilters.vue";
 import ColumnFormDialog from "./ColumnFormDialog.vue";
 import TaskFormDialog from "./TaskFormDialog.vue";
 import TaskDetailDialog from "./TaskDetailDialog.vue";
+import { canWriteFeature } from "@/lib/projectPermissions.js";
+import { useKanbanRealtime } from "@/composables/useKanbanRealtime.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
+  projectId: { type: Number, required: true },
   lists: { type: Array, required: true },
   members: { type: Array, required: true },
   priorities: { type: Object, required: true },
@@ -26,7 +29,11 @@ const props = defineProps({
 
 const emit = defineEmits(["update:swimlaneMode"]);
 
+const canWrite = computed(() => canWriteFeature(props.myPermissions, "kanban"));
+
 const localLists = ref(cloneLists(props.lists));
+const projectIdRef = toRef(props, "projectId");
+const { connected: kanbanLive } = useKanbanRealtime(projectIdRef, localLists);
 const showArchived = ref(false);
 const activeFilters = ref({
   assigneeId: "",
@@ -179,6 +186,7 @@ watch(
 );
 
 function onColumnsDragEnd() {
+  if (!canWrite.value) return;
   router.post(
     route("projects.lists.reorder", props.projectSlug),
     { order: localLists.value.map((l) => l.id), rank_id: props.rankId },
@@ -202,7 +210,7 @@ function handleTasksReorder({ listId, tasks, sync }) {
     list.tasks = tasks;
   }
 
-  if (!sync) return;
+  if (!sync || !canWrite.value) return;
 
   for (const l of localLists.value) {
     for (const t of l.tasks) {
@@ -271,7 +279,17 @@ function onFiltersUpdate(filters) {
 
     <div class="flex items-center justify-between gap-2">
       <p class="text-xs text-muted-foreground">
-        <template v-if="globalKanban">
+        <span
+          v-if="kanbanLive"
+          class="mr-2 inline-flex items-center gap-1 text-emerald-500"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Live
+        </span>
+        <template v-if="!canWrite">
+          Lecture seule — vous pouvez consulter le board sans le modifier.
+        </template>
+        <template v-else-if="globalKanban">
           Toutes les équipes · 4 colonnes unifiées · Glissez les cartes entre colonnes
         </template>
         <template v-else-if="effectiveSwimlaneMode">
@@ -285,7 +303,7 @@ function onFiltersUpdate(filters) {
         </template>
       </p>
       <Button
-        v-if="!globalKanban"
+        v-if="!globalKanban && canWrite"
         size="sm"
         variant="outline"
         class="gap-1.5"
@@ -297,7 +315,7 @@ function onFiltersUpdate(filters) {
     </div>
 
     <VueDraggable
-      v-if="!globalKanban"
+      v-if="!globalKanban && canWrite"
       v-model="localLists"
       :animation="180"
       handle=".kanban-column-handle"
@@ -311,7 +329,7 @@ function onFiltersUpdate(filters) {
         :list="list"
         :members="members"
         :swimlane-mode="effectiveSwimlaneMode"
-        :disable-tasks-drag="hasActiveFilters"
+        :disable-tasks-drag="hasActiveFilters || !canWrite"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
         @add-card="openCreateTask"
@@ -330,8 +348,8 @@ function onFiltersUpdate(filters) {
         :list="list"
         :members="members"
         :swimlane-mode="effectiveSwimlaneMode"
-        :readonly-column="globalKanban"
-        :disable-tasks-drag="hasActiveFilters"
+        :readonly-column="globalKanban || !canWrite"
+        :disable-tasks-drag="hasActiveFilters || !canWrite"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
         @add-card="openCreateTask"
@@ -367,6 +385,7 @@ function onFiltersUpdate(filters) {
       :tags="tags"
       :task-templates="taskTemplates"
       :all-tasks="lists.flatMap((l) => l.tasks ?? [])"
+      :read-only="!canWrite"
     />
   </div>
 </template>

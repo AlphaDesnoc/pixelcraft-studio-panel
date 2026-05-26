@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\TaskKanbanUpdated;
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Task;
@@ -9,6 +10,7 @@ use App\Models\TaskList;
 use App\Models\UserNotification;
 use App\Support\ActivityLogger;
 use App\Support\PanelNotifier;
+use App\Support\TaskKanbanPayload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +22,7 @@ class TaskController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
 
         $validated = $request->validate([
             'list_id' => ['required', 'integer', Rule::exists('task_lists', 'id')->where('project_id', $project->id)],
@@ -36,7 +37,7 @@ class TaskController extends Controller
         $list = TaskList::findOrFail($validated['list_id']);
         $position = (int) Task::where('list_id', $list->id)->max('position') + 1;
 
-        Task::create([
+        $task = Task::create([
             'project_id' => $project->id,
             'list_id' => $list->id,
             'assignee_id' => $validated['assignee_id'] ?? null,
@@ -62,13 +63,17 @@ class TaskController extends Controller
             );
         }
 
+        $this->broadcastKanban($project, 'created', [
+            'task' => TaskKanbanPayload::from($task->fresh()),
+            'list_id' => $task->list_id,
+        ], $request->user()->id);
+
         return back();
     }
 
     public function update(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
 
         $validated = $request->validate([
@@ -128,15 +133,22 @@ class TaskController extends Controller
             );
         }
 
+        $this->broadcastKanban($project, 'updated', [
+            'task' => TaskKanbanPayload::from($task->fresh()),
+            'list_id' => $task->list_id,
+        ], $request->user()->id);
+
         return back();
     }
 
     public function duplicate(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
 
-        DB::transaction(function () use ($task) {
+        $clone = null;
+
+        DB::transaction(function () use ($task, &$clone) {
             $task->load('tags');
 
             $nextPosition = ((int) Task::where('list_id', $task->list_id)->max('position')) + 1;
@@ -150,35 +162,53 @@ class TaskController extends Controller
             $clone->tags()->sync($task->tags->pluck('id')->all());
         });
 
+        if ($clone) {
+            $this->broadcastKanban($project, 'created', [
+                'task' => TaskKanbanPayload::from($clone->fresh()),
+                'list_id' => $clone->list_id,
+            ], $request->user()->id);
+        }
+
         return back();
     }
 
     public function archive(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
 
         $task->update(['archived_at' => now()]);
+
+        $this->broadcastKanban($project, 'archived', [
+            'task_id' => $task->id,
+            'list_id' => $task->list_id,
+        ], $request->user()->id);
 
         return back();
     }
 
     public function unarchive(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
 
         $task->update(['archived_at' => null]);
+
+        $this->broadcastKanban($project, 'updated', [
+            'task' => TaskKanbanPayload::from($task->fresh()),
+            'list_id' => $task->list_id,
+        ], $request->user()->id);
 
         return back();
     }
 
     public function destroy(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
+
+        $taskId = $task->id;
+        $listId = $task->list_id;
 
         DB::transaction(function () use ($task) {
             $listId = $task->list_id;
@@ -193,12 +223,17 @@ class TaskController extends Controller
             }
         });
 
+        $this->broadcastKanban($project, 'deleted', [
+            'task_id' => $taskId,
+            'list_id' => $listId,
+        ], $request->user()->id);
+
         return back();
     }
 
     public function move(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
 
         $validated = $request->validate([
@@ -207,7 +242,9 @@ class TaskController extends Controller
             'order.*' => ['integer', 'distinct'],
         ]);
 
-        DB::transaction(function () use ($project, $task, $validated, $request) {
+        $oldListId = $task->list_id;
+
+        DB::transaction(function () use ($project, $task, $validated, $request, &$oldListId) {
             $newList = TaskList::findOrFail($validated['list_id']);
             $task->loadMissing('list');
             $oldListId = $task->list_id;
@@ -252,15 +289,22 @@ class TaskController extends Controller
             }
         });
 
+        $task->refresh();
+
+        $this->broadcastKanban($project, 'moved', [
+            'task_id' => $task->id,
+            'list_id' => (int) $validated['list_id'],
+            'order' => array_values(array_map('intval', $validated['order'])),
+            'old_list_id' => $oldListId,
+            'task' => TaskKanbanPayload::from($task),
+        ], $request->user()->id);
+
         return back();
     }
 
-    private function ensureCanEdit(Request $request, Project $project): void
+    private function broadcastKanban(Project $project, string $action, array $payload, ?int $actorId): void
     {
-        $user = $request->user();
-        $isAdmin = $user->is_admin;
-        $isMember = $project->members()->whereKey($user->id)->exists();
-        abort_unless($isAdmin || $isMember, 403);
+        TaskKanbanUpdated::dispatch($project, $action, $payload, $actorId);
     }
 
     private function ensureBelongs(Project $project, Task $task): void
@@ -279,6 +323,7 @@ class TaskController extends Controller
         if ($idx === false) {
             return 0;
         }
+
         return (int) round(($idx / ($count - 1)) * 100);
     }
 }

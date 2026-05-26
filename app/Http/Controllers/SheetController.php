@@ -15,8 +15,7 @@ class SheetController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'spreadsheet');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'spreadsheet');
 
         $validated = $request->validate([
             'name' => ['nullable', 'string', 'max:120'],
@@ -46,8 +45,7 @@ class SheetController extends Controller
 
     public function update(Request $request, Project $project, Sheet $sheet): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'spreadsheet');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'spreadsheet');
         abort_unless($sheet->project_id === $project->id, 404);
 
         $validated = $request->validate([
@@ -80,8 +78,7 @@ class SheetController extends Controller
 
     public function destroy(Request $request, Project $project, Sheet $sheet): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'spreadsheet');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'spreadsheet');
         abort_unless($sheet->project_id === $project->id, 404);
 
         if ($project->sheets()->where('rank_id', $sheet->rank_id)->count() <= 1) {
@@ -101,8 +98,7 @@ class SheetController extends Controller
 
     public function reorder(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'spreadsheet');
-        $this->ensureCanEdit($request, $project);
+        $this->ensureFeatureWrite($request, $project, 'spreadsheet');
 
         $validated = $request->validate([
             'ids' => ['required', 'array'],

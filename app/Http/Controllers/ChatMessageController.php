@@ -44,7 +44,7 @@ class ChatMessageController extends Controller
     {
         $user = $request->user();
         $space = ProjectSpace::resolve($request, $project, $user);
-        $this->authorizeSpace($user, $project, $space);
+        $this->authorizeSpaceWrite($user, $project, $space);
 
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:5000'],
@@ -95,7 +95,7 @@ class ChatMessageController extends Controller
     {
         $user = $request->user();
         $space = ProjectSpace::resolve($request, $project, $user);
-        $this->authorizeSpace($user, $project, $space);
+        $this->authorizeSpaceWrite($user, $project, $space);
         abort_unless($message->project_id === $project->id, 404);
         abort_unless($message->canEditBy($user), 403);
 
@@ -122,7 +122,7 @@ class ChatMessageController extends Controller
     {
         $user = $request->user();
         $space = ProjectSpace::resolve($request, $project, $user);
-        $this->authorizeSpace($user, $project, $space);
+        $this->authorizeSpaceWrite($user, $project, $space);
         abort_unless($message->project_id === $project->id, 404);
         abort_unless($message->canEditBy($user), 403);
 
@@ -139,7 +139,7 @@ class ChatMessageController extends Controller
     {
         $user = $request->user();
         $space = ProjectSpace::resolve($request, $project, $user);
-        $this->authorizeSpace($user, $project, $space);
+        $this->authorizeSpaceWrite($user, $project, $space);
         abort_unless($message->project_id === $project->id, 404);
 
         if ($message->pinned_at) {
@@ -170,8 +170,14 @@ class ChatMessageController extends Controller
     private function authorizeSpace($user, Project $project, ProjectSpace $space): void
     {
         ProjectAccess::ensureAccess($user, $project);
-        abort_unless(ProjectPermissions::can($user, $project, 'chat'), 403);
+        abort_unless(ProjectPermissions::canRead($user, $project, 'chat'), 403);
         abort_unless(SpaceChatAccess::canAccess($user, $project, $space->key), 403);
         abort_if($space->isFull, 403);
+    }
+
+    private function authorizeSpaceWrite($user, Project $project, ProjectSpace $space): void
+    {
+        $this->authorizeSpace($user, $project, $space);
+        abort_unless(ProjectPermissions::canWrite($user, $project, 'chat'), 403);
     }
 }

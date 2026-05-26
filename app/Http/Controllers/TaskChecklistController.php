@@ -17,8 +17,8 @@ class TaskChecklistController extends Controller
 
     public function store(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project, $task);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -34,8 +34,8 @@ class TaskChecklistController extends Controller
 
     public function update(Request $request, Project $project, Task $task, TaskChecklist $checklist): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project, $task);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
         abort_unless($checklist->task_id === $task->id, 404);
 
         $validated = $request->validate([
@@ -49,8 +49,8 @@ class TaskChecklistController extends Controller
 
     public function destroy(Request $request, Project $project, Task $task, TaskChecklist $checklist): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project, $task);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
         abort_unless($checklist->task_id === $task->id, 404);
 
         $checklist->delete();
@@ -60,8 +60,8 @@ class TaskChecklistController extends Controller
 
     public function storeItem(Request $request, Project $project, Task $task, TaskChecklist $checklist): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project, $task);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
         abort_unless($checklist->task_id === $task->id, 404);
 
         $validated = $request->validate([
@@ -78,8 +78,8 @@ class TaskChecklistController extends Controller
 
     public function updateItem(Request $request, Project $project, Task $task, TaskChecklist $checklist, TaskChecklistItem $item): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project, $task);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
         abort_unless($checklist->task_id === $task->id, 404);
         abort_unless($item->checklist_id === $checklist->id, 404);
 
@@ -99,8 +99,8 @@ class TaskChecklistController extends Controller
 
     public function destroyItem(Request $request, Project $project, Task $task, TaskChecklist $checklist, TaskChecklistItem $item): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
-        $this->ensureCanEdit($request, $project, $task);
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
         abort_unless($checklist->task_id === $task->id, 404);
         abort_unless($item->checklist_id === $checklist->id, 404);
 

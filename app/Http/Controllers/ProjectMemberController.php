@@ -18,7 +18,7 @@ class ProjectMemberController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'team');
+        $this->ensureFeatureWrite($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
 
         $validated = $request->validate([
@@ -68,7 +68,7 @@ class ProjectMemberController extends Controller
 
     public function update(Request $request, Project $project, User $user): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'team');
+        $this->ensureFeatureWrite($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
 
         abort_unless($project->members()->whereKey($user->id)->exists(), 404);
@@ -141,7 +141,7 @@ class ProjectMemberController extends Controller
 
     public function destroy(Request $request, Project $project, User $user): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'team');
+        $this->ensureFeatureWrite($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
 
         abort_unless($project->members()->whereKey($user->id)->exists(), 404);

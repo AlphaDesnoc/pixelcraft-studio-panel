@@ -17,6 +17,7 @@ import {
   extractMentionUserIds,
   useDirectMessages,
 } from "@/composables/useDirectMessages.js";
+import { flushPendingMessages } from "@/lib/flushPendingMessages.js";
 import {
   onlineUsers as siteOnlineUsers,
   siteLive,
@@ -81,6 +82,8 @@ const {
   uploadAttachment,
   notifyTyping,
   listRef,
+  pendingOutbound,
+  refreshPendingOutbound,
   start,
   leaveConversation,
   toggleReaction,
@@ -415,6 +418,10 @@ async function submitMessage() {
     mentions,
   });
 
+  if (result?.queued) {
+    return;
+  }
+
   if (result?.conversation && !conversationId) {
     pendingRecipientId.value = null;
     selectedId.value = result.conversation.id;
@@ -495,6 +502,25 @@ const composeTargetName = computed(() => {
           </Button>
         </div>
       </header>
+
+      <div
+        v-if="pendingOutbound.length"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
+      >
+        <span>
+          {{ pendingOutbound.length }} message{{ pendingOutbound.length > 1 ? "s" : "" }}
+          en attente d'envoi (hors ligne)
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          class="h-7 border-amber-500/40 text-xs"
+          @click="refreshPendingOutbound()"
+        >
+          Actualiser
+        </Button>
+      </div>
 
       <div
         class="grid min-h-[560px] flex-1 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-[320px_1fr]"

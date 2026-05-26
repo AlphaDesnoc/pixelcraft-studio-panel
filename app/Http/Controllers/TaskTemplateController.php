@@ -16,7 +16,7 @@ class TaskTemplateController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
+        $this->ensureFeatureWrite($request, $project, 'kanban');
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:80'],
@@ -34,7 +34,7 @@ class TaskTemplateController extends Controller
 
     public function apply(Request $request, Project $project, Task $task): RedirectResponse
     {
-        $this->ensureFeature($request, $project, 'kanban');
+        $this->ensureFeatureWrite($request, $project, 'kanban');
         abort_unless($task->project_id === $project->id, 404);
 
         $validated = $request->validate([
