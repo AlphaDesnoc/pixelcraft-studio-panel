@@ -1,10 +1,17 @@
 <script setup>
 import { computed } from "vue";
-import { AlignLeft, CalendarDays, GripVertical } from "lucide-vue-next";
+import { AlignLeft, CalendarDays, GripVertical, ListTodo } from "lucide-vue-next";
+import { Progress } from "@/Components/ui/progress";
 
 const props = defineProps({
   task: { type: Object, required: true },
 });
+
+const checklistProgress = computed(
+  () => props.task.checklist_progress ?? { done: 0, total: 0 },
+);
+
+const tagPreview = computed(() => (props.task.tags ?? []).slice(0, 4));
 
 const priorityColors = {
   low: "#10b981",
@@ -47,6 +54,45 @@ const dueLabel = computed(() => {
         <h4 class="text-[13px] font-medium leading-snug text-foreground">
           {{ task.title }}
         </h4>
+
+        <div
+          v-if="tagPreview.length"
+          class="mt-1.5 flex flex-wrap gap-1"
+        >
+          <span
+            v-for="tag in tagPreview"
+            :key="tag.id"
+            class="max-w-[7rem] truncate rounded-full border border-border/70 px-1.5 py-px text-[10px] font-medium text-foreground"
+            :style="
+              tag.color ? { borderColor: tag.color, color: tag.color } : undefined
+            "
+          >
+            {{ tag.name }}
+          </span>
+          <span
+            v-if="(task.tags ?? []).length > 4"
+            class="text-[10px] text-muted-foreground"
+          >
+            +{{ (task.tags ?? []).length - 4 }}
+          </span>
+        </div>
+
+        <div
+          v-if="checklistProgress.total > 0"
+          class="mt-1.5 space-y-0.5"
+        >
+          <div class="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <ListTodo class="h-3 w-3 shrink-0" />
+            <span>
+              {{ checklistProgress.done }}/{{ checklistProgress.total }} sous-tâches
+            </span>
+          </div>
+          <Progress
+            class="h-1"
+            :value="checklistProgress.done"
+            :max="checklistProgress.total"
+          />
+        </div>
 
         <div
           v-if="task.description || dueLabel || task.progress > 0"

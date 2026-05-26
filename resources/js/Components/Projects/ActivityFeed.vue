@@ -1,8 +1,9 @@
 <script setup>
-import { Activity } from "lucide-vue-next";
+import { Activity, Download } from "lucide-vue-next";
 
-defineProps({
+const props = defineProps({
   activityLogs: { type: Array, default: () => [] },
+  exportUrl: { type: String, default: null },
 });
 
 function formatRelative(iso) {
@@ -35,9 +36,19 @@ function initials(name) {
 
 <template>
   <div class="rounded-xl border border-border bg-card">
-    <div class="flex items-center gap-2 border-b border-border px-4 py-3">
-      <Activity class="h-4 w-4 text-primary" />
-      <h3 class="text-sm font-semibold text-foreground">Activité récente</h3>
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <div class="flex items-center gap-2">
+        <Activity class="h-4 w-4 text-primary" />
+        <h3 class="text-sm font-semibold text-foreground">Activité récente</h3>
+      </div>
+      <a
+        v-if="exportUrl"
+        :href="exportUrl"
+        class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        <Download class="h-3.5 w-3.5" />
+        Exporter CSV
+      </a>
     </div>
 
     <ul v-if="activityLogs.length > 0" class="divide-y divide-border/40">

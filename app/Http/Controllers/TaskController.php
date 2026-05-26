@@ -105,6 +105,38 @@ class TaskController extends Controller
         return back();
     }
 
+    public function duplicate(Request $request, Project $project, Task $task): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        $this->ensureBelongs($project, $task);
+
+        DB::transaction(function () use ($task) {
+            $task->load('tags');
+
+            $nextPosition = ((int) Task::where('list_id', $task->list_id)->max('position')) + 1;
+
+            $clone = $task->replicate(['position', 'archived_at']);
+            $clone->title = $task->title.' (copie)';
+            $clone->position = $nextPosition;
+            $clone->archived_at = null;
+            $clone->save();
+
+            $clone->tags()->sync($task->tags->pluck('id')->all());
+        });
+
+        return back();
+    }
+
+    public function archive(Request $request, Project $project, Task $task): RedirectResponse
+    {
+        $this->ensureCanEdit($request, $project);
+        $this->ensureBelongs($project, $task);
+
+        $task->update(['archived_at' => $task->archived_at ? null : now()]);
+
+        return back();
+    }
+
     public function destroy(Request $request, Project $project, Task $task): RedirectResponse
     {
         $this->ensureCanEdit($request, $project);

@@ -23,6 +23,7 @@ export function spaceOnlyProps() {
     "canManageBugs",
     "bugs",
     "bugRanks",
+    "tags",
     "chatMessages",
     "chatMembers",
     "teamMembers",

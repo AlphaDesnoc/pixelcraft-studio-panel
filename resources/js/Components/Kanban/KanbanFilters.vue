@@ -7,6 +7,7 @@ import { Select } from "@/Components/ui/select";
 const props = defineProps({
   members: { type: Array, default: () => [] },
   priorities: { type: Object, default: () => ({}) },
+  tags: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(["update:filters"]);
@@ -16,7 +17,22 @@ const filters = reactive({
   priority: "",
   due: "all",
   search: "",
+  tagIds: [],
 });
+
+function toggleTag(id) {
+  const n = Number(id);
+  const i = filters.tagIds.indexOf(n);
+  if (i >= 0) {
+    filters.tagIds.splice(i, 1);
+  } else {
+    filters.tagIds.push(n);
+  }
+}
+
+function tagActive(id) {
+  return filters.tagIds.includes(Number(id));
+}
 
 watch(
   filters,
@@ -80,6 +96,33 @@ watch(
         <option value="overdue">En retard</option>
         <option value="none">Sans échéance</option>
       </Select>
+    </div>
+
+    <div v-if="tags.length" class="w-full min-w-[200px] md:flex-1">
+      <label class="mb-1 block text-[11px] font-medium text-muted-foreground">
+        Étiquettes
+      </label>
+      <div class="flex flex-wrap gap-1">
+        <button
+          v-for="tag in tags"
+          :key="tag.id"
+          type="button"
+          class="rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors"
+          :class="
+            tagActive(tag.id)
+              ? 'border-primary bg-primary/15 text-foreground'
+              : 'border-border/60 bg-background/40 text-muted-foreground hover:bg-muted/50'
+          "
+          :style="
+            tag.color && tagActive(tag.id)
+              ? { borderColor: tag.color, color: tag.color }
+              : undefined
+          "
+          @click="toggleTag(tag.id)"
+        >
+          {{ tag.name }}
+        </button>
+      </div>
     </div>
   </div>
 </template>

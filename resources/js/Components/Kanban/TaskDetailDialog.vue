@@ -3,10 +3,13 @@ import { computed, ref, watch } from "vue";
 import { router, useForm, usePage } from "@inertiajs/vue3";
 import {
   AlignLeft,
+  Archive,
+  Bug,
   CalendarClock,
   CalendarDays,
   CheckSquare,
   Clock,
+  Copy,
   ListChecks,
   Paperclip,
   Tag,
@@ -24,6 +27,7 @@ import { Select } from "@/Components/ui/select";
 import { Textarea } from "@/Components/ui/textarea";
 import Checklist from "./Checklist.vue";
 import TaskComments from "./TaskComments.vue";
+import TaskTagsManager from "./TaskTagsManager.vue";
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -32,6 +36,7 @@ const props = defineProps({
   lists: { type: Array, required: true },
   members: { type: Array, required: true },
   priorities: { type: Object, required: true },
+  tags: { type: Array, default: () => [] },
 });
 
 const emits = defineEmits(["update:open"]);
@@ -160,6 +165,34 @@ function saveDescription() {
   }
 }
 
+function archiveTask() {
+  if (!props.task) return;
+  if (!confirm("Archiver cette carte ? Elle disparaîtra du tableau.")) return;
+  router.post(
+    route("projects.tasks.archive", [props.projectSlug, props.task.id]),
+    {},
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["lists"],
+      onSuccess: () => emits("update:open", false),
+    },
+  );
+}
+
+function duplicateTask() {
+  if (!props.task) return;
+  router.post(
+    route("projects.tasks.duplicate", [props.projectSlug, props.task.id]),
+    {},
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["lists"],
+    },
+  );
+}
+
 function destroyTask() {
   if (!props.task) return;
   if (!confirm("Supprimer cette carte ?")) return;
@@ -281,10 +314,10 @@ function formatFileSize(bytes) {
             {{ dueLabel }}
           </span>
           <span
-            v-if="task.is_overdue"
-            class="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-400"
+            v-if="task.archived_at"
+            class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
           >
-            En retard
+            Archivée
           </span>
         </div>
 
@@ -313,6 +346,30 @@ function formatFileSize(bytes) {
             </span>
           </button>
         </section>
+
+        <section
+          v-if="task.linked_bug"
+          class="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/10 p-3"
+        >
+          <div class="flex items-center gap-2">
+            <Bug class="h-4 w-4 text-amber-400" />
+            <h3 class="text-sm font-semibold">Bug signalé lié</h3>
+          </div>
+          <a
+            v-if="task.linked_bug.url"
+            :href="task.linked_bug.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-sm font-medium text-primary hover:underline"
+          >
+            {{ task.linked_bug.title ?? `Bug #${task.linked_bug.id}` }}
+          </a>
+          <p v-else class="text-sm text-foreground">
+            {{ task.linked_bug.title ?? `Bug #${task.linked_bug.id}` }}
+          </p>
+        </section>
+
+        <TaskTagsManager :project-slug="projectSlug" :task="task" :tags="tags" />
 
         <section class="flex flex-col gap-2">
           <div class="flex items-center gap-2">
@@ -514,6 +571,25 @@ function formatFileSize(bytes) {
           <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Actions
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            class="h-8 justify-start gap-1.5 text-xs"
+            @click="duplicateTask"
+          >
+            <Copy class="h-3.5 w-3.5" />
+            Dupliquer
+          </Button>
+          <Button
+            v-if="!task.archived_at"
+            type="button"
+            variant="outline"
+            class="h-8 justify-start gap-1.5 text-xs"
+            @click="archiveTask"
+          >
+            <Archive class="h-3.5 w-3.5" />
+            Archiver
+          </Button>
           <Button
             type="button"
             variant="outline"

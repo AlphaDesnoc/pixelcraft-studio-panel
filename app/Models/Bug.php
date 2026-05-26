@@ -12,11 +12,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'reporter_id',
     'assignee_id',
     'assigned_rank_id',
+    'task_id',
     'title',
     'description',
     'priority',
     'status',
     'screenshots',
+    'sla_due_at',
 ])]
 class Bug extends Model
 {
@@ -51,6 +53,7 @@ class Bug extends Model
     {
         return [
             'screenshots' => 'array',
+            'sla_due_at' => 'datetime',
         ];
     }
 
@@ -72,6 +75,11 @@ class Bug extends Model
     public function assignedRank(): BelongsTo
     {
         return $this->belongsTo(Rank::class, 'assigned_rank_id');
+    }
+
+    public function task(): BelongsTo
+    {
+        return $this->belongsTo(Task::class);
     }
 
     public function messages(): HasMany

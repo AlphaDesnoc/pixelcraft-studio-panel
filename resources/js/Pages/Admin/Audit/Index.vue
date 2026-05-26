@@ -1,5 +1,6 @@
 <script setup>
 import { Head } from "@inertiajs/vue3";
+import { Download } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import AdminTabs from "@/Components/AdminTabs.vue";
 import { Card } from "@/Components/ui/card";
@@ -25,11 +26,20 @@ function formatDate(iso) {
 
   <AuthenticatedLayout>
     <template #header>
-      <div>
-        <h1 class="text-xl font-semibold tracking-tight">Journal d'audit</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Historique des actions administratives et sensibles
-        </p>
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">Journal d'audit</h1>
+          <p class="mt-1 text-sm text-muted-foreground">
+            Historique des actions administratives et sensibles
+          </p>
+        </div>
+        <a
+          :href="route('export.audit')"
+          class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm hover:bg-muted/60"
+        >
+          <Download class="h-3.5 w-3.5" />
+          CSV
+        </a>
       </div>
     </template>
 

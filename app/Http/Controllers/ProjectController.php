@@ -7,7 +7,7 @@ use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
 use App\Models\Task;
-use App\Models\TaskList;
+use App\Models\TaskTag;
 use App\Models\User;
 use App\Support\ProjectAccess;
 use App\Support\ProjectSpace;
@@ -45,6 +45,8 @@ class ProjectController extends Controller
             'lists.tasks.checklists.items' => fn ($q) => $q->orderBy('position'),
             'lists.tasks.comments' => fn ($q) => $q->with('user:id,name')->latest(),
             'lists.tasks.attachments',
+            'lists.tasks.tags',
+            'lists.tasks.linkedBug',
             'events' => fn ($q) => $featureScope($q)->orderBy('start_at'),
             'notes' => fn ($q) => $featureScope($q)->orderByDesc('pinned')->orderByDesc('pinned_at')->orderByDesc('created_at'),
             'notes.creator:id,name,email',
@@ -239,6 +241,11 @@ class ProjectController extends Controller
             'description' => $b->description,
             'priority' => $b->priority,
             'status' => $b->status,
+            'task_id' => $b->task_id ?? null,
+            'sla_due_at' => optional($b->sla_due_at)?->toIso8601String(),
+            'is_sla_breached' => $b->sla_due_at
+                && $b->sla_due_at->isPast()
+                && $b->status !== Bug::STATUS_CLOSED,
             'created_at' => optional($b->created_at)?->toIso8601String(),
             'reporter' => $b->reporter ? ['id' => $b->reporter->id, 'name' => $b->reporter->name] : null,
             'assignee' => $b->assignee ? ['id' => $b->assignee->id, 'name' => $b->assignee->name] : null,
@@ -263,15 +270,33 @@ class ProjectController extends Controller
             'email' => $m->email,
         ])->values();
 
-        $teamMembers = $project->members->map(fn ($m) => [
-            'id' => $m->id,
-            'name' => $m->name,
-            'email' => $m->email,
-            'role' => $m->pivot->role ?? ProjectAccess::ROLE_MEMBER,
-            'joined_at' => optional($m->pivot->joined_at)?->toIso8601String(),
-            'is_owner' => (int) $project->owner_id === (int) $m->id
-                || ($m->pivot->role ?? null) === ProjectAccess::ROLE_OWNER,
-        ])->values();
+        $teamMembers = $project->members->map(function ($m) {
+            $perms = $m->pivot->permissions ?? null;
+            if (is_string($perms)) {
+                $decoded = json_decode($perms, true);
+                $perms = is_array($decoded) ? $decoded : [];
+            } elseif (! is_array($perms)) {
+                $perms = [];
+            }
+
+            return [
+                'id' => $m->id,
+                'name' => $m->name,
+                'email' => $m->email,
+                'role' => $m->pivot->role ?? ProjectAccess::ROLE_MEMBER,
+                'joined_at' => optional($m->pivot->joined_at)?->toIso8601String(),
+                'is_owner' => (int) $project->owner_id === (int) $m->id
+                    || ($m->pivot->role ?? null) === ProjectAccess::ROLE_OWNER,
+                'permissions' => $perms,
+            ];
+        })->values();
+
+        $taskTagsPayload = TaskTag::query()
+            ->where('project_id', $project->id)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (TaskTag $tag) => $tag->toPayload())
+            ->values();
 
         $teamCandidates = $canManageTeam
             ? User::query()
@@ -313,6 +338,7 @@ class ProjectController extends Controller
             'bugPriorities' => Bug::PRIORITIES,
             'bugStatuses' => Bug::STATUSES,
             'lists' => $lists,
+            'tags' => $taskTagsPayload,
             'events' => $events,
             'notes' => $notes,
             'sheets' => $sheets,
@@ -438,6 +464,8 @@ class ProjectController extends Controller
 
     private function mapTask(Task $task): array
     {
+        $linked = $task->relationLoaded('linkedBug') ? $task->linkedBug : null;
+
         return [
             'id' => $task->id,
             'list_id' => $task->list_id,
@@ -451,6 +479,14 @@ class ProjectController extends Controller
             'start_date' => optional($task->start_date)?->toDateString(),
             'due_date' => optional($task->due_date)?->toDateString(),
             'is_overdue' => $task->isOverdue(),
+            'archived_at' => optional($task->archived_at)?->toIso8601String(),
+            'tags' => $task->tags->map(fn (TaskTag $tg) => $tg->toPayload())->values(),
+            'checklist_progress' => $this->taskChecklistProgress($task),
+            'linked_bug' => $linked ? [
+                'id' => $linked->id,
+                'title' => $linked->title,
+                'url' => null,
+            ] : null,
             'checklists' => $task->checklists->map(fn ($cl) => [
                 'id' => $cl->id,
                 'name' => $cl->name,
@@ -465,5 +501,21 @@ class ProjectController extends Controller
             'comments' => $task->comments->map(fn ($c) => $c->toPayload())->values(),
             'attachments' => $task->attachments->map(fn ($a) => $a->toPayload())->values(),
         ];
+    }
+
+    private function taskChecklistProgress(Task $task): array
+    {
+        $done = 0;
+        $total = 0;
+        foreach ($task->checklists as $cl) {
+            foreach ($cl->items as $it) {
+                $total++;
+                if ($it->is_done) {
+                    $done++;
+                }
+            }
+        }
+
+        return ['done' => $done, 'total' => $total];
     }
 }

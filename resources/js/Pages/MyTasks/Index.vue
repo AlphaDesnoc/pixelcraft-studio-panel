@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from "vue";
 import { Head, Link } from "@inertiajs/vue3";
-import { CalendarDays, ExternalLink, TriangleAlert } from "lucide-vue-next";
+import { CalendarDays, Download, ExternalLink, TriangleAlert } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Card } from "@/Components/ui/card";
@@ -37,14 +37,23 @@ const overdueCount = computed(
 
   <AuthenticatedLayout>
     <template #header>
-      <div>
-        <h1 class="text-xl font-semibold tracking-tight">Mes tâches</h1>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Tâches qui vous sont assignées et non terminées
-          <span v-if="overdueCount > 0" class="text-rose-400">
-            · {{ overdueCount }} en retard
-          </span>
-        </p>
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">Mes tâches</h1>
+          <p class="mt-1 text-sm text-muted-foreground">
+            Tâches qui vous sont assignées et non terminées
+            <span v-if="overdueCount > 0" class="text-rose-400">
+              · {{ overdueCount }} en retard
+            </span>
+          </p>
+        </div>
+        <a
+          :href="route('export.my-tasks')"
+          class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground shadow-sm hover:bg-muted/60"
+        >
+          <Download class="h-3.5 w-3.5" />
+          CSV
+        </a>
       </div>
     </template>
 

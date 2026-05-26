@@ -3,6 +3,8 @@ import { computed } from "vue";
 import { Head, usePage } from "@inertiajs/vue3";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import UpdatePasswordForm from "./Partials/UpdatePasswordForm.vue";
+import NotificationPreferencesForm from "./Partials/NotificationPreferencesForm.vue";
+import TwoFactorSetup from "./Partials/TwoFactorSetup.vue";
 import { Avatar } from "@/Components/ui/avatar";
 import {
   Card,
@@ -14,6 +16,12 @@ import {
 
 const page = usePage();
 const user = computed(() => page.props.auth?.user);
+
+defineProps({
+  notificationPreferences: { type: Object, default: () => ({}) },
+  notificationTypes: { type: Array, default: () => [] },
+  two_factor_enabled: { type: Boolean, default: false },
+});
 
 const initials = computed(() => {
   if (!user.value) return "";
@@ -71,7 +79,22 @@ const initials = computed(() => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card class="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Notifications</CardTitle>
+          <CardDescription>
+            Choisissez les alertes affichées dans la cloche du panel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NotificationPreferencesForm
+            :preferences="notificationPreferences"
+            :types="notificationTypes"
+          />
+        </CardContent>
+      </Card>
+
+      <Card class="lg:col-span-2">
         <CardHeader>
           <CardTitle>Mot de passe</CardTitle>
           <CardDescription>
@@ -82,6 +105,10 @@ const initials = computed(() => {
           <UpdatePasswordForm />
         </CardContent>
       </Card>
+
+      <div v-if="user?.is_admin" class="lg:col-span-2">
+        <TwoFactorSetup :enabled="two_factor_enabled" />
+      </div>
     </div>
   </AuthenticatedLayout>
 </template>

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
+use App\Models\Task;
+use App\Models\TaskList;
 use App\Models\UserNotification;
 use App\Support\PanelNotifier;
 use Illuminate\Http\RedirectResponse;
@@ -35,7 +37,7 @@ class BugController extends Controller
             }
         }
 
-        $project->bugs()->create([
+        $bug = $project->bugs()->create([
             'reporter_id' => $request->user()->id,
             'assigned_rank_id' => $defaultRank?->id,
             'title' => $validated['title'],
@@ -44,6 +46,8 @@ class BugController extends Controller
             'status' => Bug::STATUS_OPEN,
             'screenshots' => $paths ?: null,
         ]);
+
+        $bug->update(['sla_due_at' => \App\Support\BugSla::dueAt($bug)]);
 
         return back();
     }
@@ -105,7 +109,7 @@ class BugController extends Controller
 
         $previousAssignee = $bug->assignee_id;
 
-        $bug->update([
+        $bug->fill([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'priority' => $validated['priority'] ?? $bug->priority,
@@ -116,6 +120,9 @@ class BugController extends Controller
                 : $bug->assigned_rank_id,
             'screenshots' => $screenshots ?: null,
         ]);
+
+        $bug->sla_due_at = \App\Support\BugSla::dueAt($bug);
+        $bug->save();
 
         if (
             $bug->assignee_id
@@ -133,6 +140,72 @@ class BugController extends Controller
         }
 
         return back();
+    }
+
+    public function linkTask(Request $request, Project $project, Bug $bug): RedirectResponse
+    {
+        $this->ensureCanManage($request, $project);
+        abort_unless($bug->project_id === $project->id, 404);
+
+        $validated = $request->validate([
+            'task_id' => ['required', 'integer'],
+        ]);
+
+        $task = Task::query()->findOrFail($validated['task_id']);
+        abort_unless($task->project_id === $project->id, 422);
+
+        $bug->update(['task_id' => $task->id]);
+
+        return back();
+    }
+
+    public function createTaskFromBug(Request $request, Project $project, Bug $bug): RedirectResponse
+    {
+        $this->ensureCanManage($request, $project);
+        abort_unless($bug->project_id === $project->id, 404);
+
+        $list = $project->lists()
+            ->where('status_kind', TaskList::STATUS_TODO)
+            ->orderBy('position')
+            ->first()
+            ?? $project->lists()->orderBy('position')->first();
+
+        abort_if(! $list, 422, 'Aucune colonne disponible pour créer la tâche.');
+
+        $position = ((int) Task::query()->where('list_id', $list->id)->max('position')) + 1;
+
+        $task = Task::query()->create([
+            'project_id' => $project->id,
+            'list_id' => $list->id,
+            'assignee_id' => $bug->assignee_id,
+            'title' => $bug->title,
+            'description' => $bug->description,
+            'priority' => $bug->priority,
+            'status' => $list->status_kind,
+            'position' => $position,
+            'progress' => $this->guessProgressFromList($project, $list),
+            'completed_at' => $list->status_kind === TaskList::STATUS_DONE ? now() : null,
+        ]);
+
+        $bug->update(['task_id' => $task->id]);
+
+        return back();
+    }
+
+    /** @todo share with TaskController */
+    private function guessProgressFromList(Project $project, TaskList $list): int
+    {
+        $ids = $project->lists()->orderBy('position')->pluck('id')->all();
+        $count = count($ids);
+        if ($count <= 1) {
+            return 0;
+        }
+        $idx = array_search($list->id, $ids, true);
+        if ($idx === false) {
+            return 0;
+        }
+
+        return (int) round(($idx / ($count - 1)) * 100);
     }
 
     public function destroy(Request $request, Project $project, Bug $bug): RedirectResponse

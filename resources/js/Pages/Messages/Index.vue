@@ -1,13 +1,18 @@
 <script setup>
 import { computed, ref, toRef, watch } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
-import { Mail, MessageSquare, Plus, Search, Send } from "lucide-vue-next";
+import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, X } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
 import NewMessageDialog from "@/Components/Messages/NewMessageDialog.vue";
-import { useDirectMessages } from "@/composables/useDirectMessages.js";
+import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
+import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
+import {
+  extractMentionUserIds,
+  useDirectMessages,
+} from "@/composables/useDirectMessages.js";
 import {
   onlineUsers as siteOnlineUsers,
   siteLive,
@@ -31,6 +36,9 @@ const currentUserName = computed(() => page.props.auth?.user?.name ?? "Utilisate
 
 const search = ref("");
 const draft = ref("");
+const draftTextareaRef = ref(null);
+const fileInputRef = ref(null);
+const replyingTo = ref(null);
 const newDialogOpen = ref(false);
 const pendingRecipientId = ref(null);
 
@@ -56,10 +64,12 @@ const {
   messages: threadMessages,
   loading,
   sending,
+  uploading,
   live,
   highlightedIds,
   typingUsers,
   send,
+  uploadAttachment,
   notifyTyping,
   listRef,
   start,
@@ -69,6 +79,22 @@ const {
   currentUserIdRef,
   currentUserNameRef,
   conversationsRef: localConversations,
+});
+
+const mentionCandidatesRef = computed(() => props.contacts ?? []);
+
+const {
+  open: draftMentionOpen,
+  suggestions: draftMentionSuggestions,
+  activeIndex: draftMentionIndex,
+  handleInput: handleDraftMentionInput,
+  handleKeydown: handleDraftMentionKeydown,
+  insertMention: insertDraftMention,
+} = useMentionAutocomplete({
+  textRef: draft,
+  textareaRef: draftTextareaRef,
+  candidatesRef: mentionCandidatesRef,
+  onInput: notifyTyping,
 });
 
 watch(
@@ -95,7 +121,10 @@ watch(
 
 watch(
   selectedId,
-  (id) => setActiveConversationId(id),
+  (id) => {
+    replyingTo.value = null;
+    setActiveConversationId(id);
+  },
   { immediate: true },
 );
 
@@ -144,7 +173,79 @@ const typingLabel = computed(() => {
 });
 
 function onDraftInput() {
-  notifyTyping();
+  handleDraftMentionInput();
+}
+
+function onDraftKeydown(event) {
+  if (handleDraftMentionKeydown(event)) {
+    return;
+  }
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    submitMessage();
+  }
+}
+
+function replyPreviewText(preview) {
+  if (!preview) return "";
+  return (
+    preview.body ??
+    preview.excerpt ??
+    preview.body_snippet ??
+    preview.text ??
+    ""
+  );
+}
+
+function replyPreviewAuthor(preview) {
+  if (!preview) return "";
+  return (
+    preview.author_name ??
+    preview.user?.name ??
+    preview.from_user?.name ??
+    ""
+  );
+}
+
+function isImageAttachment(attachment) {
+  if (attachment.mime_type?.startsWith("image/")) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.original_name ?? "");
+}
+
+function shouldShowMessageBody(message) {
+  const body = message.body?.trim() ?? "";
+  if (!body) {
+    return false;
+  }
+  if (message.attachments?.length && body.startsWith("📎 ")) {
+    return false;
+  }
+  return true;
+}
+
+function startReply(message) {
+  replyingTo.value = {
+    id: message.id,
+    label: message.user?.name ?? "Message",
+    excerpt: (message.body ?? "").slice(0, 140),
+  };
+}
+
+function clearReply() {
+  replyingTo.value = null;
+}
+
+function openFilePicker() {
+  fileInputRef.value?.click();
+}
+
+async function onFileSelected(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file || !selectedId.value) return;
+  await uploadAttachment(selectedId.value, file);
 }
 
 function initials(name) {
@@ -232,12 +333,18 @@ function handleNewMessageSelect({ conversationId, recipientId }) {
 async function submitMessage() {
   if (!draft.value.trim()) return;
   const body = draft.value;
+  const mentions = extractMentionUserIds(body, props.contacts);
+  const replyToId = replyingTo.value?.id ?? null;
   draft.value = "";
+  clearReply();
 
   const conversationId = selectedId.value;
   const recipientId = pendingRecipientId.value;
 
-  const result = await send(body, conversationId, recipientId);
+  const result = await send(body, conversationId, recipientId, {
+    reply_to_id: replyToId,
+    mentions,
+  });
 
   if (result?.conversation && !conversationId) {
     pendingRecipientId.value = null;
@@ -259,6 +366,8 @@ async function submitMessage() {
 const canSend = computed(
   () => Boolean(selectedId.value || pendingRecipientId.value) && draft.value.trim(),
 );
+
+const canAttach = computed(() => Boolean(selectedId.value) && !uploading.value);
 
 const composeTargetName = computed(() => {
   if (activeConversation.value?.participant?.name) {
@@ -458,7 +567,7 @@ const composeTargetName = computed(() => {
               <div
                 v-for="message in threadMessages"
                 :key="message.id"
-                class="message-row flex gap-2.5"
+                class="message-row group flex gap-2.5"
                 :class="[
                   message.user?.id === currentUserId ? 'flex-row-reverse' : '',
                   isHighlighted(message.id) ? 'message-row--new' : '',
@@ -470,7 +579,7 @@ const composeTargetName = computed(() => {
                   {{ initials(message.user?.name) }}
                 </div>
                 <div
-                  class="message-bubble max-w-[75%] rounded-xl px-3 py-2"
+                  class="message-bubble relative max-w-[75%] rounded-xl px-3 py-2"
                   :class="[
                     message.user?.id === currentUserId
                       ? 'bg-primary/15 text-foreground'
@@ -478,10 +587,79 @@ const composeTargetName = computed(() => {
                     isHighlighted(message.id) ? 'message-bubble--new' : '',
                   ]"
                 >
-                  <p class="text-[11px] font-medium text-muted-foreground">
-                    {{ message.user?.name }} · {{ formatMessageTime(message.created_at) }}
+                  <div
+                    class="flex items-start gap-2"
+                    :class="message.user?.id === currentUserId ? 'flex-row-reverse text-right' : ''"
+                  >
+                    <div class="min-w-0 flex-1 space-y-0.5">
+                      <p class="text-[11px] font-medium text-muted-foreground">
+                        {{ message.user?.name }} · {{ formatMessageTime(message.created_at) }}
+                      </p>
+                      <div
+                        v-if="message.reply_preview"
+                        class="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-left"
+                      >
+                        <p class="text-[10px] font-medium text-muted-foreground">
+                          {{ replyPreviewAuthor(message.reply_preview) }}
+                        </p>
+                        <p class="truncate text-xs text-muted-foreground">
+                          {{ replyPreviewText(message.reply_preview) }}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      v-if="selectedId"
+                      type="button"
+                      class="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover:opacity-100"
+                      title="Répondre"
+                      @click.stop="startReply(message)"
+                    >
+                      <Reply class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div
+                    v-if="shouldShowMessageBody(message) && message.body_html"
+                    class="dm-message-body mt-0.5 text-left text-sm"
+                    v-html="message.body_html"
+                  />
+                  <p
+                    v-else-if="shouldShowMessageBody(message)"
+                    class="mt-0.5 whitespace-pre-wrap text-left text-sm"
+                  >
+                    {{ message.body }}
                   </p>
-                  <p class="mt-0.5 whitespace-pre-wrap text-sm">{{ message.body }}</p>
+
+                  <div
+                    v-if="message.attachments?.length"
+                    class="mt-2 flex flex-col gap-2"
+                  >
+                    <template v-for="attachment in message.attachments" :key="attachment.id">
+                      <a
+                        v-if="!isImageAttachment(attachment)"
+                        :href="attachment.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download
+                        class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <Paperclip class="h-3 w-3" />
+                        {{ attachment.original_name }}
+                      </a>
+                      <a
+                        v-else
+                        :href="attachment.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="block overflow-hidden rounded-md border border-border/60"
+                      >
+                        <img
+                          :src="attachment.url"
+                          :alt="attachment.original_name"
+                          class="max-h-48 max-w-full object-cover"
+                        />
+                      </a>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
@@ -493,18 +671,62 @@ const composeTargetName = computed(() => {
               {{ typingLabel }}
             </p>
 
+            <div
+              v-if="replyingTo && selectedId"
+              class="flex items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-4 py-2 text-xs"
+            >
+              <div class="min-w-0">
+                <p class="font-medium text-foreground">Réponse à {{ replyingTo.label }}</p>
+                <p class="truncate text-muted-foreground">{{ replyingTo.excerpt }}</p>
+              </div>
+              <button
+                type="button"
+                class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Annuler la réponse"
+                @click="clearReply"
+              >
+                <X class="h-4 w-4" />
+              </button>
+            </div>
+
             <form
               class="flex items-end gap-2 border-t border-border px-4 py-3"
               @submit.prevent="submitMessage"
             >
-              <Textarea
-                v-model="draft"
-                placeholder="Écrire un message…"
-                rows="2"
-                class="min-h-[44px] flex-1 resize-none"
-                @input="onDraftInput"
-                @keydown.enter.exact.prevent="submitMessage"
+              <input
+                ref="fileInputRef"
+                type="file"
+                class="hidden"
+                @change="onFileSelected"
               />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                class="h-10 w-10 shrink-0"
+                :disabled="!canAttach"
+                aria-label="Joindre un fichier"
+                @click="openFilePicker"
+              >
+                <Paperclip class="h-4 w-4" />
+              </Button>
+              <div class="relative min-w-0 flex-1">
+                <Textarea
+                  ref="draftTextareaRef"
+                  v-model="draft"
+                  placeholder="Écrire un message… (@pseudo pour mentionner)"
+                  rows="2"
+                  class="min-h-[44px] w-full resize-none"
+                  @input="onDraftInput"
+                  @keydown="onDraftKeydown"
+                />
+                <MentionSuggestions
+                  v-if="draftMentionOpen && draftMentionSuggestions.length"
+                  :suggestions="draftMentionSuggestions"
+                  :active-index="draftMentionIndex"
+                  @select="insertDraftMention"
+                />
+              </div>
               <Button
                 type="submit"
                 size="icon"
@@ -583,6 +805,10 @@ const composeTargetName = computed(() => {
   100% {
     box-shadow: 0 0 0 0 rgb(124 92 255 / 0);
   }
+}
+
+.dm-message-body :deep(span.rounded) {
+  display: inline;
 }
 
 .conv-item {

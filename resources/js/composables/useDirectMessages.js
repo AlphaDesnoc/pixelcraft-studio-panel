@@ -2,6 +2,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import axios from "axios";
 import { bindPresenceHandlers } from "@/lib/presence.js";
 import { onDirectMessage } from "@/composables/useSiteRealtime.js";
+import { memberPseudo } from "@/composables/useMentionAutocomplete.js";
 
 const POLL_MS = 2000;
 const HIGHLIGHT_MS = 2600;
@@ -49,6 +50,29 @@ function participantFromInbox(inbox, currentUserId) {
   );
 }
 
+/** @returns {number[]} unique user IDs for @pseudo matches in contacts */
+export function extractMentionUserIds(text, contacts) {
+  const byPseudo = new Map();
+  for (const c of contacts ?? []) {
+    const p = memberPseudo({ email: c.email, pseudo: c.pseudo })
+      .trim()
+      .toLowerCase();
+    if (p) {
+      byPseudo.set(p, c.id);
+    }
+  }
+  const ids = new Set();
+  const re = /@([a-z0-9._-]+)/gi;
+  let m;
+  while ((m = re.exec(text))) {
+    const id = byPseudo.get(m[1].toLowerCase());
+    if (id) {
+      ids.add(id);
+    }
+  }
+  return [...ids];
+}
+
 export function useDirectMessages({
   conversationIdRef,
   currentUserIdRef,
@@ -60,6 +84,7 @@ export function useDirectMessages({
   const typingUsers = ref([]);
   const loading = ref(false);
   const sending = ref(false);
+  const uploading = ref(false);
   const live = ref(false);
   const highlightedIds = ref(new Set());
   const listRef = ref(null);
@@ -319,7 +344,7 @@ export function useDirectMessages({
     }
   }
 
-  async function send(body, conversationId, recipientId = null) {
+  async function send(body, conversationId, recipientId = null, extras = {}) {
     const trimmed = body?.trim();
     if (!trimmed || sending.value) {
       return null;
@@ -336,6 +361,13 @@ export function useDirectMessages({
         return null;
       }
 
+      if (extras.reply_to_id) {
+        payload.reply_to_id = extras.reply_to_id;
+      }
+      if (extras.mentions?.length) {
+        payload.mentions = extras.mentions;
+      }
+
       const { data } = await axios.post(route("messages.store"), payload);
       appendMessage(data.message, { highlight: false, scroll: true });
       if (data.conversation) {
@@ -349,6 +381,33 @@ export function useDirectMessages({
       return data;
     } finally {
       sending.value = false;
+    }
+  }
+
+  async function uploadAttachment(conversationId, file) {
+    if (!conversationId || !file || uploading.value) {
+      return null;
+    }
+
+    uploading.value = true;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await axios.post(
+        route("messages.attachments.store", conversationId),
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      const message = data.message;
+      if (message?.id) {
+        appendMessage(message, {
+          highlight: message.user?.id !== currentUserIdRef.value,
+          scroll: true,
+        });
+      }
+      return data;
+    } finally {
+      uploading.value = false;
     }
   }
 
@@ -390,6 +449,8 @@ export function useDirectMessages({
     live,
     highlightedIds,
     send,
+    uploadAttachment,
+    uploading,
     notifyTyping,
     listRef,
     start,

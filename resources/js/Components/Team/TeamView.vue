@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { Link, router, usePage } from "@inertiajs/vue3";
-import { Crown, Shield, Trash2, UserPlus, Users } from "lucide-vue-next";
+import { Crown, Shield, ShieldAlert, Trash2, UserPlus, Users } from "lucide-vue-next";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -18,6 +18,39 @@ const props = defineProps({
 
 const page = usePage();
 const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
+
+/** Granular overrides; empty object → all caps allowed (backward compatible). */
+const MEMBER_PERM_KEYS = Object.freeze([
+  { key: "kanban", label: "Kanban" },
+  { key: "bugs", label: "Bugs" },
+  { key: "chat", label: "Chat" },
+  { key: "files", label: "Fichiers" },
+  { key: "notes", label: "Notes" },
+]);
+
+function memberPermState(member) {
+  const base = Object.fromEntries(MEMBER_PERM_KEYS.map(({ key }) => [key, true]));
+  const p = member.permissions;
+  if (p && typeof p === "object" && Object.keys(p).length > 0) {
+    Object.assign(base, p);
+  }
+  return base;
+}
+
+function updatePermission(member, key, checked) {
+  if (!isAdmin.value || member.is_owner) return;
+  const state = memberPermState(member);
+  state[key] = checked;
+  router.put(
+    route("projects.members.permissions", [props.projectSlug, member.id]),
+    { permissions: state },
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["teamMembers", "members"],
+    },
+  );
+}
 
 const pickerOpen = ref(false);
 
@@ -124,17 +157,46 @@ function removeMember(member) {
           {{ initials(member.name) }}
         </Avatar>
 
-        <div class="min-w-0 flex-1">
+        <div class="min-w-0 flex-1 space-y-2">
           <div class="flex flex-wrap items-center gap-2">
             <span class="truncate text-sm font-medium text-foreground">
               {{ member.name }}
             </span>
+            <ShieldAlert
+              v-if="isAdmin && !member.is_owner"
+              class="h-3.5 w-3.5 text-amber-500"
+              aria-hidden="true"
+            />
             <Badge :variant="roleVariant[member.role] ?? 'outline'" class="gap-1">
               <Crown v-if="member.is_owner" class="h-3 w-3" />
               {{ roleLabel(member.role) }}
             </Badge>
           </div>
           <p class="truncate text-xs text-muted-foreground">{{ member.email }}</p>
+          <div
+            v-if="isAdmin && !member.is_owner"
+            class="w-full rounded-md border border-border/60 bg-muted/10 px-3 py-2"
+          >
+            <p class="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <ShieldAlert class="h-3 w-3" />
+              Overrides (admins système uniquement)
+            </p>
+            <div class="flex flex-wrap gap-x-4 gap-y-2">
+              <label
+                v-for="row in MEMBER_PERM_KEYS"
+                :key="row.key"
+                class="inline-flex cursor-pointer items-center gap-1.5 text-[11px] text-foreground"
+              >
+                <input
+                  type="checkbox"
+                  class="h-3.5 w-3.5 rounded border-input text-primary"
+                  :checked="memberPermState(member)[row.key]"
+                  @change="updatePermission(member, row.key, $event.target.checked)"
+                />
+                {{ row.label }}
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="text-xs text-muted-foreground">
