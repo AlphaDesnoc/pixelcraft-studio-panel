@@ -44,7 +44,11 @@ else
 fi
 
 echo "==> docker compose up -d --build..."
-docker compose up -d --build
+if ! docker compose up -d --build; then
+  echo "==> ERREUR docker compose — logs app (100 dernières lignes) :"
+  docker compose logs --tail=100 app || true
+  exit 1
+fi
 
 if [[ -f docker-compose.proxy.yml ]]; then
   echo "==> reverse-proxy..."
