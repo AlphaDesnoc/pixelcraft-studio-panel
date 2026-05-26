@@ -1,9 +1,13 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\MyTasksController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RealtimeController;
@@ -17,6 +21,7 @@ use App\Http\Controllers\NoteController;
 use App\Http\Controllers\RankController;
 use App\Http\Controllers\SheetController;
 use App\Http\Controllers\TaskChecklistController;
+use App\Http\Controllers\TaskCommentController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TaskListController;
 use Illuminate\Support\Facades\Auth;
@@ -30,6 +35,11 @@ Route::get('/', function () {
 
 Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/my-tasks', [MyTasksController::class, 'index'])->name('my-tasks.index');
+
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     Route::post('/realtime/heartbeat', [RealtimeController::class, 'heartbeat'])->name('realtime.heartbeat');
     Route::get('/realtime/sync', [RealtimeController::class, 'sync'])->name('realtime.sync');
@@ -56,6 +66,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
         Route::post('/tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
 
+        Route::post('/tasks/{task}/comments', [TaskCommentController::class, 'store'])->name('tasks.comments.store');
+        Route::delete('/tasks/{task}/comments/{comment}', [TaskCommentController::class, 'destroy'])->name('tasks.comments.destroy');
+        Route::post('/tasks/{task}/attachments', [AttachmentController::class, 'storeTask'])->name('tasks.attachments.store');
+
         Route::post('/tasks/{task}/checklists', [TaskChecklistController::class, 'store'])->name('tasks.checklists.store');
         Route::put('/tasks/{task}/checklists/{checklist}', [TaskChecklistController::class, 'update'])->name('tasks.checklists.update');
         Route::delete('/tasks/{task}/checklists/{checklist}', [TaskChecklistController::class, 'destroy'])->name('tasks.checklists.destroy');
@@ -67,6 +81,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/chat/messages', [ChatMessageController::class, 'index'])->name('chat.messages.index');
         Route::get('/chat/presence', [ChatMessageController::class, 'presence'])->name('chat.presence');
         Route::post('/chat/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
+        Route::put('/chat/messages/{message}', [ChatMessageController::class, 'update'])->name('chat.messages.update');
+        Route::delete('/chat/messages/{message}', [ChatMessageController::class, 'destroy'])->name('chat.messages.destroy');
+        Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])->name('chat.attachments.store');
+        Route::delete('/attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
 
         Route::post('/events', [CalendarEventController::class, 'store'])->name('events.store');
         Route::put('/events/{event}', [CalendarEventController::class, 'update'])->name('events.update');
@@ -120,6 +138,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/projects', [AdminProjectController::class, 'store'])->name('projects.store');
         Route::post('/projects/{project}', [AdminProjectController::class, 'update'])->name('projects.update');
         Route::delete('/projects/{project}', [AdminProjectController::class, 'destroy'])->name('projects.destroy');
+
+        Route::get('/audit', [AuditLogController::class, 'index'])->name('audit.index');
     });
 });
 

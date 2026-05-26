@@ -4,6 +4,7 @@ import { bindPresenceHandlers } from "@/lib/presence.js";
 
 export const onlineUsers = ref([]);
 export const unreadMessages = ref(0);
+export const unreadNotifications = ref(0);
 export const siteLive = ref(false);
 
 const POLL_MS = 3000;
@@ -26,6 +27,10 @@ export function setActiveConversationId(id) {
 
 export function setUnreadCount(count) {
   unreadMessages.value = Math.max(0, Number(count) || 0);
+}
+
+export function setUnreadNotificationsCount(count) {
+  unreadNotifications.value = Math.max(0, Number(count) || 0);
 }
 
 export function isUserOnline(userId) {
@@ -81,6 +86,9 @@ async function pollSync() {
 
     lastSyncAt = data.server_time ?? new Date().toISOString();
     unreadMessages.value = data.unread_count ?? unreadMessages.value;
+    if (typeof data.unread_notifications === "number") {
+      unreadNotifications.value = data.unread_notifications;
+    }
 
     if (!echoConnected && Array.isArray(data.online_users)) {
       onlineUsers.value = data.online_users;

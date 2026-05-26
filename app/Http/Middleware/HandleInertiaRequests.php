@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\DirectConversation;
+use App\Support\PanelNotifier;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -54,6 +55,9 @@ class HandleInertiaRequests extends Middleware
                         })
                         ->get()
                         ->sum(fn (DirectConversation $c) => $c->unreadCountFor($user))
+                    : 0,
+                'unread_notifications' => fn () => $user
+                    ? PanelNotifier::unreadCount($user)
                     : 0,
             ],
             'flash' => [

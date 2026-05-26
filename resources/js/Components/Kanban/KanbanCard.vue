@@ -31,7 +31,8 @@ const dueLabel = computed(() => {
 
 <template>
   <article
-    class="group relative cursor-pointer overflow-hidden rounded-md border border-border bg-card/80 shadow-sm transition-colors hover:border-primary/40"
+    class="group relative cursor-pointer overflow-hidden rounded-md border bg-card/80 shadow-sm transition-colors hover:border-primary/40"
+    :class="task.is_overdue ? 'border-rose-500/60' : 'border-border'"
   >
     <div
       class="absolute inset-x-2 top-1.5 h-1 rounded-full"
@@ -54,7 +55,15 @@ const dueLabel = computed(() => {
           <AlignLeft v-if="task.description" class="h-3 w-3" />
           <span v-if="dueLabel" class="inline-flex items-center gap-0.5">
             <CalendarDays class="h-3 w-3" />
-            {{ dueLabel }}
+            <span :class="task.is_overdue ? 'font-medium text-rose-400' : ''">
+              {{ dueLabel }}
+            </span>
+          </span>
+          <span
+            v-if="task.is_overdue"
+            class="inline-flex items-center rounded-full bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-400"
+          >
+            En retard
           </span>
           <span
             v-if="task.progress > 0"
