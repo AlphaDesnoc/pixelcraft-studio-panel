@@ -22,7 +22,7 @@
         <title inertia>{{ config('app.name', 'Pixelcraft Studios') }}</title>
 
         @routes
-        @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
+        @vite(['resources/js/app.js'])
         @inertiaHead
     </head>
     <body class="min-h-screen bg-background font-sans text-foreground antialiased">

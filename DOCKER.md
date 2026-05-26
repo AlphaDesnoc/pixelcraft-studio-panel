@@ -475,6 +475,7 @@ app / reverb / worker ──► db:3306 (MariaDB, réseau interne "pixelcraft")
 ### Page blanche / 502
 - Vérifie que `app` est **healthy**
 - Logs conteneur `app` et `nginx`
+- Si le 502 apparaît **uniquement au refresh** (navigation Inertia OK) : souvent des en-têtes `Link` Vite trop volumineux pour nginx (`upstream sent too big header`). Rebuild la stack après mise à jour de `docker/nginx/default.conf` (buffers fastcgi déjà augmentés dans le repo).
 
 ### WebSocket / messagerie pas instantanée
 - Conteneur `reverb` running ?
