@@ -24,19 +24,23 @@ if [[ -f "$PANEL_CONF" ]]; then
   echo "==> panel.conf sauvegardé (config locale reverse-proxy)"
 fi
 
-echo "==> git fetch + reset..."
-git fetch origin "$BRANCH"
-git checkout "$BRANCH"
-git reset --hard "origin/$BRANCH"
+if [[ "${SKIP_GIT_SYNC:-0}" != "1" ]]; then
+  echo "==> git fetch + reset..."
+  git fetch origin "$BRANCH"
+  git checkout "$BRANCH"
+  git reset --hard "origin/$BRANCH"
 
-if [[ -n "$PANEL_BACKUP" && -f "$PANEL_BACKUP" ]]; then
-  cp "$PANEL_BACKUP" "$PANEL_CONF"
-  rm -f "$PANEL_BACKUP"
-  echo "==> panel.conf local restauré"
-elif [[ ! -f "$PANEL_CONF" ]]; then
-  echo "==> panel.conf absent — copie depuis panel.http.conf.example"
-  cp docker/nginx-proxy/conf.d/panel.http.conf.example "$PANEL_CONF"
-  echo "    Édite server_name dans $PANEL_CONF si besoin."
+  if [[ -n "$PANEL_BACKUP" && -f "$PANEL_BACKUP" ]]; then
+    cp "$PANEL_BACKUP" "$PANEL_CONF"
+    rm -f "$PANEL_BACKUP"
+    echo "==> panel.conf local restauré"
+  elif [[ ! -f "$PANEL_CONF" ]]; then
+    echo "==> panel.conf absent — copie depuis panel.http.conf.example"
+    cp docker/nginx-proxy/conf.d/panel.http.conf.example "$PANEL_CONF"
+    echo "    Édite server_name dans $PANEL_CONF si besoin."
+  fi
+else
+  echo "==> git sync ignoré (SKIP_GIT_SYNC=1)"
 fi
 
 echo "==> docker compose up -d --build..."

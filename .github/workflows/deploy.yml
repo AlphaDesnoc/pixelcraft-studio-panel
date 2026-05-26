@@ -26,6 +26,36 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           command_timeout: 30m
           script: |
-            set -e
+            set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
-            bash scripts/deploy.sh
+
+            BRANCH="${DEPLOY_BRANCH:-main}"
+            PANEL_CONF="docker/nginx-proxy/conf.d/panel.conf"
+            PANEL_BACKUP=""
+
+            if [[ -f "${HOME}/.ssh/github_deploy" ]]; then
+              export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/github_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+            fi
+
+            # Bootstrap git : le VPS peut avoir une panel.conf SSL locale et un vieux deploy.sh (git pull).
+            if [[ -f "$PANEL_CONF" ]]; then
+              PANEL_BACKUP="$(mktemp)"
+              cp "$PANEL_CONF" "$PANEL_BACKUP"
+              echo "==> panel.conf sauvegardé (config locale reverse-proxy)"
+            fi
+
+            echo "==> git fetch + reset..."
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
+
+            if [[ -n "$PANEL_BACKUP" && -f "$PANEL_BACKUP" ]]; then
+              cp "$PANEL_BACKUP" "$PANEL_CONF"
+              rm -f "$PANEL_BACKUP"
+              echo "==> panel.conf local restauré"
+            elif [[ ! -f "$PANEL_CONF" ]]; then
+              echo "==> panel.conf absent — copie depuis panel.http.conf.example"
+              cp docker/nginx-proxy/conf.d/panel.http.conf.example "$PANEL_CONF"
+            fi
+
+            SKIP_GIT_SYNC=1 bash scripts/deploy.sh
