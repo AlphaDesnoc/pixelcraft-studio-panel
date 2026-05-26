@@ -1,14 +1,16 @@
 <script setup>
 import { computed, ref, toRef, watch } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
-import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, X } from "lucide-vue-next";
+import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, Smile, X } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
+import EmojiPickerPopover from "@/Components/Chat/EmojiPickerPopover.vue";
 import NewMessageDialog from "@/Components/Messages/NewMessageDialog.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
+import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
 import {
   extractMentionUserIds,
   useDirectMessages,
@@ -38,6 +40,8 @@ const search = ref("");
 const draft = ref("");
 const draftTextareaRef = ref(null);
 const fileInputRef = ref(null);
+const draftEmojiOpen = ref(false);
+const draftEmojiTriggerRef = ref(null);
 const replyingTo = ref(null);
 const newDialogOpen = ref(false);
 const pendingRecipientId = ref(null);
@@ -184,6 +188,23 @@ function onDraftKeydown(event) {
     event.preventDefault();
     submitMessage();
   }
+}
+
+function isEmojiOnly(body) {
+  const trimmed = body?.trim() ?? "";
+  if (!trimmed) {
+    return false;
+  }
+  return !/[\p{L}\p{N}]/u.test(trimmed);
+}
+
+function toggleDraftEmojiPicker() {
+  draftEmojiOpen.value = !draftEmojiOpen.value;
+}
+
+async function onDraftEmojiSelected(emoji) {
+  await insertTextAtCursor(draftTextareaRef.value, emoji, draft);
+  notifyTyping();
 }
 
 function replyPreviewText(preview) {
@@ -624,7 +645,8 @@ const composeTargetName = computed(() => {
                   />
                   <p
                     v-else-if="shouldShowMessageBody(message)"
-                    class="mt-0.5 whitespace-pre-wrap text-left text-sm"
+                    class="mt-0.5 whitespace-pre-wrap text-left"
+                    :class="isEmojiOnly(message.body) ? 'text-2xl leading-snug' : 'text-sm'"
                   >
                     {{ message.body }}
                   </p>
@@ -710,6 +732,19 @@ const composeTargetName = computed(() => {
               >
                 <Paperclip class="h-4 w-4" />
               </Button>
+              <span ref="draftEmojiTriggerRef" class="inline-flex shrink-0">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  class="h-10 w-10"
+                  aria-label="Insérer un emoji"
+                  title="Emoji"
+                  @click="toggleDraftEmojiPicker"
+                >
+                  <Smile class="h-4 w-4" />
+                </Button>
+              </span>
               <div class="relative min-w-0 flex-1">
                 <Textarea
                   ref="draftTextareaRef"
@@ -771,6 +806,13 @@ const composeTargetName = computed(() => {
       :contacts="contacts"
       :conversations="localConversations"
       @select="handleNewMessageSelect"
+    />
+
+    <EmojiPickerPopover
+      v-model:open="draftEmojiOpen"
+      :trigger-ref="draftEmojiTriggerRef"
+      placement="top"
+      @select="onDraftEmojiSelected"
     />
   </AuthenticatedLayout>
 </template>
