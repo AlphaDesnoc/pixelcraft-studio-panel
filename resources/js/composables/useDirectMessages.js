@@ -28,19 +28,35 @@ function sortConversations(list) {
   });
 }
 
-function mergeMessages(existing, incoming) {
-  if (incoming.length === 0) {
-    return existing;
+function messagesForConversation(list, conversationId) {
+  if (!conversationId) {
+    return [];
+  }
+  return (list ?? []).filter(
+    (message) =>
+      Number(message.direct_conversation_id) === Number(conversationId),
+  );
+}
+
+function mergeMessages(existing, incoming, conversationId) {
+  const scopedExisting = messagesForConversation(existing, conversationId);
+  const scopedIncoming = messagesForConversation(incoming, conversationId);
+
+  if (scopedIncoming.length === 0) {
+    return scopedExisting;
   }
 
-  const lastExisting = existing[existing.length - 1]?.id;
-  const lastIncoming = incoming[incoming.length - 1]?.id;
-  if (existing.length === incoming.length && lastExisting === lastIncoming) {
-    return existing;
+  const lastExisting = scopedExisting[scopedExisting.length - 1]?.id;
+  const lastIncoming = scopedIncoming[scopedIncoming.length - 1]?.id;
+  if (
+    scopedExisting.length === scopedIncoming.length &&
+    lastExisting === lastIncoming
+  ) {
+    return scopedExisting;
   }
 
-  const byId = new Map(existing.map((m) => [m.id, m]));
-  for (const message of incoming) {
+  const byId = new Map(scopedExisting.map((m) => [m.id, m]));
+  for (const message of scopedIncoming) {
     byId.set(message.id, message);
   }
 
@@ -271,7 +287,13 @@ export function useDirectMessages({
   }
 
   function appendMessage(message, { highlight = true, scroll = true } = {}) {
-    if (!message?.id || messages.value.some((m) => m.id === message.id)) {
+    if (
+      !message?.id ||
+      Number(message.direct_conversation_id) !== Number(activeConversationId)
+    ) {
+      return false;
+    }
+    if (messages.value.some((m) => m.id === message.id)) {
       return false;
     }
     const normalized =
@@ -325,11 +347,15 @@ export function useDirectMessages({
   }
 
   async function fetchMessages(conversationId, { scroll = false } = {}) {
+    if (Number(conversationId) !== Number(activeConversationId)) {
+      return;
+    }
+
     const { data } = await axios.get(
       route("messages.conversations.messages", conversationId),
     );
     const incoming = data.messages ?? [];
-    const merged = mergeMessages(messages.value, incoming);
+    const merged = mergeMessages(messages.value, incoming, conversationId);
     if (merged !== messages.value) {
       const previousIds = new Set(messages.value.map((m) => m.id));
       messages.value = merged;
@@ -376,7 +402,9 @@ export function useDirectMessages({
     leaveConversation();
     activeConversationId = conversationId;
     loading.value = true;
-    messages.value = sortMessages(initialMessages);
+    messages.value = sortMessages(
+      messagesForConversation(initialMessages, conversationId),
+    );
 
     try {
       await fetchMessages(conversationId, { scroll: true });
@@ -500,10 +528,6 @@ export function useDirectMessages({
   watch(
     conversationIdRef,
     (conversationId, previousId) => {
-      if (conversationId && conversationId !== previousId) {
-        start(conversationId);
-        return;
-      }
       if (!conversationId) {
         leaveConversation();
         messages.value = [];

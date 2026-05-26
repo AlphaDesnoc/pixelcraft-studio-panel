@@ -111,12 +111,15 @@ const {
 });
 
 watch(
-  () => props.selectedConversationId,
-  (id) => {
+  () => [props.selectedConversationId, props.messages],
+  ([id, msgs]) => {
     selectedId.value = id;
     pendingRecipientId.value = null;
     if (id) {
-      start(id, props.messages);
+      start(id, msgs ?? []);
+    } else {
+      leaveConversation();
+      threadMessages.value = [];
     }
   },
   { immediate: true },
