@@ -7,6 +7,7 @@ use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
 use App\Models\Task;
+use App\Models\TaskList;
 use App\Models\TaskTag;
 use App\Models\User;
 use App\Support\ProjectAccess;
@@ -270,7 +271,7 @@ class ProjectController extends Controller
             'email' => $m->email,
         ])->values();
 
-        $teamMembers = $project->members->map(function ($m) {
+        $teamMembers = $project->members->map(function ($m) use ($project) {
             $perms = $m->pivot->permissions ?? null;
             if (is_string($perms)) {
                 $decoded = json_decode($perms, true);
