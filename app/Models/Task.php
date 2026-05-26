@@ -5,6 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 #[Fillable([
     'project_id',
@@ -19,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'due_date',
     'start_date',
     'completed_at',
+    'archived_at',
 ])]
 class Task extends Model
 {
@@ -56,6 +61,7 @@ class Task extends Model
             'start_date' => 'date',
             'completed_at' => 'datetime',
             'progress' => 'integer',
+            'archived_at' => 'datetime',
         ];
     }
 
@@ -84,9 +90,19 @@ class Task extends Model
         return $this->hasMany(TaskComment::class)->latest();
     }
 
-    public function attachments(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    public function attachments(): MorphMany
     {
         return $this->morphMany(Attachment::class, 'attachable');
+    }
+
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(TaskTag::class, 'task_tag', 'task_id', 'task_tag_id')->orderBy('task_tags.name');
+    }
+
+    public function linkedBug(): HasOne
+    {
+        return $this->hasOne(Bug::class, 'task_id');
     }
 
     public function isOverdue(): bool

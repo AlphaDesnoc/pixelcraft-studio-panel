@@ -115,6 +115,23 @@ class ProjectMemberController extends Controller
         return back();
     }
 
+    public function permissions(Request $request, Project $project, User $user): RedirectResponse
+    {
+        abort_unless($request->user()->is_admin, 403);
+        abort_unless($project->members()->whereKey($user->id)->exists(), 404);
+
+        $validated = $request->validate([
+            'permissions' => ['required', 'array'],
+            'permissions.*' => ['boolean'],
+        ]);
+
+        $project->members()->updateExistingPivot($user->id, [
+            'permissions' => $validated['permissions'],
+        ]);
+
+        return back();
+    }
+
     public function destroy(Request $request, Project $project, User $user): RedirectResponse
     {
         ProjectAccess::ensureCanManageTeam($request->user(), $project);

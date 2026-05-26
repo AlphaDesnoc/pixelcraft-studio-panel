@@ -273,6 +273,19 @@ export function useSpaceChat(
     }
   }
 
+  function handleReactionUpdated(event) {
+    const messageId = event?.message_id ?? event?.messageId;
+    const reactions = event?.reactions;
+    if (!messageId || reactions === undefined) {
+      return;
+    }
+
+    const prev = messages.value.find((m) => m.id === messageId);
+    if (prev) {
+      replaceMessage({ ...prev, reactions });
+    }
+  }
+
   function subscribe(spaceKey) {
     if (!window.Echo || !spaceKey || !projectId) {
       return;
@@ -301,6 +314,8 @@ export function useSpaceChat(
       .listen("ChatMessageUpdated", handleUpdated)
       .listen(".ChatMessageDeleted", handleDeleted)
       .listen("ChatMessageDeleted", handleDeleted)
+      .listen(".ChatReactionUpdated", handleReactionUpdated)
+      .listen("ChatReactionUpdated", handleReactionUpdated)
       .listenForWhisper("typing", (event) => {
         addTypingUser(event?.user);
       })
@@ -338,7 +353,7 @@ export function useSpaceChat(
     }
   }
 
-  async function send(body) {
+  async function send(body, replyToId = null) {
     const trimmed = body?.trim();
     if (!trimmed || !activeSpace || sending.value) {
       return;
@@ -346,14 +361,40 @@ export function useSpaceChat(
 
     sending.value = true;
     try {
+      const payload = { body: trimmed };
+      if (replyToId) {
+        payload.reply_to_id = replyToId;
+      }
       const { data } = await axios.post(
         route("projects.chat.messages.store", projectSlug),
-        { body: trimmed },
+        payload,
         { params: { space: activeSpace } },
       );
       appendMessage(data.message);
     } finally {
       sending.value = false;
+    }
+  }
+
+  async function toggleReaction(messageId, emoji) {
+    if (!activeSpace || !emoji || !messageId) {
+      return;
+    }
+
+    try {
+      const { data } = await axios.post(
+        route("projects.chat.reactions.toggle", [projectSlug, messageId]),
+        { emoji },
+        { params: { space: activeSpace } },
+      );
+      if (data?.reactions) {
+        const prev = messages.value.find((m) => m.id === messageId);
+        if (prev) {
+          replaceMessage({ ...prev, reactions: data.reactions });
+        }
+      }
+    } catch {
+      /* ignore */
     }
   }
 
@@ -455,6 +496,7 @@ export function useSpaceChat(
     uploading,
     typingUsers,
     send,
+    toggleReaction,
     updateMessage,
     deleteMessage,
     uploadAttachment,

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { Head, Link } from "@inertiajs/vue3";
-import { ArrowLeft, Plus } from "lucide-vue-next";
+import { ArrowLeft, LayoutDashboard, Plus } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
@@ -119,10 +119,19 @@ const memberCandidates = computed(() => {
               de membres), plus son propre Kanban, Gantt, notes et calendrier
             </p>
           </div>
-          <Button v-if="canEdit" size="sm" class="gap-1.5" @click="openCreate">
-            <Plus class="h-3.5 w-3.5" />
-            Nouveau rank
-          </Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <Link
+              :href="route('projects.ranks.dashboard', project.slug)"
+              class="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-muted/30 px-2.5 text-xs font-medium text-foreground hover:bg-muted/50"
+            >
+              <LayoutDashboard class="h-3.5 w-3.5" />
+              Tableau ranks
+            </Link>
+            <Button v-if="canEdit" size="sm" class="gap-1.5" @click="openCreate">
+              <Plus class="h-3.5 w-3.5" />
+              Nouveau rank
+            </Button>
+          </div>
         </div>
 
         <div

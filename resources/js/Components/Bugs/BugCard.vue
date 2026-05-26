@@ -37,6 +37,21 @@ const dateLabel = computed(() => {
   }).format(d);
 });
 
+const slaInfo = computed(() => {
+  if (!props.bug.sla_due_at) return null;
+  const d = new Date(props.bug.sla_due_at);
+  const due = new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+  return {
+    due,
+    breached: Boolean(props.bug.is_sla_breached),
+  };
+});
+
 function destroy() {
   if (!confirm("Supprimer ce bug ?")) return;
   router.delete(route("projects.bugs.destroy", [props.projectSlug, props.bug.id]), {
@@ -59,7 +74,13 @@ function destroy() {
           {{ bug.description }}
         </p>
       </div>
-      <div class="flex shrink-0 items-center gap-1.5">
+      <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+        <Badge
+          v-if="slaInfo"
+          :variant="slaInfo.breached ? 'destructive' : 'outline'"
+        >
+          SLA {{ slaInfo.breached ? "dép." : "" }} · {{ slaInfo.due }}
+        </Badge>
         <Badge :variant="statusVariant">{{ statuses[bug.status] ?? bug.status }}</Badge>
         <Badge :variant="priorityVariant">{{ priorities[bug.priority] ?? bug.priority }}</Badge>
       </div>

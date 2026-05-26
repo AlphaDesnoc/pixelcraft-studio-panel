@@ -5,10 +5,14 @@ use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ExportController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\MyTasksController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProfileTwoFactorController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\RealtimeController;
 use App\Http\Controllers\ProjectMemberController;
@@ -16,14 +20,17 @@ use App\Http\Controllers\BugController;
 use App\Http\Controllers\BugMessageController;
 use App\Http\Controllers\CalendarEventController;
 use App\Http\Controllers\ChatMessageController;
+use App\Http\Controllers\ChatReactionController;
 use App\Http\Controllers\FileNodeController;
 use App\Http\Controllers\NoteController;
 use App\Http\Controllers\RankController;
+use App\Http\Controllers\RankDashboardController;
 use App\Http\Controllers\SheetController;
 use App\Http\Controllers\TaskChecklistController;
 use App\Http\Controllers\TaskCommentController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TaskListController;
+use App\Http\Controllers\TaskTagController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +43,10 @@ Route::get('/', function () {
 Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/my-tasks', [MyTasksController::class, 'index'])->name('my-tasks.index');
+    Route::get('/search', GlobalSearchController::class)->name('search.global');
+
+    Route::get('/export/my-tasks', [ExportController::class, 'myTasks'])->name('export.my-tasks');
+    Route::get('/export/audit', [ExportController::class, 'audit'])->name('export.audit');
 
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
@@ -47,7 +58,12 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
     Route::get('/messages/conversations/{conversation}/messages', [MessageController::class, 'messages'])->name('messages.conversations.messages');
     Route::post('/messages/conversations/{conversation}/read', [MessageController::class, 'markRead'])->name('messages.conversations.read');
-    Route::post('/messages', [MessageController::class, 'store'])->name('messages.store');
+    Route::post('/messages/conversations/{conversation}/attachments', [MessageController::class, 'storeAttachment'])
+        ->middleware('throttle:panel-uploads')
+        ->name('messages.attachments.store');
+    Route::post('/messages', [MessageController::class, 'store'])
+        ->middleware('throttle:panel-chat')
+        ->name('messages.store');
 
     Route::prefix('projects/{project:slug}')->name('projects.')->middleware('project.member')->group(function () {
         Route::get('/', [ProjectController::class, 'show'])->name('show');
@@ -55,6 +71,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/members', [ProjectMemberController::class, 'store'])->name('members.store');
         Route::put('/members/{user}', [ProjectMemberController::class, 'update'])->name('members.update');
         Route::delete('/members/{user}', [ProjectMemberController::class, 'destroy'])->name('members.destroy');
+
+        Route::put('/members/{user}/permissions', [ProjectMemberController::class, 'permissions'])->name('members.permissions');
 
         Route::post('/lists', [TaskListController::class, 'store'])->name('lists.store');
         Route::put('/lists/{list}', [TaskListController::class, 'update'])->name('lists.update');
@@ -65,6 +83,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::put('/tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
         Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
         Route::post('/tasks/{task}/move', [TaskController::class, 'move'])->name('tasks.move');
+        Route::post('/tasks/{task}/duplicate', [TaskController::class, 'duplicate'])->name('tasks.duplicate');
+        Route::post('/tasks/{task}/archive', [TaskController::class, 'archive'])->name('tasks.archive');
+        Route::put('/tasks/{task}/tags', [TaskTagController::class, 'sync'])->name('tasks.tags.sync');
+
+        Route::post('/tags', [TaskTagController::class, 'store'])->name('tags.store');
 
         Route::post('/tasks/{task}/comments', [TaskCommentController::class, 'store'])->name('tasks.comments.store');
         Route::delete('/tasks/{task}/comments/{comment}', [TaskCommentController::class, 'destroy'])->name('tasks.comments.destroy');
@@ -80,10 +103,15 @@ Route::middleware(['auth', 'active'])->group(function () {
 
         Route::get('/chat/messages', [ChatMessageController::class, 'index'])->name('chat.messages.index');
         Route::get('/chat/presence', [ChatMessageController::class, 'presence'])->name('chat.presence');
-        Route::post('/chat/messages', [ChatMessageController::class, 'store'])->name('chat.messages.store');
+        Route::post('/chat/messages', [ChatMessageController::class, 'store'])
+            ->middleware('throttle:panel-chat')
+            ->name('chat.messages.store');
         Route::put('/chat/messages/{message}', [ChatMessageController::class, 'update'])->name('chat.messages.update');
         Route::delete('/chat/messages/{message}', [ChatMessageController::class, 'destroy'])->name('chat.messages.destroy');
-        Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])->name('chat.attachments.store');
+        Route::post('/chat/messages/{message}/reactions', [ChatReactionController::class, 'toggle'])->name('chat.reactions.toggle');
+        Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])
+            ->middleware('throttle:panel-uploads')
+            ->name('chat.attachments.store');
         Route::get('/attachments/{attachment}', [AttachmentController::class, 'show'])->name('attachments.show');
         Route::delete('/attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
 
@@ -113,7 +141,13 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/bugs/{bug}', [BugController::class, 'destroy'])->name('bugs.destroy');
         Route::get('/bugs/{bug}/messages', [BugMessageController::class, 'index'])->name('bugs.messages.index');
         Route::post('/bugs/{bug}/messages', [BugMessageController::class, 'store'])->name('bugs.messages.store');
+        Route::post('/bugs/{bug}/link-task', [BugController::class, 'linkTask'])->name('bugs.link-task');
+        Route::post('/bugs/{bug}/create-task', [BugController::class, 'createTaskFromBug'])->name('bugs.create-task');
 
+        Route::get('/export/bugs', [ExportController::class, 'bugs'])->name('export.bugs');
+        Route::get('/export/activity', [ExportController::class, 'projectActivity'])->name('export.activity');
+
+        Route::get('/ranks/dashboard', [RankDashboardController::class, 'index'])->name('ranks.dashboard');
         Route::get('/ranks', [RankController::class, 'index'])->name('ranks.index');
         Route::post('/ranks', [RankController::class, 'store'])->name('ranks.store');
         Route::put('/ranks/{rank}', [RankController::class, 'update'])->name('ranks.update');
@@ -125,6 +159,14 @@ Route::middleware(['auth', 'active'])->group(function () {
     });
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile/notifications', [NotificationPreferenceController::class, 'update'])
+        ->name('profile.notifications.update');
+    Route::post('/profile/two-factor/setup', [ProfileTwoFactorController::class, 'setup'])
+        ->name('profile.two-factor.setup');
+    Route::post('/profile/two-factor/confirm', [ProfileTwoFactorController::class, 'confirm'])
+        ->name('profile.two-factor.confirm');
+    Route::delete('/profile/two-factor', [ProfileTwoFactorController::class, 'destroy'])
+        ->name('profile.two-factor.disable');
 
     Route::middleware('admin')->prefix('admin')->name('admin.')->group(function () {
         Route::get('/', fn () => redirect()->route('admin.users.index'))->name('index');

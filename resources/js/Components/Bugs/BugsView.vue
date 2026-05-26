@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from "vue";
-import { Bug, Plus } from "lucide-vue-next";
+import { Bug, Download, Plus } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
 import BugCard from "./BugCard.vue";
 import BugFormDialog from "./BugFormDialog.vue";
@@ -15,6 +15,7 @@ defineProps({
   statuses: { type: Object, required: true },
   members: { type: Array, default: () => [] },
   bugRanks: { type: Array, default: () => [] },
+  taskOptions: { type: Array, default: () => [] },
 });
 
 const dialogOpen = ref(false);
@@ -55,15 +56,25 @@ function openDetail(bug) {
           </template>
         </p>
       </div>
-      <Button
-        v-if="canReport || canManage"
-        size="sm"
-        class="gap-1.5"
-        @click="openCreate"
-      >
-        <Plus class="h-3.5 w-3.5" />
-        Signaler un bug
-      </Button>
+      <div class="flex flex-wrap items-center gap-2">
+        <a
+          v-if="bugs.length"
+          :href="route('projects.export.bugs', projectSlug)"
+          class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-muted/50"
+        >
+          <Download class="h-3.5 w-3.5" />
+          Export CSV
+        </a>
+        <Button
+          v-if="canReport || canManage"
+          size="sm"
+          class="gap-1.5"
+          @click="openCreate"
+        >
+          <Plus class="h-3.5 w-3.5" />
+          Signaler un bug
+        </Button>
+      </div>
     </header>
 
     <div
@@ -105,6 +116,8 @@ function openDetail(bug) {
       :bug="viewingBug"
       :priorities="priorities"
       :statuses="statuses"
+      :task-options="taskOptions"
+      :can-manage="canManage"
     />
   </div>
 </template>

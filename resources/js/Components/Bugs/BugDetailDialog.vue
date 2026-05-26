@@ -1,7 +1,7 @@
 <script setup>
-import { computed, ref, toRef } from "vue";
-import { usePage } from "@inertiajs/vue3";
-import { MessageSquare, Send } from "lucide-vue-next";
+import { computed, ref, toRef, watch } from "vue";
+import { router, usePage } from "@inertiajs/vue3";
+import { ClipboardPlus, Link2, MessageSquare, Send } from "lucide-vue-next";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import {
@@ -20,6 +20,8 @@ const props = defineProps({
   bug: { type: Object, default: null },
   priorities: { type: Object, required: true },
   statuses: { type: Object, required: true },
+  taskOptions: { type: Array, default: () => [] },
+  canManage: { type: Boolean, default: false },
 });
 
 const emits = defineEmits(["update:open"]);
@@ -30,6 +32,17 @@ const bugRef = toRef(props, "bug");
 const openRef = toRef(props, "open");
 
 const draft = ref("");
+const linkTaskId = ref("");
+const linkingTask = ref(false);
+const spawningTask = ref(false);
+
+watch(
+  () => props.bug?.id,
+  () => {
+    linkTaskId.value = "";
+  },
+);
+
 const { messages, onlineUsers, loading, sending, send, listRef } = useBugChat(
   props.projectSlug,
   openRef,
@@ -74,6 +87,40 @@ async function submitMessage() {
   draft.value = "";
   await send(body);
 }
+
+function linkSelectedTask() {
+  if (!props.bug?.id || !linkTaskId.value || linkingTask.value) return;
+  linkingTask.value = true;
+  router.post(
+    route("projects.bugs.link-task", [props.projectSlug, props.bug.id]),
+    { task_id: Number(linkTaskId.value) },
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["bugs", "lists"],
+      onFinish: () => {
+        linkingTask.value = false;
+      },
+    },
+  );
+}
+
+function createTaskFromBug() {
+  if (!props.bug?.id || spawningTask.value) return;
+  spawningTask.value = true;
+  router.post(
+    route("projects.bugs.create-task", [props.projectSlug, props.bug.id]),
+    {},
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["bugs", "lists"],
+      onFinish: () => {
+        spawningTask.value = false;
+      },
+    },
+  );
+}
 </script>
 
 <template>
@@ -117,6 +164,73 @@ async function submitMessage() {
           Signalé par {{ bug.reporter.name }}
           <span v-if="bug.assignee"> · Assigné à {{ bug.assignee.name }}</span>
         </p>
+
+        <div
+          v-if="bug && canManage"
+          class="mt-3 space-y-2 rounded-lg border border-border/60 bg-muted/15 px-3 py-2.5"
+        >
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Tâche Kanban
+          </p>
+          <p v-if="bug.task_id" class="text-xs text-foreground">
+            Lié au ticket tâche
+            <span class="font-mono font-medium">#{{ bug.task_id }}</span>
+          </p>
+          <template v-else-if="taskOptions.length">
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="flex min-w-[200px] flex-1 flex-col gap-1 text-[11px] text-muted-foreground">
+                Associer une tâche existante
+                <select
+                  v-model="linkTaskId"
+                  class="h-9 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Choisir…</option>
+                  <option
+                    v-for="opt in taskOptions"
+                    :key="opt.id"
+                    :value="String(opt.id)"
+                  >
+                    {{ opt.title }}{{ opt.list_name ? " — " + opt.list_name : "" }}
+                  </option>
+                </select>
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                class="h-9 gap-1.5"
+                :disabled="linkingTask || !linkTaskId"
+                @click="linkSelectedTask"
+              >
+                <Link2 class="h-3.5 w-3.5" />
+                {{ linkingTask ? "…" : "Lier" }}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                class="h-9 gap-1.5"
+                :disabled="spawningTask"
+                @click="createTaskFromBug"
+              >
+                <ClipboardPlus class="h-3.5 w-3.5" />
+                Créer une tâche
+              </Button>
+            </div>
+          </template>
+          <template v-else>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              class="h-8 gap-1.5 text-xs"
+              :disabled="spawningTask"
+              @click="createTaskFromBug"
+            >
+              <ClipboardPlus class="h-3.5 w-3.5" />
+              Créer une tâche depuis ce bug
+            </Button>
+          </template>
+        </div>
       </DialogHeader>
 
       <section class="flex min-h-0 flex-1 flex-col">

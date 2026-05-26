@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Support\MentionParser;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class DirectMessage extends Model
 {
@@ -11,7 +13,16 @@ class DirectMessage extends Model
         'direct_conversation_id',
         'user_id',
         'body',
+        'mentions',
+        'reply_to_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'mentions' => 'array',
+        ];
+    }
 
     public function conversation(): BelongsTo
     {
@@ -23,19 +34,43 @@ class DirectMessage extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function replyTo(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'reply_to_id');
+    }
+
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(Attachment::class, 'attachable');
+    }
+
     public function toPayload(): array
     {
-        $this->loadMissing('user:id,name');
+        $this->loadMissing('user:id,name', 'attachments', 'replyTo.user:id,name');
+
+        $replyPreview = null;
+        if ($this->replyTo) {
+            $replyPreview = [
+                'id' => $this->replyTo->id,
+                'body' => str($this->replyTo->body)->limit(120),
+                'user_name' => $this->replyTo->user?->name,
+            ];
+        }
 
         return [
             'id' => $this->id,
             'direct_conversation_id' => $this->direct_conversation_id,
             'body' => $this->body,
+            'body_html' => MentionParser::highlightHtml($this->body ?? ''),
+            'mentions' => $this->mentions ?? [],
+            'reply_to_id' => $this->reply_to_id,
+            'reply_preview' => $replyPreview,
             'created_at' => $this->created_at?->toIso8601String(),
             'user' => $this->user ? [
                 'id' => $this->user->id,
                 'name' => $this->user->name,
             ] : null,
+            'attachments' => $this->attachments->map(fn (Attachment $a) => $a->toPayload())->values(),
         ];
     }
 }

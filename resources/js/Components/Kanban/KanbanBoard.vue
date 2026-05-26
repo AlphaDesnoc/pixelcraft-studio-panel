@@ -18,6 +18,7 @@ const props = defineProps({
   statusKinds: { type: Object, required: true },
   rankId: { type: Number, default: null },
   globalKanban: { type: Boolean, default: false },
+  tags: { type: Array, default: () => [] },
 });
 
 const localLists = ref(cloneLists(props.lists));
@@ -26,9 +27,14 @@ const activeFilters = ref({
   priority: "",
   due: "all",
   search: "",
+  tagIds: [],
 });
 
 function taskMatchesFilters(task, filters) {
+  if (task.archived_at) {
+    return false;
+  }
+
   if (filters.search) {
     const query = filters.search.toLowerCase();
     const haystack = `${task.title ?? ""} ${task.description ?? ""}`.toLowerCase();
@@ -52,6 +58,12 @@ function taskMatchesFilters(task, filters) {
     return false;
   }
 
+  if (filters.tagIds?.length) {
+    const taskTagIds = new Set((task.tags ?? []).map((t) => t.id));
+    const any = filters.tagIds.some((id) => taskTagIds.has(Number(id)));
+    if (!any) return false;
+  }
+
   return true;
 }
 
@@ -68,7 +80,8 @@ const hasActiveFilters = computed(() => {
     filters.search ||
       filters.assigneeId ||
       filters.priority ||
-      filters.due !== "all",
+      filters.due !== "all" ||
+      (filters.tagIds?.length ?? 0) > 0,
   );
 });
 
@@ -211,6 +224,7 @@ function handleTasksReorder({ listId, tasks, sync }) {
     <KanbanFilters
       :members="members"
       :priorities="priorities"
+      :tags="tags"
       @update:filters="activeFilters = $event"
     />
 
@@ -299,6 +313,7 @@ function handleTasksReorder({ listId, tasks, sync }) {
       :lists="lists"
       :members="members"
       :priorities="priorities"
+      :tags="tags"
     />
   </div>
 </template>

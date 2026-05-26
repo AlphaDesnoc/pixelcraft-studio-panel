@@ -5,6 +5,7 @@ import {
   MessageSquare,
   Paperclip,
   Pencil,
+  Reply,
   Send,
   Trash2,
   X,
@@ -27,6 +28,7 @@ const props = defineProps({
 
 const page = usePage();
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+const currentUserName = computed(() => page.props.auth?.user?.name ?? "");
 const activeRef = toRef(props, "active");
 const spaceKeyRef = toRef(props, "spaceKey");
 const initialMembersRef = toRef(props, "initialChatMembers");
@@ -37,6 +39,9 @@ const editDraft = ref("");
 const fileInputRef = ref(null);
 const draftTextareaRef = ref(null);
 const editTextareaRef = ref(null);
+const replyingTo = ref(null);
+
+const REACTION_PICKER = ["👍", "✅", "❤️", "😂"];
 
 const {
   messages,
@@ -51,6 +56,7 @@ const {
   uploadAttachment,
   notifyTyping,
   listRef,
+  toggleReaction,
 } = useSpaceChat(
   props.projectSlug,
   props.projectId,
@@ -136,11 +142,60 @@ function shouldShowMessageBody(message) {
   return true;
 }
 
+function reactionCount(message, emoji) {
+  const hit = (message.reactions ?? []).find((r) => r.emoji === emoji);
+  if (!hit) return 0;
+  if (typeof hit.count === "number") {
+    return hit.count;
+  }
+  return hit.users?.length ?? 0;
+}
+
+function reactionActive(message, emoji) {
+  const hit = (message.reactions ?? []).find((r) => r.emoji === emoji);
+  if (!hit) {
+    return false;
+  }
+  if (hit.me !== undefined) {
+    return Boolean(hit.me);
+  }
+  const name = currentUserName.value;
+  return Boolean(name && hit.users?.includes(name));
+}
+
+function replyPreviewText(preview) {
+  if (!preview) return "";
+  return preview.body ?? preview.excerpt ?? preview.body_snippet ?? preview.text ?? "";
+}
+
+function replyPreviewAuthor(preview) {
+  if (!preview) return "";
+  return preview.author_name ?? preview.user?.name ?? preview.from_user?.name ?? "";
+}
+
+function startReply(message) {
+  replyingTo.value = {
+    id: message.id,
+    label: message.user?.name ?? "Message",
+    excerpt: (message.body ?? "").slice(0, 140),
+  };
+}
+
+function clearReply() {
+  replyingTo.value = null;
+}
+
+async function onToggleReaction(message, emoji) {
+  await toggleReaction(message.id, emoji);
+}
+
 async function submitMessage() {
   if (!draft.value.trim()) return;
   const body = draft.value;
+  const replyId = replyingTo.value?.id ?? null;
   draft.value = "";
-  await send(body);
+  clearReply();
+  await send(body, replyId);
 }
 
 function onDraftInput() {
@@ -241,7 +296,7 @@ async function onFileSelected(event) {
               {{ initials(message.user?.name) }}
             </div>
             <div
-              class="max-w-[75%] rounded-xl px-3 py-2"
+              class="relative max-w-[75%] rounded-xl px-3 py-2"
               :class="
                 message.user?.id === currentUserId
                   ? 'bg-primary/15 text-foreground'
@@ -249,34 +304,57 @@ async function onFileSelected(event) {
               "
             >
               <div
-                class="flex items-center gap-2"
+                class="flex items-start gap-2"
                 :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
               >
-                <p class="text-[11px] font-medium text-muted-foreground">
-                  {{ message.user?.name }}
-                  · {{ formatTime(message.created_at) }}
-                  <span v-if="message.edited_at" class="italic">(modifié)</span>
-                </p>
+                <div class="min-w-0 flex-1 space-y-1">
+                  <p class="text-[11px] font-medium text-muted-foreground">
+                    {{ message.user?.name }}
+                    · {{ formatTime(message.created_at) }}
+                    <span v-if="message.edited_at" class="italic">(modifié)</span>
+                  </p>
+                  <div
+                    v-if="message.reply_preview && editingMessageId !== message.id"
+                    class="rounded-md border border-border/60 bg-background/35 px-2 py-1.5"
+                  >
+                    <p class="text-[10px] font-medium text-muted-foreground">
+                      {{ replyPreviewAuthor(message.reply_preview) }}
+                    </p>
+                    <p class="line-clamp-2 text-xs text-muted-foreground">
+                      {{ replyPreviewText(message.reply_preview) }}
+                    </p>
+                  </div>
+                </div>
                 <div
-                  v-if="message.can_edit && editingMessageId !== message.id"
-                  class="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                  class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
                 >
                   <button
                     type="button"
                     class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Modifier"
-                    @click="startEdit(message)"
+                    aria-label="Répondre"
+                    title="Répondre"
+                    @click="startReply(message)"
                   >
-                    <Pencil class="h-3 w-3" />
+                    <Reply class="h-3 w-3" />
                   </button>
-                  <button
-                    type="button"
-                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-rose-400"
-                    aria-label="Supprimer"
-                    @click="confirmDelete(message)"
-                  >
-                    <Trash2 class="h-3 w-3" />
-                  </button>
+                  <template v-if="message.can_edit && editingMessageId !== message.id">
+                    <button
+                      type="button"
+                      class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label="Modifier"
+                      @click="startEdit(message)"
+                    >
+                      <Pencil class="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-rose-400"
+                      aria-label="Supprimer"
+                      @click="confirmDelete(message)"
+                    >
+                      <Trash2 class="h-3 w-3" />
+                    </button>
+                  </template>
                 </div>
               </div>
 
@@ -364,6 +442,29 @@ async function onFileSelected(event) {
                   </a>
                 </template>
               </div>
+
+              <div
+                v-if="editingMessageId !== message.id"
+                class="mt-1.5 flex flex-wrap items-center gap-0.5 border-t border-border/50 pt-1.5 opacity-80 transition-opacity group-hover:opacity-100"
+              >
+                <button
+                  v-for="emoji in REACTION_PICKER"
+                  :key="emoji"
+                  type="button"
+                  class="inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-sm leading-none hover:bg-muted/80"
+                  :class="reactionActive(message, emoji) ? 'bg-primary/15 ring-1 ring-primary/25' : ''"
+                  :title="`Réagir avec ${emoji}`"
+                  @click="onToggleReaction(message, emoji)"
+                >
+                  <span>{{ emoji }}</span>
+                  <span
+                    v-if="reactionCount(message, emoji) > 0"
+                    class="text-[10px] font-semibold tabular-nums text-muted-foreground"
+                  >
+                    {{ reactionCount(message, emoji) }}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -374,6 +475,24 @@ async function onFileSelected(event) {
         >
           {{ typingLabel }}
         </p>
+
+        <div
+          v-if="replyingTo"
+          class="flex items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-4 py-2 text-xs"
+        >
+          <div class="min-w-0">
+            <p class="font-medium text-foreground">Réponse à {{ replyingTo.label }}</p>
+            <p class="truncate text-muted-foreground">{{ replyingTo.excerpt }}</p>
+          </div>
+          <button
+            type="button"
+            class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Annuler la réponse"
+            @click="clearReply"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
 
         <form
           class="flex shrink-0 items-end gap-2 border-t border-border px-4 py-3"

@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Events\UserNotificationSent;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Support\NotificationPreferences;
 
 class PanelNotifier
 {
@@ -15,8 +16,12 @@ class PanelNotifier
         ?string $body = null,
         ?string $url = null,
         array $data = [],
-    ): UserNotification {
+    ): ?UserNotification {
         $userId = $user instanceof User ? $user->id : $user;
+
+        if (! NotificationPreferences::allows($userId, $type)) {
+            return null;
+        }
 
         $notification = UserNotification::query()->create([
             'user_id' => $userId,

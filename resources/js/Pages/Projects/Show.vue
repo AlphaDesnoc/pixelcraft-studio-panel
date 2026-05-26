@@ -73,6 +73,7 @@ const props = defineProps({
   chatMessages: { type: Array, default: () => [] },
   chatMembers: { type: Array, default: () => [] },
   activityLogs: { type: Array, default: () => [] },
+  tags: { type: Array, default: () => [] },
 });
 
 const activeSpace = ref(props.activeSpace);
@@ -198,6 +199,16 @@ const statusColors = {
 
 const totalStatusCount = computed(() =>
   props.byStatus.reduce((acc, s) => acc + s.count, 0),
+);
+
+const kanbanBugLinkTasks = computed(() =>
+  props.lists.flatMap((list) =>
+    (list.tasks ?? []).map((task) => ({
+      id: task.id,
+      title: task.title,
+      list_name: list.name,
+    })),
+  ),
 );
 </script>
 
@@ -395,7 +406,10 @@ const totalStatusCount = computed(() =>
           </Card>
         </div>
 
-        <ActivityFeed :activity-logs="activityLogs" />
+        <ActivityFeed
+          :activity-logs="activityLogs"
+          :export-url="route('projects.export.activity', project.slug)"
+        />
       </section>
 
       <section v-else-if="activeTab === 'kanban'">
@@ -407,6 +421,7 @@ const totalStatusCount = computed(() =>
           :status-kinds="statusKinds"
           :rank-id="activeRankId"
           :global-kanban="activeSpace === 'global' || activeSpace === 'full'"
+          :tags="tags"
         />
       </section>
 
@@ -471,6 +486,7 @@ const totalStatusCount = computed(() =>
           :statuses="bugStatuses"
           :members="members"
           :bug-ranks="bugRanks"
+          :task-options="kanbanBugLinkTasks"
         />
       </section>
 

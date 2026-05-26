@@ -26,7 +26,7 @@ class ChatMessageController extends Controller
 
         $messages = $project->chatMessages()
             ->where('space_key', $space->key)
-            ->with(['user:id,name', 'attachments'])
+            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
             ->orderBy('created_at')
             ->get()
             ->map(fn ($m) => $m->toPayload())
@@ -43,6 +43,7 @@ class ChatMessageController extends Controller
 
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:5000'],
+            'reply_to_id' => ['nullable', 'integer', 'exists:chat_messages,id'],
         ]);
 
         $body = trim($validated['body']);
@@ -55,9 +56,10 @@ class ChatMessageController extends Controller
             'space_key' => $space->key,
             'body' => $body,
             'mentions' => $mentions,
+            'reply_to_id' => $validated['reply_to_id'] ?? null,
         ]);
 
-        $message->load('user:id,name', 'attachments');
+        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
         $url = route('projects.show', $project->slug).'?space='.$space->key.'&tab=chat';
 
         $mentionedIds = collect($mentions)->pluck('id');
@@ -76,17 +78,7 @@ class ChatMessageController extends Controller
                     $url,
                     ['project_id' => $project->id, 'message_id' => $message->id],
                 );
-                continue;
             }
-
-            PanelNotifier::send(
-                $member,
-                UserNotification::TYPE_CHAT_MESSAGE,
-                'Nouveau message — '.$project->name,
-                sprintf('%s : %s', $user->name, str($body)->limit(80)),
-                $url,
-                ['project_id' => $project->id, 'message_id' => $message->id],
-            );
         }
 
         ChatMessageSent::dispatch($message);

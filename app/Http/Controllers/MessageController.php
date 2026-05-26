@@ -8,9 +8,11 @@ use App\Models\DirectMessage;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Support\DirectMessageAccess;
+use App\Support\MentionParser;
 use App\Support\PanelNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,7 +58,7 @@ class MessageController extends Controller
                     $user,
                 );
                 $messages = $conv->messages()
-                    ->with('user:id,name')
+                    ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
                     ->orderBy('created_at')
                     ->get()
                     ->map(fn (DirectMessage $m) => $m->toPayload())
@@ -81,7 +83,7 @@ class MessageController extends Controller
         DirectMessageAccess::ensureAccess($user, $conversation);
 
         $messages = $conversation->messages()
-            ->with('user:id,name')
+            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
             ->orderBy('created_at')
             ->get()
             ->map(fn (DirectMessage $m) => $m->toPayload())
@@ -100,37 +102,36 @@ class MessageController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function storeAttachment(Request $request, DirectConversation $conversation): JsonResponse
     {
         $user = $request->user();
+        DirectMessageAccess::ensureAccess($user, $conversation);
 
         $validated = $request->validate([
-            'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
-            'conversation_id' => ['nullable', 'integer', 'exists:direct_conversations,id'],
-            'body' => ['required', 'string', 'max:5000'],
+            'file' => ['required', 'file', 'max:10240'],
+            'reply_to_id' => ['nullable', 'integer', 'exists:direct_messages,id'],
         ]);
 
-        $conversation = null;
-
-        if (! empty($validated['conversation_id'])) {
-            $conversation = DirectConversation::query()->findOrFail($validated['conversation_id']);
-            DirectMessageAccess::ensureAccess($user, $conversation);
-        } elseif (! empty($validated['recipient_id'])) {
-            $recipient = User::query()->findOrFail($validated['recipient_id']);
-            DirectMessageAccess::ensureCanMessage($user, $recipient);
-            $conversation = DirectConversation::findOrCreateBetween($user->id, $recipient->id);
-        } else {
-            abort(422, 'Destinataire ou conversation requis.');
-        }
+        $file = $validated['file'];
+        $path = $file->store("direct/{$conversation->id}", 'public');
+        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
 
         $message = $conversation->messages()->create([
             'user_id' => $user->id,
-            'body' => trim($validated['body']),
+            'body' => '',
+            'reply_to_id' => $validated['reply_to_id'] ?? null,
+        ]);
+
+        $attachment = $message->attachments()->create([
+            'user_id' => $user->id,
+            'path' => $path,
+            'original_name' => $file->getClientOriginalName(),
+            'mime_type' => $mimeType,
+            'size' => $file->getSize(),
         ]);
 
         $conversation->update(['last_message_at' => $message->created_at]);
-
-        $message->load('user:id,name');
+        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
 
         DirectMessageSent::dispatch($message);
 
@@ -140,10 +141,89 @@ class MessageController extends Controller
                 $recipient,
                 UserNotification::TYPE_DIRECT_MESSAGE,
                 'Nouveau message privé',
-                sprintf('%s : %s', $user->name, str($message->body)->limit(80)),
+                sprintf('%s a envoyé un fichier : %s', $user->name, $attachment->original_name),
                 route('messages.index', ['c' => $conversation->id]),
                 ['conversation_id' => $conversation->id],
             );
+        }
+
+        return response()->json([
+            'message' => $message->toPayload(),
+            'conversation' => $this->serializeConversation(
+                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
+                $user,
+            ),
+        ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'recipient_id' => ['nullable', 'integer', 'exists:users,id'],
+            'conversation_id' => ['nullable', 'integer', 'exists:direct_conversations,id'],
+            'body' => ['required', 'string', 'max:5000'],
+            'reply_to_id' => ['nullable', 'integer', 'exists:direct_messages,id'],
+        ]);
+
+        $conversation = null;
+        $candidates = collect();
+
+        if (! empty($validated['conversation_id'])) {
+            $conversation = DirectConversation::query()->findOrFail($validated['conversation_id']);
+            DirectMessageAccess::ensureAccess($user, $conversation);
+            $other = $conversation->otherParticipant($user);
+            if ($other) {
+                $candidates = collect([$other]);
+            }
+        } elseif (! empty($validated['recipient_id'])) {
+            $recipient = User::query()->findOrFail($validated['recipient_id']);
+            DirectMessageAccess::ensureCanMessage($user, $recipient);
+            $conversation = DirectConversation::findOrCreateBetween($user->id, $recipient->id);
+            $candidates = collect([$recipient]);
+        } else {
+            abort(422, 'Destinataire ou conversation requis.');
+        }
+
+        $body = trim($validated['body']);
+        $mentions = MentionParser::extract($body, $candidates);
+
+        $message = $conversation->messages()->create([
+            'user_id' => $user->id,
+            'body' => $body,
+            'mentions' => $mentions,
+            'reply_to_id' => $validated['reply_to_id'] ?? null,
+        ]);
+
+        $conversation->update(['last_message_at' => $message->created_at]);
+
+        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+
+        DirectMessageSent::dispatch($message);
+
+        $recipient = $conversation->otherParticipant($user);
+        if ($recipient && $recipient->id !== $user->id) {
+            $mentionedIds = collect($mentions)->pluck('id');
+            if ($mentionedIds->contains($recipient->id)) {
+                PanelNotifier::send(
+                    $recipient,
+                    UserNotification::TYPE_CHAT_MENTION,
+                    'Mention en message privé',
+                    sprintf('%s vous a mentionné : %s', $user->name, str($body)->limit(80)),
+                    route('messages.index', ['c' => $conversation->id]),
+                    ['conversation_id' => $conversation->id],
+                );
+            } else {
+                PanelNotifier::send(
+                    $recipient,
+                    UserNotification::TYPE_DIRECT_MESSAGE,
+                    'Nouveau message privé',
+                    sprintf('%s : %s', $user->name, str($body)->limit(80)),
+                    route('messages.index', ['c' => $conversation->id]),
+                    ['conversation_id' => $conversation->id],
+                );
+            }
         }
 
         return response()->json([
