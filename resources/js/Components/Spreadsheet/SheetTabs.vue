@@ -55,6 +55,7 @@ function cancelRename() {
         ref="inputRef"
         v-model="editingValue"
         class="h-6 w-[100px] rounded border border-input bg-background px-1 text-xs outline-none"
+        @keydown.stop
         @keydown.enter.prevent="commitRename(sheet)"
         @keydown.escape="cancelRename"
         @blur="commitRename(sheet)"
