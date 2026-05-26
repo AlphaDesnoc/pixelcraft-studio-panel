@@ -52,6 +52,15 @@ const page = usePage();
 const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 
+const taskRankId = computed(() => {
+  if (props.task?.rank_id != null) {
+    return props.task.rank_id;
+  }
+
+  const list = props.lists.find((entry) => entry.id === props.task?.list_id);
+  return list?.rank_id ?? null;
+});
+
 const form = useForm({
   title: "",
   description: "",
@@ -465,7 +474,13 @@ function formatFileSize(bytes) {
           </p>
         </section>
 
-        <TaskTagsManager :project-slug="projectSlug" :task="task" :tags="tags" />
+        <TaskTagsManager
+          :project-slug="projectSlug"
+          :task="task"
+          :tags="tags"
+          :rank-id="taskRankId"
+          :read-only="readOnly"
+        />
 
         <section class="flex flex-col gap-2">
           <div class="flex items-center gap-2">

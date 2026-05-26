@@ -26,10 +26,24 @@ class ProjectTemplateApplier
             ]);
         }
 
+        $ranks = $project->ranks()->orderBy('position')->get(['id']);
+
         foreach ($payload['tags'] ?? [] as $tagData) {
+            foreach ($ranks as $rank) {
+                TaskTag::query()->firstOrCreate(
+                    [
+                        'project_id' => $project->id,
+                        'rank_id' => $rank->id,
+                        'name' => $tagData['name'],
+                    ],
+                    ['color' => $tagData['color'] ?? '#7c5cff'],
+                );
+            }
+
             TaskTag::query()->firstOrCreate(
                 [
                     'project_id' => $project->id,
+                    'rank_id' => null,
                     'name' => $tagData['name'],
                 ],
                 ['color' => $tagData['color'] ?? '#7c5cff'],

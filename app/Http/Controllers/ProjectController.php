@@ -314,9 +314,19 @@ class ProjectController extends Controller
             ];
         })->values();
 
-        $taskTagsPayload = TaskTag::query()
+        $taskTagsQuery = TaskTag::query()
             ->where('project_id', $project->id)
-            ->orderBy('name')
+            ->orderBy('name');
+
+        if ($space->isFull) {
+            // Vue totale : toutes les étiquettes de tous les ranks.
+        } elseif ($space->isGlobal) {
+            $taskTagsQuery->whereNull('rank_id');
+        } else {
+            $taskTagsQuery->where('rank_id', $space->rankId);
+        }
+
+        $taskTagsPayload = $taskTagsQuery
             ->get()
             ->map(fn (TaskTag $tag) => $tag->toPayload())
             ->values();
@@ -500,6 +510,7 @@ class ProjectController extends Controller
         return [
             'id' => $task->id,
             'list_id' => $task->list_id,
+            'rank_id' => $task->list?->rank_id,
             'title' => $task->title,
             'description' => $task->description,
             'priority' => $task->priority,
