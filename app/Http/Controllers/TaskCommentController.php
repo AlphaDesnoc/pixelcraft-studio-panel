@@ -29,13 +29,19 @@ class TaskCommentController extends Controller
             'body' => trim($validated['body']),
         ]);
 
+        $task->loadMissing('list:id,rank_id');
+
         ActivityLogger::log(
             $project,
             $request->user(),
             'task_commented',
             sprintf('%s a commenté « %s »', $request->user()->name, $task->title),
             $task,
-            ['comment_id' => $comment->id],
+            [
+                'comment_id' => $comment->id,
+                'rank_id' => $task->list?->rank_id,
+                'task_title' => $task->title,
+            ],
         );
 
         return back();

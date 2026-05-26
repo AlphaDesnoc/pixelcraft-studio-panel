@@ -14,7 +14,7 @@ use App\Models\User;
 use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
 use App\Support\ProjectSpace;
-use App\Support\SpaceChatAccess;
+use App\Support\TaskActivityFeed;
 use App\Support\BugVisibility;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -387,6 +387,7 @@ class ProjectController extends Controller
                 ->limit(30)
                 ->get()
                 ->map(fn (ActivityLog $log) => $log->toPayload()),
+            'taskActivityByRank' => TaskActivityFeed::groupedForSpace($project, $space, $ranks),
             'members' => $members,
             'teamMembers' => $teamMembers,
             'teamCandidates' => $teamCandidates,

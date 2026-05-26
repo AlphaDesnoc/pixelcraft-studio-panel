@@ -24,6 +24,7 @@ export function spaceOnlyProps() {
     "bugs",
     "bugRanks",
     "tags",
+    "taskActivityByRank",
     "chatMessages",
     "chatMembers",
     "teamMembers",

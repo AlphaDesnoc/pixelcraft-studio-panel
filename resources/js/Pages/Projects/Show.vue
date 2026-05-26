@@ -38,7 +38,7 @@ import FilesView from "@/Components/Files/FilesView.vue";
 import BugsView from "@/Components/Bugs/BugsView.vue";
 import ChatView from "@/Components/Chat/ChatView.vue";
 import TeamView from "@/Components/Team/TeamView.vue";
-import ActivityFeed from "@/Components/Projects/ActivityFeed.vue";
+import TaskActivityByRank from "@/Components/Projects/TaskActivityByRank.vue";
 import { spaceOnlyProps } from "@/composables/useProjectSpace.js";
 
 const props = defineProps({
@@ -74,6 +74,7 @@ const props = defineProps({
   chatMessages: { type: Array, default: () => [] },
   chatMembers: { type: Array, default: () => [] },
   activityLogs: { type: Array, default: () => [] },
+  taskActivityByRank: { type: Array, default: () => [] },
   tags: { type: Array, default: () => [] },
   myPermissions: { type: Object, default: () => ({}) },
   taskTemplates: { type: Array, default: () => [] },
@@ -448,8 +449,8 @@ const kanbanBugLinkTasks = computed(() =>
           </Card>
         </div>
 
-        <ActivityFeed
-          :activity-logs="activityLogs"
+        <TaskActivityByRank
+          :groups="taskActivityByRank"
           :export-url="route('projects.export.activity', project.slug)"
         />
       </section>
