@@ -75,70 +75,72 @@ function pickConversation(conversationId) {
 
 <template>
   <Dialog :open="open" @update:open="(v) => emits('update:open', v)">
-    <DialogContent class="max-w-md">
-      <DialogHeader>
+    <DialogContent class="flex max-h-[85vh] max-w-md flex-col overflow-hidden">
+      <DialogHeader class="shrink-0">
         <DialogTitle>Nouveau message</DialogTitle>
       </DialogHeader>
 
-      <div class="flex flex-col gap-3">
+      <div class="flex min-h-0 flex-1 flex-col gap-3">
         <input
           v-model="search"
           type="search"
           placeholder="Rechercher un contact…"
-          class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+          class="h-10 w-full shrink-0 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
         />
 
-        <div v-if="existingContacts.length" class="flex flex-col gap-1">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Conversations existantes
-          </p>
-          <button
-            v-for="conv in existingContacts"
-            :key="conv.id"
-            type="button"
-            class="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-muted/60"
-            @click="pickConversation(conv.id)"
-          >
-            <span
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+        <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div v-if="existingContacts.length" class="mb-3 flex flex-col gap-1">
+            <p class="sticky top-0 z-10 bg-card py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Conversations existantes
+            </p>
+            <button
+              v-for="conv in existingContacts"
+              :key="conv.id"
+              type="button"
+              class="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+              @click="pickConversation(conv.id)"
             >
-              {{ conv.participant?.name?.charAt(0) ?? "?" }}
-            </span>
-            <span class="min-w-0 flex-1 truncate font-medium">
-              {{ conv.participant?.name }}
-            </span>
-          </button>
-        </div>
-
-        <div class="flex flex-col gap-1">
-          <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Contacts
-          </p>
-          <div
-            v-if="!filteredContacts.length && !existingContacts.length"
-            class="py-6 text-center text-sm text-muted-foreground"
-          >
-            Aucun contact disponible.
-          </div>
-          <button
-            v-for="contact in filteredContacts"
-            :key="contact.id"
-            type="button"
-            class="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-muted/60"
-            @click="pickContact(contact.id)"
-          >
-            <span
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
-            >
-              {{ contact.name.charAt(0) }}
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-medium">{{ contact.name }}</span>
-              <span class="block truncate text-xs text-muted-foreground">
-                {{ contact.email }}
+              <span
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+              >
+                {{ conv.participant?.name?.charAt(0) ?? "?" }}
               </span>
-            </span>
-          </button>
+              <span class="min-w-0 flex-1 truncate font-medium">
+                {{ conv.participant?.name }}
+              </span>
+            </button>
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <p class="sticky top-0 z-10 bg-card py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Contacts
+            </p>
+            <div
+              v-if="!filteredContacts.length && !existingContacts.length"
+              class="py-6 text-center text-sm text-muted-foreground"
+            >
+              Aucun contact disponible.
+            </div>
+            <button
+              v-for="contact in filteredContacts"
+              :key="contact.id"
+              type="button"
+              class="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+              @click="pickContact(contact.id)"
+            >
+              <span
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary"
+              >
+                {{ contact.name.charAt(0) }}
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium">{{ contact.name }}</span>
+                <span class="block truncate text-xs text-muted-foreground">
+                  {{ contact.email }}
+                </span>
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </DialogContent>

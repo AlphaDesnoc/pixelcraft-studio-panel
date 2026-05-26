@@ -73,6 +73,19 @@ class ProjectController extends Controller
             $request->user()->id => ['role' => 'owner', 'joined_at' => now()],
         ]);
 
+        AuditLogger::log(
+            $request->user(),
+            'project_created',
+            sprintf(
+                '%s a créé le projet « %s »',
+                $request->user()->name,
+                $project->name,
+            ),
+            $project,
+            ['slug' => $project->slug, 'status' => $project->status],
+            $request,
+        );
+
         return back()->with('success', 'Projet créé.');
     }
 
@@ -87,8 +100,28 @@ class ProjectController extends Controller
             'start_date' => ['nullable', 'date'],
         ]);
 
+        $changes = [];
+
         if ($validated['name'] !== $project->name) {
+            $changes['name'] = ['from' => $project->name, 'to' => $validated['name']];
             $project->slug = $this->uniqueSlug($validated['name'], $project->id);
+        }
+
+        if (($validated['description'] ?? null) !== $project->description) {
+            $changes['description'] = ['changed' => true];
+        }
+
+        if ($validated['status'] !== $project->status) {
+            $changes['status'] = [
+                'from' => $project->status,
+                'to' => $validated['status'],
+            ];
+        }
+
+        $newStartDate = $validated['start_date'] ?? null;
+        $oldStartDate = $project->start_date?->format('Y-m-d');
+        if ($newStartDate !== $oldStartDate) {
+            $changes['start_date'] = ['from' => $oldStartDate, 'to' => $newStartDate];
         }
 
         $project->name = $validated['name'];
@@ -99,12 +132,29 @@ class ProjectController extends Controller
         if ($request->hasFile('image')) {
             $this->deleteStoredImage($project);
             $project->image = $request->file('image')->store('projects', 'public');
+            $changes['image'] = ['changed' => true];
         } elseif (! empty($validated['remove_image'])) {
             $this->deleteStoredImage($project);
             $project->image = null;
+            $changes['image'] = ['removed' => true];
         }
 
         $project->save();
+
+        if ($changes !== []) {
+            AuditLogger::log(
+                $request->user(),
+                'project_updated',
+                sprintf(
+                    '%s a modifié le projet « %s »',
+                    $request->user()->name,
+                    $project->name,
+                ),
+                $project,
+                ['changes' => $changes],
+                $request,
+            );
+        }
 
         return back()->with('success', 'Projet mis à jour.');
     }

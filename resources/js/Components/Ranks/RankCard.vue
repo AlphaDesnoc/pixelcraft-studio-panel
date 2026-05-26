@@ -1,14 +1,34 @@
 <script setup>
 import { computed } from "vue";
-import { Link, router } from "@inertiajs/vue3";
+import { Link, router, usePage } from "@inertiajs/vue3";
 import { Bug, Crown, Star, Trash2, UserPlus } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
+
+const page = usePage();
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
   rank: { type: Object, required: true },
   canEdit: { type: Boolean, default: false },
 });
+
+const canManageMembers = computed(
+  () => props.canEdit || props.rank.can_manage_members === true,
+);
+
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+
+function canRemoveMember(memberId) {
+  if (!canManageMembers.value) return false;
+  if (
+    !props.canEdit &&
+    props.rank.responsible?.id === memberId &&
+    memberId === currentUserId.value
+  ) {
+    return false;
+  }
+  return true;
+}
 
 const emits = defineEmits(["add-member", "set-responsible", "rename"]);
 
@@ -35,7 +55,7 @@ function toggleBugs() {
 }
 
 function removeMember(userId) {
-  if (!props.canEdit) return;
+  if (!canManageMembers.value) return;
   if (!confirm("Retirer ce membre du rank ?")) return;
   router.delete(
     route("projects.ranks.members.remove", [
@@ -108,7 +128,7 @@ function removeMember(userId) {
             class="h-2.5 w-2.5 fill-amber-400 text-amber-400"
           />
           <button
-            v-if="canEdit"
+            v-if="canRemoveMember(member.id)"
             type="button"
             class="ml-0.5 hidden text-muted-foreground hover:text-rose-400 group-hover/member:inline-flex"
             title="Retirer du rank"
@@ -127,7 +147,7 @@ function removeMember(userId) {
         </Link>
       </Button>
       <button
-        v-if="canEdit"
+        v-if="canManageMembers"
         type="button"
         class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background/40 text-foreground transition-colors hover:bg-muted/60"
         title="Ajouter un membre"
