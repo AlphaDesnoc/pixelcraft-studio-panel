@@ -6,6 +6,7 @@ use App\Events\ChatReactionUpdated;
 use App\Models\ChatMessage;
 use App\Models\ChatMessageReaction;
 use App\Models\Project;
+use App\Support\EmojiValidator;
 use App\Support\ProjectAccess;
 use App\Support\ProjectSpace;
 use App\Support\SpaceChatAccess;
@@ -14,8 +15,6 @@ use Illuminate\Http\Request;
 
 class ChatReactionController extends Controller
 {
-    private const ALLOWED = ['👍', '✅', '❤️', '😂'];
-
     public function toggle(Request $request, Project $project, ChatMessage $message): JsonResponse
     {
         $user = $request->user();
@@ -25,10 +24,10 @@ class ChatReactionController extends Controller
         abort_unless($message->project_id === $project->id, 404);
 
         $validated = $request->validate([
-            'emoji' => ['required', 'string', 'max:16'],
+            'emoji' => ['required', 'string', 'max:32'],
         ]);
 
-        abort_unless(in_array($validated['emoji'], self::ALLOWED, true), 422);
+        abort_unless(EmojiValidator::isReactionEmoji($validated['emoji']), 422);
 
         $existing = ChatMessageReaction::query()
             ->where('chat_message_id', $message->id)
@@ -46,7 +45,7 @@ class ChatReactionController extends Controller
             ]);
         }
 
-        $reactions = $this->groupedReactions($message);
+        $reactions = self::groupedReactions($message, $user->id);
 
         ChatReactionUpdated::dispatch(
             $message->id,
@@ -58,9 +57,11 @@ class ChatReactionController extends Controller
         return response()->json(['reactions' => $reactions]);
     }
 
-    /** @return array<int, array{emoji: string, count: int, users: array<int, string>}> */
-    public static function groupedReactions(ChatMessage $message): array
+    /** @return array<int, array{emoji: string, count: int, users: array<int, string>, me: bool}> */
+    public static function groupedReactions(ChatMessage $message, ?int $viewerId = null): array
     {
+        $viewerId ??= auth()->id();
+
         return ChatMessageReaction::query()
             ->where('chat_message_id', $message->id)
             ->with('user:id,name')
@@ -70,6 +71,7 @@ class ChatReactionController extends Controller
                 'emoji' => $emoji,
                 'count' => $group->count(),
                 'users' => $group->pluck('user.name')->filter()->values()->all(),
+                'me' => $viewerId ? $group->contains('user_id', $viewerId) : false,
             ])
             ->values()
             ->all();
