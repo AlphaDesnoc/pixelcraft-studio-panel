@@ -50,8 +50,8 @@ function actionLabel(action) {
 </script>
 
 <template>
-  <div class="rounded-xl border border-border bg-card">
-    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+  <div class="flex max-h-[min(520px,58dvh)] min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+    <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
       <div class="flex items-center gap-2">
         <Activity class="h-4 w-4 text-primary" />
         <h3 class="text-sm font-semibold text-foreground">Activité des tâches</h3>
@@ -66,12 +66,13 @@ function actionLabel(action) {
       </a>
     </div>
 
-    <div v-if="groups.length" class="divide-y divide-border/40">
-      <section
-        v-for="group in groups"
-        :key="group.rank?.id ?? 'global'"
-        class="px-4 py-3"
-      >
+    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div v-if="groups.length" class="divide-y divide-border/40">
+        <section
+          v-for="group in groups"
+          :key="group.rank?.id ?? 'global'"
+          class="px-4 py-3"
+        >
         <div class="mb-2 flex items-center gap-2">
           <span
             class="h-2 w-2 shrink-0 rounded-full"
@@ -116,11 +117,12 @@ function actionLabel(action) {
         <p v-else class="text-xs text-muted-foreground">
           Aucune activité récente pour cet espace.
         </p>
-      </section>
-    </div>
+        </section>
+      </div>
 
-    <p v-else class="px-4 py-8 text-center text-sm text-muted-foreground">
-      Aucune activité de tâche pour le moment
-    </p>
+      <p v-else class="px-4 py-8 text-center text-sm text-muted-foreground">
+        Aucune activité de tâche pour le moment
+      </p>
+    </div>
   </div>
 </template>
