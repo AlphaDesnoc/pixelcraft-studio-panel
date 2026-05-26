@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, toRef, watch } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
-import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, Smile, SmilePlus, X } from "lucide-vue-next";
+import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, Smile, SmilePlus, X, Check, CheckCheck } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -362,6 +362,16 @@ function formatMessageTime(iso) {
   }).format(new Date(iso));
 }
 
+function readReceiptTitle(message) {
+  if (!message?.is_read) {
+    return "Envoyé";
+  }
+  if (message.read_at) {
+    return `Lu · ${formatMessageTime(message.read_at)}`;
+  }
+  return "Lu";
+}
+
 function previewText(conv) {
   const body = conv.last_message?.body;
   if (!body) return "Aucun message";
@@ -687,8 +697,26 @@ const composeTargetName = computed(() => {
                     :class="message.user?.id === currentUserId ? 'flex-row-reverse text-right' : ''"
                   >
                     <div class="min-w-0 flex-1 space-y-0.5">
-                      <p class="text-[11px] font-medium text-muted-foreground">
-                        {{ message.user?.name }} · {{ formatMessageTime(message.created_at) }}
+                      <p
+                        class="flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
+                        :class="message.user?.id === currentUserId ? 'justify-end' : ''"
+                      >
+                        <span>{{ message.user?.name }} · {{ formatMessageTime(message.created_at) }}</span>
+                        <span
+                          v-if="message.user?.id === currentUserId"
+                          class="inline-flex items-center"
+                          :title="readReceiptTitle(message)"
+                          :aria-label="readReceiptTitle(message)"
+                        >
+                          <CheckCheck
+                            v-if="message.is_read"
+                            class="h-3.5 w-3.5 text-primary"
+                          />
+                          <Check
+                            v-else
+                            class="h-3.5 w-3.5 text-muted-foreground/70"
+                          />
+                        </span>
                       </p>
                       <div
                         v-if="message.reply_preview"

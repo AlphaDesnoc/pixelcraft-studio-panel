@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\DirectMessagesRead;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -92,7 +93,12 @@ class DirectConversation extends Model
             $this->forceFill(['user_one_last_read_at' => $now])->save();
         } elseif ((int) $this->user_two_id === (int) $user->id) {
             $this->forceFill(['user_two_last_read_at' => $now])->save();
+        } else {
+            return;
         }
+
+        $this->refresh();
+        DirectMessagesRead::dispatch($this, $user);
     }
 
     public function unreadCountFor(User $user): int

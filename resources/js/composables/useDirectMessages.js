@@ -238,11 +238,47 @@ export function useDirectMessages({
     conversationsRef.value = sortConversations(list);
   }
 
+  function otherParticipantId() {
+    const conv = conversationsRef?.value?.find(
+      (c) => c.id === conversationIdRef.value,
+    );
+    return conv?.participant?.id ?? null;
+  }
+
+  function handleMessagesRead(event) {
+    const conversationId = event?.conversation_id;
+    const readerId = event?.reader_id;
+    const readAt = event?.read_at;
+    if (
+      !conversationId ||
+      !readAt ||
+      conversationIdRef.value !== conversationId ||
+      readerId !== otherParticipantId()
+    ) {
+      return;
+    }
+
+    const readTime = new Date(readAt).getTime();
+    messages.value = messages.value.map((message) => {
+      if (message.user?.id !== currentUserIdRef.value) {
+        return message;
+      }
+      if (new Date(message.created_at).getTime() <= readTime) {
+        return { ...message, is_read: true, read_at: readAt };
+      }
+      return message;
+    });
+  }
+
   function appendMessage(message, { highlight = true, scroll = true } = {}) {
     if (!message?.id || messages.value.some((m) => m.id === message.id)) {
       return false;
     }
-    messages.value = sortMessages([...messages.value, message]);
+    const normalized =
+      message.user?.id === currentUserIdRef.value && message.is_read === undefined
+        ? { ...message, is_read: false, read_at: null }
+        : message;
+    messages.value = sortMessages([...messages.value, normalized]);
     if (highlight) {
       highlightMessage(message.id);
     }
@@ -319,6 +355,8 @@ export function useDirectMessages({
     channel
       .listen(".DirectMessageSent", (event) => handleIncoming(event, { fromInbox: false }))
       .listen("DirectMessageSent", (event) => handleIncoming(event, { fromInbox: false }))
+      .listen(".DirectMessagesRead", handleMessagesRead)
+      .listen("DirectMessagesRead", handleMessagesRead)
       .listenForWhisper("typing", (event) => {
         addTypingUser(event?.user);
       })
