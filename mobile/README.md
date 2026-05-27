@@ -32,6 +32,25 @@ flutter run
 flutter run --dart-define=PANEL_BASE_URL=http://10.0.2.2:8000
 ```
 
+## Mises à jour automatiques (Android)
+
+Au démarrage, l’app lit un manifeste texte et compare le **build** installé :
+
+```ini
+version=1.0.7
+build=7
+apk=https://github.com/.../pixelcraft-panel-mobile-1.0.7.apk
+```
+
+| Source | URL |
+|--------|-----|
+| **Défaut (CI)** | `releases/latest/download/update-manifest.txt` sur GitHub |
+| **Gist / serveur** | `--dart-define=UPDATE_MANIFEST_URL=https://gist.githubusercontent.com/.../raw/update.txt` |
+
+Flux : dialogue « Mise à jour disponible » → téléchargement APK → écran d’installation Android (données conservées si même signature).
+
+Voir `update-manifest.example.txt`. La CI `mobile-release.yml` publie `update-manifest.txt` à chaque release.
+
 ## Backend requis
 
 Après déploiement, exécuter les migrations :

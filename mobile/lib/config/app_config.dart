@@ -17,4 +17,15 @@ class AppConfig {
   }
 
   static String get apiBaseUrl => '$panelBaseUrl/api/v1';
+
+  /// Manifeste texte (version/build/url APK). Par défaut : asset de la dernière release GitHub.
+  /// Override : `--dart-define=UPDATE_MANIFEST_URL=https://gist.githubusercontent.com/.../raw/update.txt`
+  static const defaultUpdateManifestUrl =
+      'https://github.com/AlphaDesnoc/pixelcraft-studio-panel/releases/latest/download/update-manifest.txt';
+
+  static String get updateManifestUrl {
+    const fromEnv = String.fromEnvironment('UPDATE_MANIFEST_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    return defaultUpdateManifestUrl;
+  }
 }

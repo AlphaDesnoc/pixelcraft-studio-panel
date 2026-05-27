@@ -33,6 +33,31 @@ String chatAttachmentUrl(String? url) {
   return '${AppConfig.panelBaseUrl}$url';
 }
 
+BorderRadius _waBubbleRadius({
+  required bool isMine,
+  required bool clusterStart,
+  required bool clusterEnd,
+}) {
+  const large = 10.0;
+  const small = 3.0;
+
+  if (isMine) {
+    return BorderRadius.only(
+      topLeft: const Radius.circular(large),
+      topRight: Radius.circular(clusterStart ? large : small),
+      bottomLeft: const Radius.circular(large),
+      bottomRight: Radius.circular(clusterEnd ? small : large),
+    );
+  }
+
+  return BorderRadius.only(
+    topLeft: Radius.circular(clusterStart ? large : small),
+    topRight: const Radius.circular(large),
+    bottomLeft: Radius.circular(clusterEnd ? small : large),
+    bottomRight: const Radius.circular(large),
+  );
+}
+
 class ChatMessageRow extends StatelessWidget {
   const ChatMessageRow({
     super.key,
@@ -46,10 +71,13 @@ class ChatMessageRow extends StatelessWidget {
     this.attachments = const [],
     this.pinned = false,
     this.isRead,
+    this.groupChat = false,
+    this.clusterStart = true,
+    this.clusterEnd = true,
     this.onToggleReaction,
     this.onReply,
+    this.onLongPress,
     this.trailing,
-    this.footer,
     this.editingChild,
   });
 
@@ -63,52 +91,99 @@ class ChatMessageRow extends StatelessWidget {
   final List<PanelAttachment> attachments;
   final bool pinned;
   final bool? isRead;
+  final bool groupChat;
+  final bool clusterStart;
+  final bool clusterEnd;
   final ValueChanged<String>? onToggleReaction;
   final VoidCallback? onReply;
+  final VoidCallback? onLongPress;
   final Widget? trailing;
-  final Widget? footer;
   final Widget? editingChild;
+
+  bool get _showSenderName => groupChat && !isMine && clusterStart;
+  bool get _showAvatar => groupChat && !isMine && clusterEnd;
 
   @override
   Widget build(BuildContext context) {
-    final maxWidth = MediaQuery.sizeOf(context).width * 0.78;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final maxWidth = (screenWidth * 0.78).clamp(220.0, 320.0);
+    final topPadding = clusterStart ? 6.0 : 2.0;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
       child: Row(
-        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMine) ...[
-            _Avatar(name: userName),
-            const SizedBox(width: 8),
-          ],
+          if (groupChat && !isMine)
+            SizedBox(
+              width: 32,
+              child: _showAvatar
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 2, right: 6),
+                      child: _Avatar(name: userName, radius: 14),
+                    )
+                  : null,
+            ),
           Flexible(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxWidth),
-              child: _ChatBubble(
-                isMine: isMine,
-                pinned: pinned,
-                userName: userName,
-                body: body,
-                createdAt: createdAt,
-                editedAt: editedAt,
-                replyPreview: replyPreview,
-                reactions: reactions,
-                attachments: attachments,
-                isRead: isRead,
-                onToggleReaction: onToggleReaction,
-                onReply: onReply,
-                trailing: trailing,
-                footer: footer,
-                editingChild: editingChild,
+              child: GestureDetector(
+                onLongPress: onLongPress ?? onReply,
+                child: Column(
+                  crossAxisAlignment:
+                      isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    if (_showSenderName)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 2),
+                        child: Text(
+                          userName,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12.5,
+                              ),
+                        ),
+                      ),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _ChatBubble(
+                          isMine: isMine,
+                          pinned: pinned,
+                          body: body,
+                          createdAt: createdAt,
+                          editedAt: editedAt,
+                          replyPreview: replyPreview,
+                          reactions: reactions,
+                          attachments: attachments,
+                          isRead: isRead,
+                          clusterStart: clusterStart,
+                          clusterEnd: clusterEnd,
+                          onToggleReaction: onToggleReaction,
+                          trailing: trailing,
+                          editingChild: editingChild,
+                        ),
+                        if (reactions.isNotEmpty && editingChild == null)
+                          Positioned(
+                            bottom: -10,
+                            left: isMine ? null : 8,
+                            right: isMine ? 8 : null,
+                            child: _ReactionPills(
+                              reactions: reactions,
+                              onToggle: onToggleReaction,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (reactions.isNotEmpty) const SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
           ),
-          if (isMine) ...[
-            const SizedBox(width: 8),
-            _Avatar(name: userName),
-          ],
         ],
       ),
     );
@@ -116,20 +191,24 @@ class ChatMessageRow extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name});
+  const _Avatar({required this.name, this.radius = 16});
 
   final String name;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return CircleAvatar(
-      radius: 16,
+      radius: radius,
       backgroundColor: theme.colorScheme.surfaceContainerHighest,
       foregroundColor: theme.colorScheme.onSurfaceVariant,
       child: Text(
         initialsFromName(name),
-        style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: radius * 0.72,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -139,7 +218,6 @@ class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.isMine,
     required this.pinned,
-    required this.userName,
     required this.body,
     this.createdAt,
     this.editedAt,
@@ -147,16 +225,15 @@ class _ChatBubble extends StatelessWidget {
     this.reactions = const [],
     this.attachments = const [],
     this.isRead,
+    required this.clusterStart,
+    required this.clusterEnd,
     this.onToggleReaction,
-    this.onReply,
     this.trailing,
-    this.footer,
     this.editingChild,
   });
 
   final bool isMine;
   final bool pinned;
-  final String userName;
   final String body;
   final String? createdAt;
   final String? editedAt;
@@ -164,10 +241,10 @@ class _ChatBubble extends StatelessWidget {
   final List<MessageReaction> reactions;
   final List<PanelAttachment> attachments;
   final bool? isRead;
+  final bool clusterStart;
+  final bool clusterEnd;
   final ValueChanged<String>? onToggleReaction;
-  final VoidCallback? onReply;
   final Widget? trailing;
-  final Widget? footer;
   final Widget? editingChild;
 
   @override
@@ -180,103 +257,73 @@ class _ChatBubble extends StatelessWidget {
             ? scheme.primary.withValues(alpha: 0.14)
             : scheme.surfaceContainerHigh;
     final textColor = scheme.onSurface;
-    final metaColor = scheme.onSurfaceVariant;
+    final metaColor = scheme.onSurfaceVariant.withValues(alpha: 0.85);
     final showBody = chatShouldShowBody(body, attachments);
     final emojiOnly = showBody && chatIsEmojiOnly(body);
+    final hasMedia = attachments.isNotEmpty;
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bubbleColor,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: _waBubbleRadius(
+          isMine: isMine,
+          clusterStart: clusterStart,
+          clusterEnd: clusterEnd,
+        ),
         border: pinned
             ? Border.all(color: scheme.secondary.withValues(alpha: 0.35))
             : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 1,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+        padding: EdgeInsets.fromLTRB(
+          hasMedia ? 4 : 9,
+          hasMedia ? 4 : 6,
+          hasMedia ? 4 : 8,
+          hasMedia ? 4 : 5,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    [
-                      userName,
-                      if (createdAt != null && createdAt!.isNotEmpty)
-                        formatRelativeTime(createdAt),
-                      if (editedAt != null && editedAt!.isNotEmpty) '(modifié)',
-                    ].join(' · '),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: metaColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                if (pinned)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Icon(Icons.push_pin, size: 14, color: metaColor),
-                  ),
-                if (trailing != null) trailing!,
-              ],
-            ),
             if (replyPreview != null) ...[
-              const SizedBox(height: 6),
-              _ReplyPreview(preview: replyPreview!),
-            ],
-            if (editingChild != null) ...[
-              const SizedBox(height: 6),
-              editingChild!,
-            ] else if (showBody) ...[
+              _ReplyPreview(preview: replyPreview!, isMine: isMine),
               const SizedBox(height: 4),
-              Text(
-                body,
-                style: emojiOnly
-                    ? theme.textTheme.headlineMedium?.copyWith(color: textColor)
-                    : theme.textTheme.bodyMedium?.copyWith(color: textColor),
-              ),
             ],
-            if (attachments.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              _AttachmentList(attachments: attachments),
-            ],
-            if (onToggleReaction != null) ...[
-              const SizedBox(height: 4),
-              ReactionBar(
-                reactions: reactions,
-                onToggle: onToggleReaction!,
-                compact: true,
-              ),
-            ],
-            if (footer != null) footer!,
-            if (isMine && isRead != null)
+            if (editingChild != null)
+              editingChild!
+            else ...[
+              if (showBody)
+                _MessageText(
+                  body: body,
+                  emojiOnly: emojiOnly,
+                  textColor: textColor,
+                ),
+              if (attachments.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: showBody ? 4 : 0),
+                  child: _AttachmentList(attachments: attachments),
+                ),
               Padding(
-                padding: const EdgeInsets.only(top: 2),
+                padding: const EdgeInsets.only(top: 2, left: 8),
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: Icon(
-                    isRead! ? Icons.done_all : Icons.done,
-                    size: 14,
-                    color: isRead!
-                        ? scheme.primary
-                        : metaColor.withValues(alpha: 0.7),
+                  child: _MetaRow(
+                    createdAt: createdAt,
+                    editedAt: editedAt,
+                    isRead: isMine ? isRead : null,
+                    pinned: pinned,
+                    metaColor: metaColor,
+                    scheme: scheme,
                   ),
                 ),
               ),
-            if (onReply != null && editingChild == null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 16,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  icon: Icon(Icons.reply, color: metaColor),
-                  onPressed: onReply,
-                ),
-              ),
+            ],
           ],
         ),
       ),
@@ -284,22 +331,150 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
+class _MessageText extends StatelessWidget {
+  const _MessageText({
+    required this.body,
+    required this.emojiOnly,
+    required this.textColor,
+  });
+
+  final String body;
+  final bool emojiOnly;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      body,
+      style: TextStyle(
+        color: textColor,
+        fontSize: emojiOnly ? 34 : 15.5,
+        height: emojiOnly ? 1.1 : 1.35,
+        letterSpacing: 0.1,
+      ),
+    );
+  }
+}
+
+class _MetaRow extends StatelessWidget {
+  const _MetaRow({
+    required this.createdAt,
+    required this.editedAt,
+    required this.isRead,
+    required this.pinned,
+    required this.metaColor,
+    required this.scheme,
+  });
+
+  final String? createdAt;
+  final String? editedAt;
+  final bool? isRead;
+  final bool pinned;
+  final Color metaColor;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (pinned) ...[
+          Icon(Icons.push_pin, size: 12, color: metaColor),
+          const SizedBox(width: 3),
+        ],
+        if (editedAt != null && editedAt!.isNotEmpty) ...[
+          Text(
+            'Modifié',
+            style: TextStyle(color: metaColor, fontSize: 11),
+          ),
+          const SizedBox(width: 4),
+        ],
+        if (createdAt != null && createdAt!.isNotEmpty)
+          Text(
+            formatMessageTime(createdAt),
+            style: TextStyle(color: metaColor, fontSize: 11),
+          ),
+        if (isRead != null) ...[
+          const SizedBox(width: 3),
+          Icon(
+            isRead! ? Icons.done_all : Icons.done,
+            size: 15,
+            color: isRead! ? scheme.primary : metaColor,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ReactionPills extends StatelessWidget {
+  const _ReactionPills({
+    required this.reactions,
+    this.onToggle,
+  });
+
+  final List<MessageReaction> reactions;
+  final ValueChanged<String>? onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: reactions
+              .map(
+                (r) => InkWell(
+                  onTap: onToggle == null ? null : () => onToggle!(r.emoji),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Text(
+                      r.emoji,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
+}
+
 class _ReplyPreview extends StatelessWidget {
-  const _ReplyPreview({required this.preview});
+  const _ReplyPreview({required this.preview, required this.isMine});
 
   final ReplyPreview preview;
+  final bool isMine;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+        color: scheme.surface.withValues(alpha: isMine ? 0.35 : 0.5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(color: scheme.primary, width: 3),
         ),
       ),
       child: Column(
@@ -310,15 +485,17 @@ class _ReplyPreview extends StatelessWidget {
               preview.userName!,
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurfaceVariant,
+                color: scheme.primary,
+                fontSize: 12,
               ),
             ),
           Text(
             preview.body,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontSize: 13,
             ),
           ),
         ],
@@ -341,37 +518,34 @@ class _AttachmentList extends StatelessWidget {
         if (url.isEmpty) return const SizedBox.shrink();
 
         if (chatIsImageAttachment(attachment)) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: InkWell(
-                onTap: () => _openUrl(url),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 192),
-                  child: Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return SizedBox(
-                        height: 120,
-                        width: double.infinity,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            value: progress.expectedTotalBytes != null
-                                ? progress.cumulativeBytesLoaded /
-                                    progress.expectedTotalBytes!
-                                : null,
-                          ),
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              onTap: () => _openUrl(url),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240, minWidth: 180),
+                child: Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return SizedBox(
+                      height: 160,
+                      width: double.infinity,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: progress.expectedTotalBytes != null
+                              ? progress.cumulativeBytesLoaded /
+                                  progress.expectedTotalBytes!
+                              : null,
                         ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return _FileLink(name: attachment.originalName, url: url);
-                    },
-                  ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return _FileLink(name: attachment.originalName, url: url);
+                  },
                 ),
               ),
             ),
@@ -379,7 +553,7 @@ class _AttachmentList extends StatelessWidget {
         }
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.only(top: 4),
           child: _FileLink(name: attachment.originalName, url: url),
         );
       }).toList(),
@@ -408,17 +582,19 @@ class _FileLink extends StatelessWidget {
       },
       borderRadius: BorderRadius.circular(6),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.attach_file, size: 16, color: theme.colorScheme.primary),
-            const SizedBox(width: 4),
+            Icon(Icons.insert_drive_file_outlined,
+                size: 18, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
             Flexible(
               child: Text(
                 name,
-                style: theme.textTheme.labelMedium?.copyWith(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.primary,
+                  fontSize: 13,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -428,4 +604,37 @@ class _FileLink extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> showReactionPicker(
+  BuildContext context,
+  ValueChanged<String> onSelected,
+) async {
+  final emoji = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: commonEmojis
+              .map(
+                (e) => InkWell(
+                  onTap: () => Navigator.pop(context, e),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Text(e, style: const TextStyle(fontSize: 28)),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    ),
+  );
+  if (emoji != null) onSelected(emoji);
 }

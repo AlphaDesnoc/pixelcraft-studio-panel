@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'api/panel_api_extensions.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/app_update_service.dart';
 import 'services/auth_session.dart';
 import 'services/realtime_service.dart';
 import 'theme/app_theme.dart';
@@ -49,6 +50,7 @@ class _AppRootState extends State<_AppRoot> {
         realtime.start();
       }
       _session!.addListener(_onSessionChanged);
+      AppUpdateService.checkOnStartup(context);
     });
   }
 

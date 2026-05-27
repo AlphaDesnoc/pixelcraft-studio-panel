@@ -1,0 +1,7 @@
+version=1.0.0
+build=1
+apk=https://github.com/AlphaDesnoc/pixelcraft-studio-panel/releases/download/mobile-v1.0.0/pixelcraft-panel-mobile-1.0.0.apk
+
+# Fichier lu par l'app au démarrage (Android).
+# La CI mobile-release.yml régénère update-manifest.txt à chaque release GitHub.
+# Override possible : --dart-define=UPDATE_MANIFEST_URL=https://gist.githubusercontent.com/...
