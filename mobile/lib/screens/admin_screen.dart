@@ -77,7 +77,7 @@ class _AdminScreenState extends State<AdminScreen> {
       onRefresh: _load,
       child: ListView.separated(
         itemCount: _users.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final user = _users[index];
           return ListTile(
@@ -106,7 +106,7 @@ class _AdminScreenState extends State<AdminScreen> {
       onRefresh: _load,
       child: ListView.separated(
         itemCount: _projects.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final project = _projects[index];
           return ListTile(

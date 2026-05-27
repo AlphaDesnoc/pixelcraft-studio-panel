@@ -243,8 +243,8 @@ class PanelApi {
       final data = await _client.postJson('/projects/$projectSlug/tasks', data: {
         'list_id': listId,
         'title': title,
-        if (description != null) 'description': description,
-        if (priority != null) 'priority': priority,
+        'description': ?description,
+        'priority': ?priority,
       });
       return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
     });
@@ -320,7 +320,7 @@ class PanelApi {
     return _client.guard(() async {
       final data = await _client.postJson('/projects/$projectSlug/notes', data: {
         'title': title,
-        if (content != null) 'content': content,
+        'content': ?content,
       });
       return WorkspaceNote.fromJson(data['note'] as Map<String, dynamic>);
     });
@@ -336,7 +336,7 @@ class PanelApi {
       final data =
           await _client.putJson('/projects/$projectSlug/notes/$noteId', data: {
         'title': title,
-        if (content != null) 'content': content,
+        'content': ?content,
       });
       return WorkspaceNote.fromJson(data['note'] as Map<String, dynamic>);
     });
@@ -363,7 +363,7 @@ class PanelApi {
         'title': title,
         'start_at': startAt,
         'end_at': endAt,
-        if (description != null) 'description': description,
+        'description': ?description,
       });
       return WorkspaceEvent.fromJson(data['event'] as Map<String, dynamic>);
     });
@@ -387,8 +387,8 @@ class PanelApi {
     return _client.guard(() async {
       final data = await _client.postJson('/projects/$projectSlug/bugs', data: {
         'title': title,
-        if (description != null) 'description': description,
-        if (priority != null) 'priority': priority,
+        'description': ?description,
+        'priority': ?priority,
       });
       return WorkspaceBug.fromJson(data['bug'] as Map<String, dynamic>);
     });
@@ -413,9 +413,10 @@ class PanelApi {
     String? name,
   }) {
     return _client.guard(() async {
-      final payload = <String, dynamic>{};
-      if (data != null) payload['data'] = data;
-      if (name != null) payload['name'] = name;
+      final payload = <String, dynamic>{
+        'data': ?data,
+        'name': ?name,
+      };
       final response =
           await _client.putJson('/projects/$projectSlug/sheets/$sheetId', data: payload);
       return WorkspaceSheet.fromJson(response['sheet'] as Map<String, dynamic>);
@@ -428,7 +429,7 @@ class PanelApi {
   }) {
     return _client.guard(() async {
       final response = await _client.postJson('/projects/$projectSlug/sheets', data: {
-        if (name != null) 'name': name,
+        'name': ?name,
       });
       return WorkspaceSheet.fromJson(response['sheet'] as Map<String, dynamic>);
     });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/panel_api.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
 
@@ -25,6 +26,7 @@ class BugsTab extends StatelessWidget {
   final Future<void> Function() onChanged;
 
   Future<void> _reportBug(BuildContext context) async {
+    final api = context.read<AuthSession>().api;
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
 
@@ -62,7 +64,7 @@ class BugsTab extends StatelessWidget {
 
     if (created != true || titleController.text.trim().isEmpty) return;
 
-    await context.read<AuthSession>().api.createBug(
+    await api.createBug(
           projectSlug: projectSlug,
           title: titleController.text.trim(),
           description: descriptionController.text.trim(),
@@ -71,11 +73,11 @@ class BugsTab extends StatelessWidget {
   }
 
   Future<void> _updateStatus(
-    BuildContext context,
+    PanelApi api,
     WorkspaceBug bug,
     String status,
   ) async {
-    await context.read<AuthSession>().api.updateBug(
+    await api.updateBug(
           projectSlug: projectSlug,
           bugId: bug.id,
           fields: {
@@ -140,6 +142,7 @@ class BugsTab extends StatelessWidget {
   }
 
   Future<void> _showStatusSheet(BuildContext context, WorkspaceBug bug) async {
+    final api = context.read<AuthSession>().api;
     final status = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
@@ -158,6 +161,6 @@ class BugsTab extends StatelessWidget {
     );
 
     if (status == null) return;
-    await _updateStatus(context, bug, status);
+    await _updateStatus(api, bug, status);
   }
 }

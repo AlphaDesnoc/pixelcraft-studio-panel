@@ -19,6 +19,7 @@ class NotesTab extends StatelessWidget {
   final Future<void> Function() onChanged;
 
   Future<void> _createNote(BuildContext context) async {
+    final api = context.read<AuthSession>().api;
     final titleController = TextEditingController();
     final contentController = TextEditingController();
 
@@ -56,7 +57,7 @@ class NotesTab extends StatelessWidget {
 
     if (created != true || titleController.text.trim().isEmpty) return;
 
-    await context.read<AuthSession>().api.createNote(
+    await api.createNote(
           projectSlug: projectSlug,
           title: titleController.text.trim(),
           content: contentController.text.trim(),
