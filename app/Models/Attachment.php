@@ -37,10 +37,10 @@ class Attachment extends Model
     {
         $project = $this->resolveProject();
         if ($project) {
-            return route('projects.attachments.show', [$project->slug, $this->id], false);
+            return url(route('projects.attachments.show', [$project->slug, $this->id], false));
         }
 
-        return $this->publicUrl();
+        return url($this->publicUrl());
     }
 
     public function resolveProject(): ?Project
