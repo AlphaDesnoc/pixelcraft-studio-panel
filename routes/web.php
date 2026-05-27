@@ -112,6 +112,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/tasks/{task}/checklists/{checklist}', [TaskChecklistController::class, 'destroy'])->name('tasks.checklists.destroy');
 
         Route::post('/tasks/{task}/checklists/{checklist}/items', [TaskChecklistController::class, 'storeItem'])->name('tasks.checklists.items.store');
+        Route::post('/tasks/{task}/checklists/{checklist}/items/reorder', [TaskChecklistController::class, 'reorderItems'])->name('tasks.checklists.items.reorder');
         Route::put('/tasks/{task}/checklists/{checklist}/items/{item}', [TaskChecklistController::class, 'updateItem'])->name('tasks.checklists.items.update');
         Route::delete('/tasks/{task}/checklists/{checklist}/items/{item}', [TaskChecklistController::class, 'destroyItem'])->name('tasks.checklists.items.destroy');
 

@@ -31,6 +31,9 @@ class CalendarEventController extends Controller
             'all_day' => (bool) ($validated['all_day'] ?? false),
             'color' => $validated['color'] ?? '#7c5cff',
             'rank_id' => $validated['rank_id'] ?? null,
+            'recurrence' => $validated['recurrence'] ?? null,
+            'recurrence_weekdays' => $validated['recurrence_weekdays'] ?? null,
+            'recurrence_until' => $validated['recurrence_until'] ?? null,
         ]);
 
         return $this->apiOrBack($request, ['event' => $this->eventPayload($event)]);
@@ -50,6 +53,9 @@ class CalendarEventController extends Controller
             'end_at' => $validated['end_at'],
             'all_day' => (bool) ($validated['all_day'] ?? false),
             'color' => $validated['color'] ?? $event->color,
+            'recurrence' => $validated['recurrence'] ?? null,
+            'recurrence_weekdays' => $validated['recurrence_weekdays'] ?? null,
+            'recurrence_until' => $validated['recurrence_until'] ?? null,
         ]);
 
         return $this->apiOrBack($request, ['event' => $this->eventPayload($event->fresh())]);
@@ -79,24 +85,41 @@ class CalendarEventController extends Controller
             'color' => $event->color,
             'creator_id' => $event->creator_id,
             'rank_id' => $event->rank_id,
+            'recurrence' => $event->recurrence,
+            'recurrence_weekdays' => $event->recurrence_weekdays ?? [],
+            'recurrence_until' => optional($event->recurrence_until)?->toDateString(),
         ];
     }
 
     private function validateData(Request $request): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
             'start_at' => ['required', 'date'],
             'end_at' => ['required', 'date', 'after_or_equal:start_at'],
             'all_day' => ['nullable', 'boolean'],
             'color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'recurrence' => ['nullable', 'string', Rule::in(['daily', 'weekly', 'monthly'])],
+            'recurrence_weekdays' => ['nullable', 'array', 'required_if:recurrence,weekly', 'min:1'],
+            'recurrence_weekdays.*' => ['integer', 'min:0', 'max:6'],
+            'recurrence_until' => ['nullable', 'date', 'after_or_equal:start_at'],
             'rank_id' => [
                 'nullable',
                 'integer',
                 Rule::exists('ranks', 'id')->where('project_id', $request->route('project')->id),
             ],
         ]);
+
+        if (empty($validated['recurrence'])) {
+            $validated['recurrence'] = null;
+            $validated['recurrence_weekdays'] = null;
+            $validated['recurrence_until'] = null;
+        } elseif ($validated['recurrence'] !== 'weekly') {
+            $validated['recurrence_weekdays'] = null;
+        }
+
+        return $validated;
     }
 
     private function ensureCanEdit(Request $request, Project $project): void

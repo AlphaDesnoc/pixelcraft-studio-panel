@@ -27,6 +27,7 @@ export function spaceOnlyProps() {
     "taskActivityByRank",
     "chatMessages",
     "chatMembers",
+    "chatRankMentions",
     "teamMembers",
     "teamCandidates",
     "canManageTeam",

@@ -116,6 +116,34 @@ class TaskChecklistController extends Controller
         return back();
     }
 
+    public function reorderItems(Request $request, Project $project, Task $task, TaskChecklist $checklist): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($task->project_id === $project->id, 404);
+        abort_unless($checklist->task_id === $task->id, 404);
+
+        $validated = $request->validate([
+            'order' => ['required', 'array'],
+            'order.*' => ['integer', 'exists:task_checklist_items,id'],
+        ]);
+
+        $itemIds = $checklist->items()->pluck('id')->all();
+
+        foreach ($validated['order'] as $id) {
+            abort_unless(in_array($id, $itemIds, true), 404);
+        }
+
+        abort_unless(count($validated['order']) === count($itemIds), 422);
+
+        DB::transaction(function () use ($validated) {
+            foreach ($validated['order'] as $position => $id) {
+                TaskChecklistItem::whereKey($id)->update(['position' => $position]);
+            }
+        });
+
+        return back();
+    }
+
     private function ensureCanEdit(Request $request, Project $project, Task $task): void
     {
         $user = $request->user();

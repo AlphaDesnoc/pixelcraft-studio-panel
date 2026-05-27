@@ -16,6 +16,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'end_at',
     'all_day',
     'color',
+    'recurrence',
+    'recurrence_weekdays',
+    'recurrence_until',
 ])]
 class CalendarEvent extends Model
 {
@@ -25,6 +28,8 @@ class CalendarEvent extends Model
             'start_at' => 'datetime',
             'end_at' => 'datetime',
             'all_day' => 'boolean',
+            'recurrence_weekdays' => 'array',
+            'recurrence_until' => 'date',
         ];
     }
 

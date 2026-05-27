@@ -10,6 +10,13 @@ const emits = defineEmits(["select"]);
 
 const listRef = ref(null);
 
+function suggestionKey(item, index) {
+  if (item.type === "rank") {
+    return `rank-${item.id}`;
+  }
+  return `user-${item.id ?? index}`;
+}
+
 function scrollActiveIntoView() {
   const list = listRef.value;
   if (!list) {
@@ -45,8 +52,8 @@ watch(
     role="listbox"
   >
     <li
-      v-for="(member, index) in suggestions"
-      :key="member.id"
+      v-for="(item, index) in suggestions"
+      :key="suggestionKey(item, index)"
       role="option"
       :data-mention-index="index"
       :aria-selected="index === activeIndex"
@@ -59,17 +66,34 @@ watch(
             ? 'bg-primary/15 text-foreground'
             : 'text-foreground hover:bg-muted/60'
         "
-        @mousedown.prevent="emits('select', member)"
+        @mousedown.prevent="emits('select', item)"
       >
         <span
-          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary"
+          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+          :class="
+            item.type === 'rank'
+              ? 'bg-violet-500/15 text-violet-300'
+              : 'bg-primary/15 text-primary'
+          "
+          :style="
+            item.type === 'rank' && item.color
+              ? {
+                  backgroundColor: `${item.color}22`,
+                  color: item.color,
+                }
+              : undefined
+          "
         >
-          {{ member.name?.charAt(0) ?? "?" }}
+          {{ item.type === "rank" ? "#" : (item.name?.charAt(0) ?? "?") }}
         </span>
         <span class="min-w-0 flex-1">
-          <span class="block truncate font-medium">@{{ member.pseudo }}</span>
+          <span class="block truncate font-medium">@{{ item.pseudo }}</span>
           <span class="block truncate text-xs text-muted-foreground">
-            {{ member.name }}
+            {{
+              item.type === "rank"
+                ? `Rank · ${item.name}`
+                : item.name
+            }}
           </span>
         </span>
       </button>

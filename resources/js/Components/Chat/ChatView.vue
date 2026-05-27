@@ -32,6 +32,7 @@ const props = defineProps({
   spaceLabel: { type: String, default: "Global" },
   active: { type: Boolean, default: false },
   initialChatMembers: { type: Array, default: () => [] },
+  chatRankMentions: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -80,6 +81,27 @@ const {
 
 const chatMembersRef = computed(() => chatMembers.value);
 
+const mentionCandidatesRef = computed(() => {
+  const members = (chatMembersRef.value ?? []).map((member) => ({
+    ...member,
+    type: "user",
+  }));
+
+  if (props.spaceKey !== "global") {
+    return members;
+  }
+
+  const ranks = (props.chatRankMentions ?? []).map((rank) => ({
+    type: "rank",
+    id: rank.id,
+    slug: rank.slug,
+    name: rank.name,
+    color: rank.color,
+  }));
+
+  return [...ranks, ...members];
+});
+
 const {
   open: draftMentionOpen,
   suggestions: draftMentionSuggestions,
@@ -90,7 +112,7 @@ const {
 } = useMentionAutocomplete({
   textRef: draft,
   textareaRef: draftTextareaRef,
-  candidatesRef: chatMembersRef,
+  candidatesRef: mentionCandidatesRef,
   onInput: notifyTyping,
 });
 
@@ -104,7 +126,7 @@ const {
 } = useMentionAutocomplete({
   textRef: editDraft,
   textareaRef: editTextareaRef,
-  candidatesRef: chatMembersRef,
+  candidatesRef: mentionCandidatesRef,
 });
 
 const typingLabel = computed(() => {
@@ -672,7 +694,11 @@ async function onFileSelected(event) {
             <Textarea
               ref="draftTextareaRef"
               v-model="draft"
-              placeholder="Écrire un message… Markdown (**gras**, *italique*) · @pseudo · Ctrl+Entrée pour envoyer"
+              :placeholder="
+                spaceKey === 'global'
+                  ? 'Écrire un message… Markdown (**gras**, *italique*) · @pseudo ou @rank · Ctrl+Entrée pour envoyer'
+                  : 'Écrire un message… Markdown (**gras**, *italique*) · @pseudo · Ctrl+Entrée pour envoyer'
+              "
               rows="2"
               class="min-h-[44px] w-full resize-none"
               @input="onDraftInput"

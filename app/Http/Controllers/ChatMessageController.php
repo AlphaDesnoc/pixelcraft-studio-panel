@@ -8,6 +8,7 @@ use App\Events\ChatMessageSent;
 use App\Events\ChatMessageUpdated;
 use App\Models\ChatMessage;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\UserNotification;
 use App\Support\MentionParser;
 use App\Support\PanelNotifier;
@@ -53,7 +54,8 @@ class ChatMessageController extends Controller
 
         $body = trim($validated['body']);
         $eligible = SpaceChatAccess::eligibleUsers($project, $space->key);
-        $mentions = MentionParser::extract($body, $eligible);
+        $ranks = $space->isGlobal ? $project->ranks()->orderBy('position')->get() : null;
+        $mentions = MentionParser::extract($body, $eligible, $ranks);
 
         $message = $project->chatMessages()->create([
             'user_id' => $user->id,
@@ -67,23 +69,26 @@ class ChatMessageController extends Controller
         $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
         $url = route('projects.show', $project->slug).'?space='.$space->key.'&tab=chat';
 
-        $mentionedIds = collect($mentions)->pluck('id');
+        $mentionedIds = MentionParser::notifiedUserIds($project, $mentions);
 
-        foreach ($eligible as $member) {
-            if ($member->id === $user->id) {
+        foreach ($mentionedIds as $memberId) {
+            if ($memberId === $user->id) {
                 continue;
             }
 
-            if ($mentionedIds->contains($member->id)) {
-                PanelNotifier::send(
-                    $member,
-                    UserNotification::TYPE_CHAT_MENTION,
-                    'Mention dans le chat',
-                    sprintf('%s vous a mentionné : %s', $user->name, str($body)->limit(80)),
-                    $url,
-                    ['project_id' => $project->id, 'message_id' => $message->id],
-                );
+            $member = User::query()->find($memberId);
+            if (! $member) {
+                continue;
             }
+
+            PanelNotifier::send(
+                $member,
+                UserNotification::TYPE_CHAT_MENTION,
+                'Mention dans le chat',
+                sprintf('%s vous a mentionné : %s', $user->name, str($body)->limit(80)),
+                $url,
+                ['project_id' => $project->id, 'message_id' => $message->id],
+            );
         }
 
         ChatMessageSent::dispatch($message);
@@ -105,10 +110,13 @@ class ChatMessageController extends Controller
 
         $body = trim($validated['body']);
         $eligible = SpaceChatAccess::eligibleUsers($project, $message->space_key);
+        $ranks = $message->space_key === ProjectSpace::GLOBAL
+            ? $project->ranks()->orderBy('position')->get()
+            : null;
 
         $message->update([
             'body' => $body,
-            'mentions' => MentionParser::extract($body, $eligible),
+            'mentions' => MentionParser::extract($body, $eligible, $ranks),
             'edited_at' => now(),
         ]);
 

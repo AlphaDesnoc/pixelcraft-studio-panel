@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { router } from "@inertiajs/vue3";
-import { CheckSquare, Trash2, X } from "lucide-vue-next";
+import { ArrowDownUp, CheckSquare, GripVertical, Trash2, X } from "lucide-vue-next";
+import { VueDraggable } from "vue-draggable-plus";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 
@@ -14,6 +15,15 @@ const props = defineProps({
 const newItem = ref("");
 const editingName = ref(false);
 const nameDraft = ref("");
+const localItems = ref([]);
+
+watch(
+  () => props.checklist.items,
+  (items) => {
+    localItems.value = items.map((item) => ({ ...item }));
+  },
+  { immediate: true, deep: true },
+);
 
 const total = computed(() => props.checklist.items.length);
 const done = computed(() => props.checklist.items.filter((i) => i.is_done).length);
@@ -26,6 +36,27 @@ const optimistic = ref(new Map());
 function isItemDone(item) {
   const o = optimistic.value.get(item.id);
   return o !== undefined ? o : item.is_done;
+}
+
+function persistOrder() {
+  router.post(
+    route("projects.tasks.checklists.items.reorder", [
+      props.projectSlug,
+      props.taskId,
+      props.checklist.id,
+    ]),
+    { order: localItems.value.map((item) => item.id) },
+    { preserveScroll: true, preserveState: true, only: ["lists"] },
+  );
+}
+
+function onDragEnd() {
+  persistOrder();
+}
+
+function reverseItems() {
+  localItems.value = [...localItems.value].reverse();
+  persistOrder();
 }
 
 function toggleItem(item) {
@@ -134,6 +165,15 @@ function saveName() {
         {{ checklist.name }}
       </h3>
       <button
+        v-if="total > 1"
+        type="button"
+        class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        title="Inverser l'ordre"
+        @click="reverseItems"
+      >
+        <ArrowDownUp class="h-3.5 w-3.5" />
+      </button>
+      <button
         type="button"
         class="rounded p-1 text-rose-400/80 hover:bg-rose-500/10 hover:text-rose-300"
         @click="deleteChecklist"
@@ -154,12 +194,28 @@ function saveName() {
       </div>
     </div>
 
-    <ul v-if="total > 0" class="flex flex-col gap-0.5">
+    <VueDraggable
+      v-if="total > 0"
+      v-model="localItems"
+      :animation="150"
+      handle=".checklist-item-handle"
+      tag="ul"
+      class="flex flex-col gap-0.5"
+      ghost-class="checklist-item-ghost"
+      @end="onDragEnd"
+    >
       <li
-        v-for="item in checklist.items"
+        v-for="item in localItems"
         :key="item.id"
         class="group flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted/40"
       >
+        <button
+          type="button"
+          class="checklist-item-handle cursor-grab rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground active:cursor-grabbing group-hover:opacity-100"
+          title="Glisser pour réordonner"
+        >
+          <GripVertical class="h-3.5 w-3.5" />
+        </button>
         <input
           type="checkbox"
           :checked="isItemDone(item)"
@@ -184,7 +240,7 @@ function saveName() {
           <X class="h-3.5 w-3.5" />
         </button>
       </li>
-    </ul>
+    </VueDraggable>
 
     <form class="flex items-center gap-2" @submit.prevent="addItem">
       <Input
@@ -197,3 +253,9 @@ function saveName() {
     </form>
   </section>
 </template>
+
+<style scoped>
+.checklist-item-ghost {
+  opacity: 0.4;
+}
+</style>
