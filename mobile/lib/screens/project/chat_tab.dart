@@ -29,6 +29,10 @@ class ChatTab extends StatefulWidget {
   State<ChatTab> createState() => _ChatTabState();
 }
 
+///
+/// Test de mise a jour
+///
+
 class _ChatTabState extends State<ChatTab> {
   late List<WorkspaceChatMessage> _messages;
   final _controller = TextEditingController();
@@ -397,7 +401,7 @@ class _ChatTabState extends State<ChatTab> {
             onAttach: _uploadAttachment,
             onChanged: (_) => _notifyTyping(),
             hintText: 'Message',
-          ),
+          ),          
       ],
     );
   }
