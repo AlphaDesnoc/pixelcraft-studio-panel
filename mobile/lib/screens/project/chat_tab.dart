@@ -3,18 +3,15 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/panel_api_extensions.dart';
-import '../../config/app_config.dart';
 import '../../models/attachment.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
 import '../../services/realtime_service.dart';
 import '../../services/reverb_service.dart';
-import '../../utils/format.dart';
 import '../../utils/typing_users.dart';
-import '../../widgets/reaction_bar.dart';
+import '../../widgets/chat_bubble.dart';
 
 class ChatTab extends StatefulWidget {
   const ChatTab({
@@ -33,6 +30,7 @@ class ChatTab extends StatefulWidget {
 class _ChatTabState extends State<ChatTab> {
   late List<WorkspaceChatMessage> _messages;
   final _controller = TextEditingController();
+  final _scrollController = ScrollController();
   bool _sending = false;
   WorkspaceChatMessage? _replyTo;
   int? _editingId;
@@ -71,6 +69,7 @@ class _ChatTabState extends State<ChatTab> {
             final message = WorkspaceChatMessage.fromJson(raw);
             if (_messages.any((m) => m.id == message.id)) return;
             setState(() => _messages = [..._messages, message]);
+            _scrollToBottom();
           },
           onMessageUpdated: (payload) {
             final raw = payload['message'];
@@ -138,7 +137,19 @@ class _ChatTabState extends State<ChatTab> {
     _liveSubscription?.dispose();
     _controller.dispose();
     _editController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   Future<void> _refresh() async {
@@ -146,6 +157,7 @@ class _ChatTabState extends State<ChatTab> {
       final messages = await context.read<AuthSession>().api.fetchChatMessages(_slug);
       if (!mounted) return;
       setState(() => _messages = messages);
+      _scrollToBottom();
     } catch (_) {}
   }
 
@@ -171,6 +183,7 @@ class _ChatTabState extends State<ChatTab> {
       );
       if (!mounted) return;
       setState(() => _messages = [..._messages, message]);
+      _scrollToBottom();
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -195,6 +208,7 @@ class _ChatTabState extends State<ChatTab> {
         _messages = [..._messages, message];
         _replyTo = null;
       });
+      _scrollToBottom();
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -256,12 +270,6 @@ class _ChatTabState extends State<ChatTab> {
     await _refresh();
   }
 
-  Future<void> _openAttachment(String? url) async {
-    if (url == null) return;
-    final uri = Uri.parse('${AppConfig.panelBaseUrl}$url');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -277,130 +285,78 @@ class _ChatTabState extends State<ChatTab> {
                     ],
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(12),
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final message = _messages[index];
                       final isMine = message.userId == _currentUserId;
                       final editing = _editingId == message.id;
 
-                      return Align(
-                        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          color: message.pinned
-                              ? Theme.of(context).colorScheme.secondaryContainer
-                              : null,
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        message.userName ?? 'Membre',
-                                        style: Theme.of(context).textTheme.labelLarge,
-                                      ),
+                      return ChatMessageRow(
+                        isMine: isMine,
+                        userName: message.userName ?? 'Membre',
+                        body: message.body,
+                        createdAt: message.createdAt,
+                        editedAt: message.editedAt,
+                        replyPreview: message.replyPreview,
+                        reactions: message.reactions,
+                        attachments: message.attachments,
+                        pinned: message.pinned,
+                        onToggleReaction: (emoji) =>
+                            _toggleReaction(message, emoji),
+                        trailing: PopupMenuButton<String>(
+                          icon: Icon(
+                            Icons.more_vert,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          padding: EdgeInsets.zero,
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'reply', child: Text('Répondre')),
+                            if (message.canEdit)
+                              const PopupMenuItem(value: 'edit', child: Text('Modifier')),
+                            if (message.canEdit)
+                              const PopupMenuItem(value: 'delete', child: Text('Supprimer')),
+                            if (_canWrite)
+                              PopupMenuItem(
+                                value: 'pin',
+                                child: Text(message.pinned ? 'Désépingler' : 'Épingler'),
+                              ),
+                          ],
+                          onSelected: (value) {
+                            switch (value) {
+                              case 'reply':
+                                _setReply(message);
+                              case 'edit':
+                                setState(() {
+                                  _editingId = message.id;
+                                  _editController.text = message.body;
+                                });
+                              case 'delete':
+                                _deleteMessage(message);
+                              case 'pin':
+                                _pinMessage(message);
+                            }
+                          },
+                        ),
+                        editingChild: editing
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _editController,
+                                      minLines: 1,
+                                      maxLines: 4,
                                     ),
-                                    if (message.pinned)
-                                      const Icon(Icons.push_pin, size: 16),
-                                    PopupMenuButton<String>(
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(value: 'reply', child: Text('Répondre')),
-                                        if (message.canEdit)
-                                          const PopupMenuItem(value: 'edit', child: Text('Modifier')),
-                                        if (message.canEdit)
-                                          const PopupMenuItem(value: 'delete', child: Text('Supprimer')),
-                                        if (_canWrite)
-                                          PopupMenuItem(
-                                            value: 'pin',
-                                            child: Text(message.pinned ? 'Désépingler' : 'Épingler'),
-                                          ),
-                                      ],
-                                      onSelected: (value) {
-                                        switch (value) {
-                                          case 'reply':
-                                            _setReply(message);
-                                          case 'edit':
-                                            setState(() {
-                                              _editingId = message.id;
-                                              _editController.text = message.body;
-                                            });
-                                          case 'delete':
-                                            _deleteMessage(message);
-                                          case 'pin':
-                                            _pinMessage(message);
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                                if (message.replyPreview != null) ...[
-                                  const SizedBox(height: 6),
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      '${message.replyPreview!.userName ?? ''}: ${message.replyPreview!.body}',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context).textTheme.labelSmall,
-                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.check),
+                                    onPressed: () => _saveEdit(message),
                                   ),
                                 ],
-                                const SizedBox(height: 4),
-                                if (editing)
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _editController,
-                                          minLines: 1,
-                                          maxLines: 4,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.check),
-                                        onPressed: () => _saveEdit(message),
-                                      ),
-                                    ],
-                                  )
-                                else if (message.body.isNotEmpty)
-                                  Text(message.body),
-                                ...message.attachments.map(
-                                  (a) => ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                    leading: const Icon(Icons.attach_file, size: 18),
-                                    title: Text(a.originalName),
-                                    onTap: () => _openAttachment(a.url),
-                                  ),
-                                ),
-                                ReactionBar(
-                                  reactions: message.reactions,
-                                  onToggle: (emoji) => _toggleReaction(message, emoji),
-                                  compact: true,
-                                ),
-                                if (message.createdAt != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                      [
-                                        formatRelativeTime(message.createdAt),
-                                        if (message.editedAt != null) '(modifié)',
-                                      ].join(' '),
-                                      style: Theme.of(context).textTheme.labelSmall,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
+                              )
+                            : null,
                       );
                     },
                   ),

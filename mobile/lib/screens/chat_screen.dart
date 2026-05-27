@@ -3,10 +3,8 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../api/panel_api_extensions.dart';
-import '../config/app_config.dart';
 import '../models/conversation.dart';
 import '../models/direct_message.dart';
 import '../services/auth_session.dart';
@@ -14,7 +12,7 @@ import '../services/realtime_service.dart';
 import '../services/reverb_service.dart';
 import '../utils/format.dart';
 import '../utils/typing_users.dart';
-import '../widgets/reaction_bar.dart';
+import '../widgets/chat_bubble.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -200,12 +198,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<void> _openAttachment(String? url) async {
-    if (url == null) return;
-    final uri = Uri.parse('${AppConfig.panelBaseUrl}$url');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -233,76 +225,24 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? Center(child: Text(_error!))
                     : ListView.builder(
                         controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isMine = message.user?.id == currentUserId;
 
-                          return Align(
-                            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
-                              decoration: BoxDecoration(
-                                color: isMine
-                                    ? Theme.of(context).colorScheme.primaryContainer
-                                    : const Color(0xFF27272A),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Column(
-                                crossAxisAlignment:
-                                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                                children: [
-                                  if (message.replyPreview != null)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 6),
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black26,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '${message.replyPreview!.userName ?? ''}: ${message.replyPreview!.body}',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context).textTheme.labelSmall,
-                                      ),
-                                    ),
-                                  if (message.body.isNotEmpty) Text(message.body),
-                                  ...message.attachments.map(
-                                    (a) => ListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      dense: true,
-                                      leading: const Icon(Icons.attach_file, size: 18),
-                                      title: Text(a.originalName),
-                                      onTap: () => _openAttachment(a.url),
-                                    ),
-                                  ),
-                                  ReactionBar(
-                                    reactions: message.reactions,
-                                    onToggle: (emoji) => _toggleReaction(message, emoji),
-                                    compact: true,
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        formatRelativeTime(message.createdAt),
-                                        style: Theme.of(context).textTheme.labelSmall,
-                                      ),
-                                      IconButton(
-                                        visualDensity: VisualDensity.compact,
-                                        iconSize: 16,
-                                        icon: const Icon(Icons.reply),
-                                        onPressed: () => setState(() => _replyTo = message),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
+                          return ChatMessageRow(
+                            isMine: isMine,
+                            userName: message.user?.name ?? 'Utilisateur',
+                            body: message.body,
+                            createdAt: message.createdAt,
+                            replyPreview: message.replyPreview,
+                            reactions: message.reactions,
+                            attachments: message.attachments,
+                            isRead: isMine ? message.isRead : null,
+                            onToggleReaction: (emoji) =>
+                                _toggleReaction(message, emoji),
+                            onReply: () => setState(() => _replyTo = message),
                           );
                         },
                       ),
