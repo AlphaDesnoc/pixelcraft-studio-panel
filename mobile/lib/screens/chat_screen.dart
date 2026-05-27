@@ -12,7 +12,9 @@ import '../services/realtime_service.dart';
 import '../services/reverb_service.dart';
 import '../utils/format.dart';
 import '../utils/typing_users.dart';
+import '../widgets/chat_actions.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/chat_composer.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -215,7 +217,26 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUserId = context.watch<AuthSession>().user?.id;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              child: Text(initialsFromName(title)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -225,11 +246,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     ? Center(child: Text(_error!))
                     : ListView.builder(
                         controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                        padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isMine = message.user?.id == currentUserId;
+                          final prev =
+                              index > 0 ? _messages[index - 1] : null;
+                          final next = index < _messages.length - 1
+                              ? _messages[index + 1]
+                              : null;
+                          final clusterStart = prev == null ||
+                              prev.user?.id != message.user?.id;
+                          final clusterEnd = next == null ||
+                              next.user?.id != message.user?.id;
 
                           return ChatMessageRow(
                             isMine: isMine,
@@ -240,74 +270,38 @@ class _ChatScreenState extends State<ChatScreen> {
                             reactions: message.reactions,
                             attachments: message.attachments,
                             isRead: isMine ? message.isRead : null,
+                            clusterStart: clusterStart,
+                            clusterEnd: clusterEnd,
                             onToggleReaction: (emoji) =>
                                 _toggleReaction(message, emoji),
-                            onReply: () => setState(() => _replyTo = message),
+                            onLongPress: () => showChatMessageActions(
+                              context,
+                              onReply: () =>
+                                  setState(() => _replyTo = message),
+                              onReact: () => showReactionPicker(
+                                context,
+                                (emoji) => _toggleReaction(message, emoji),
+                              ),
+                            ),
                           );
                         },
                       ),
           ),
           if (_replyTo != null)
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: ListTile(
-                dense: true,
-                title: Text('Réponse à ${ _replyTo!.user?.name ?? ''}'),
-                subtitle: Text(_replyTo!.body, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(() => _replyTo = null),
-                ),
-              ),
+            ChatReplyBar(
+              authorName: _replyTo!.user?.name ?? '',
+              body: _replyTo!.body,
+              onClose: () => setState(() => _replyTo = null),
             ),
           if (_typingUsers.label != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _typingUsers.label!,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                ),
-              ),
-            ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: _sending ? null : _uploadAttachment,
-                    icon: const Icon(Icons.attach_file),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      decoration: const InputDecoration(hintText: 'Écrire un message…'),
-                      onChanged: (_) => _notifyTyping(),
-                      onSubmitted: (_) => _send(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: _sending ? null : _send,
-                    icon: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
-                  ),
-                ],
-              ),
-            ),
+            ChatTypingIndicator(label: _typingUsers.label!),
+          ChatComposer(
+            controller: _controller,
+            sending: _sending,
+            onSend: _send,
+            onAttach: _uploadAttachment,
+            onChanged: (_) => _notifyTyping(),
+            hintText: 'Message',
           ),
         ],
       ),

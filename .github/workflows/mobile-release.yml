@@ -94,6 +94,14 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
             "../pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk"
 
+      - name: Write update manifest
+        run: |
+          {
+            echo "version=${{ steps.version.outputs.version_name }}"
+            echo "build=${{ steps.version.outputs.build_number }}"
+            echo "apk=https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk"
+          } > ../update-manifest.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -113,9 +121,14 @@ jobs:
             2. Autorisez l'installation depuis sources inconnues (Android)
             3. Connectez-vous avec votre compte panel
 
+            ### Mise à jour automatique in-app
+
+            L'app Android lit `update-manifest.txt` (ci-joint) au démarrage et propose la mise à jour si le build est plus récent.
+
             > APK signé debug par défaut. Pour Play Store, ajoutez les secrets `ANDROID_KEYSTORE_*` au dépôt.
           files: |
             pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk
+            update-manifest.txt
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
