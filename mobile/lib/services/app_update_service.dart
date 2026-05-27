@@ -44,8 +44,11 @@ class AppUpdateService {
         currentVersion: package.version,
         currentBuild: currentBuild,
       );
-    } catch (_) {
-      // Ne bloque jamais le démarrage si le manifeste est injoignable.
+    } catch (error, stackTrace) {
+      assert(() {
+        debugPrint('AppUpdateService: $error\n$stackTrace');
+        return true;
+      }());
     }
   }
 
@@ -54,7 +57,13 @@ class AppUpdateService {
       BaseOptions(
         connectTimeout: const Duration(seconds: 12),
         receiveTimeout: const Duration(seconds: 12),
-        headers: {'Accept': 'text/plain'},
+        followRedirects: true,
+        maxRedirects: 5,
+        validateStatus: (status) => status != null && status >= 200 && status < 400,
+        headers: {
+          'Accept': 'text/plain, */*',
+          'User-Agent': AppConfig.mobileUserAgentSuffix,
+        },
       ),
     );
 
@@ -62,7 +71,13 @@ class AppUpdateService {
     final body = response.data;
     if (body == null || body.trim().isEmpty) return null;
 
-      return _parseManifest(body);
+    // GitHub peut renvoyer une page HTML si l'asset est absent.
+    if (body.trimLeft().startsWith('<!DOCTYPE') ||
+        body.trimLeft().startsWith('<html')) {
+      return null;
+    }
+
+    return _parseManifest(body);
   }
 
   /// Exposé pour les tests unitaires.
@@ -112,6 +127,7 @@ class AppUpdateService {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Mise à jour disponible'),
         content: Text(
