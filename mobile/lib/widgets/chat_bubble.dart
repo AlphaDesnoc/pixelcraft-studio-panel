@@ -114,13 +114,15 @@ class ChatMessageRow extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
-      child: Align(
-        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        heightFactor: 1,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
+      child: SizedBox(
+        width: double.infinity,
+        child: Align(
+          alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+          heightFactor: 1,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
           if (groupChat && !isMine)
             SizedBox(
               width: 32,
@@ -184,6 +186,7 @@ class ChatMessageRow extends StatelessWidget {
             ),
           ),
           ],
+        ),
         ),
       ),
     );
@@ -312,19 +315,16 @@ class _ChatBubble extends StatelessWidget {
                 ),
               if (!showBody && attachments.isEmpty)
                 const SizedBox.shrink(),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _MetaRow(
-                    createdAt: createdAt,
-                    editedAt: editedAt,
-                    isRead: isMine ? isRead : null,
-                    pinned: pinned,
-                    metaColor: metaColor,
-                    scheme: scheme,
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: _MetaRow(
+                  createdAt: createdAt,
+                  editedAt: editedAt,
+                  isRead: isMine ? isRead : null,
+                  pinned: pinned,
+                  metaColor: metaColor,
+                  scheme: scheme,
+                ),
               ),
             ],
           ],
