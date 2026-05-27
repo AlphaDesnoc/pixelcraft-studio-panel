@@ -11,10 +11,12 @@ import 'services/app_update_service.dart';
 import 'services/auth_session.dart';
 import 'services/realtime_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/system_ui.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR');
+  await configureSystemUi();
   runApp(const PixelCraftPanelApp());
 }
 

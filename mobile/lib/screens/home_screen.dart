@@ -121,13 +121,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ProfileScreen(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) {
-          setState(() => _index = value);
-          if (value == 2 || value == 3) _loadBadges();
-        },
-        destinations: [
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (value) {
+            setState(() => _index = value);
+            if (value == 2 || value == 3) _loadBadges();
+          },
+          destinations: [
           const NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
@@ -166,6 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Compte',
           ),
         ],
+        ),
       ),
     );
   }

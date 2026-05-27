@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/system_ui.dart';
+
 class ChatReplyBar extends StatelessWidget {
   const ChatReplyBar({
     super.key,
@@ -90,11 +92,14 @@ class ChatComposer extends StatelessWidget {
 
     return Material(
       color: scheme.surface,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
-          child: Row(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          6,
+          6,
+          6,
+          8 + bottomSafePadding(context),
+        ),
+        child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               IconButton(
@@ -167,7 +172,6 @@ class ChatComposer extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }
