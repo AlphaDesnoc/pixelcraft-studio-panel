@@ -50,7 +50,6 @@ class _AppRootState extends State<_AppRoot> {
         realtime.start();
       }
       _session!.addListener(_onSessionChanged);
-      AppUpdateService.checkOnStartup(context);
     });
   }
 
@@ -86,8 +85,22 @@ class _AppRootState extends State<_AppRoot> {
   }
 }
 
-class _RootScreen extends StatelessWidget {
+class _RootScreen extends StatefulWidget {
   const _RootScreen();
+
+  @override
+  State<_RootScreen> createState() => _RootScreenState();
+}
+
+class _RootScreenState extends State<_RootScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AppUpdateService.checkOnStartup(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
