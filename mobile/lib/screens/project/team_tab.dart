@@ -46,6 +46,7 @@ class _TeamTabState extends State<TeamTab> {
   }
 
   Future<void> _removeMember(TeamMember member) async {
+    final api = context.read<AuthSession>().api;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -65,7 +66,7 @@ class _TeamTabState extends State<TeamTab> {
     );
     if (confirmed != true) return;
 
-    await context.read<AuthSession>().api.removeTeamMember(
+    await api.removeTeamMember(
           projectSlug: widget.projectSlug,
           userId: member.id,
         );
@@ -84,7 +85,7 @@ class _TeamTabState extends State<TeamTab> {
       child: ListView.separated(
         padding: const EdgeInsets.all(12),
         itemCount: _members.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final member = _members[index];
           return ListTile(

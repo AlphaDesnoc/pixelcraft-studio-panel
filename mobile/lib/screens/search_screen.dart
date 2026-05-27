@@ -109,7 +109,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ? Center(child: Text(_error!))
               : ListView.separated(
                   itemCount: _results.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final result = _results[index];
                     return ListTile(
@@ -208,7 +208,7 @@ class _MyTasksTabState extends State<MyTasksTab> {
       onRefresh: _load,
       child: ListView.separated(
         itemCount: _tasks.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
+        separatorBuilder: (context, index) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final task = _tasks[index];
           return ListTile(

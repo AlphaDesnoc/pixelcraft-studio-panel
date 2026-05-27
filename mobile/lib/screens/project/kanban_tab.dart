@@ -15,6 +15,7 @@ class KanbanTab extends StatelessWidget {
   final Future<void> Function() onChanged;
 
   Future<void> _createTask(BuildContext context, KanbanList list) async {
+    final api = context.read<AuthSession>().api;
     final titleController = TextEditingController();
     final created = await showDialog<bool>(
       context: context,
@@ -40,7 +41,7 @@ class KanbanTab extends StatelessWidget {
 
     if (created != true || titleController.text.trim().isEmpty) return;
 
-    await context.read<AuthSession>().api.createTask(
+    await api.createTask(
           projectSlug: workspace.project.slug,
           listId: list.id,
           title: titleController.text.trim(),
@@ -49,6 +50,7 @@ class KanbanTab extends StatelessWidget {
   }
 
   Future<void> _openTask(BuildContext context, KanbanTask task) async {
+    final api = context.read<AuthSession>().api;
     final titleController = TextEditingController(text: task.title);
     final descriptionController = TextEditingController(text: task.description);
 
@@ -90,7 +92,7 @@ class KanbanTab extends StatelessWidget {
 
     if (saved != true || !workspace.canWrite('kanban')) return;
 
-    await context.read<AuthSession>().api.updateTask(
+    await api.updateTask(
           projectSlug: workspace.project.slug,
           taskId: task.id,
           fields: {

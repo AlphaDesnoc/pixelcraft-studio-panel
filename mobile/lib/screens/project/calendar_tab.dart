@@ -20,6 +20,7 @@ class CalendarTab extends StatelessWidget {
   final Future<void> Function() onChanged;
 
   Future<void> _createEvent(BuildContext context) async {
+    final api = context.read<AuthSession>().api;
     final titleController = TextEditingController();
     final now = DateTime.now();
     final start = now.toIso8601String();
@@ -48,7 +49,7 @@ class CalendarTab extends StatelessWidget {
 
     if (created != true || titleController.text.trim().isEmpty) return;
 
-    await context.read<AuthSession>().api.createEvent(
+    await api.createEvent(
           projectSlug: projectSlug,
           title: titleController.text.trim(),
           startAt: start,
@@ -75,7 +76,7 @@ class CalendarTab extends StatelessWidget {
             : ListView.separated(
                 padding: const EdgeInsets.all(12),
                 itemCount: sorted.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final event = sorted[index];
                   return Card(
