@@ -111,44 +111,51 @@ class ChatMessageRow extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
-      child: Row(
-        mainAxisAlignment:
-            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (groupChat && !isMine)
-            SizedBox(
-              width: 32,
-              child: _showAvatar
-                  ? Padding(
-                      padding: const EdgeInsets.only(bottom: 2, right: 6),
-                      child: _Avatar(name: userName, radius: 14),
-                    )
-                  : null,
-            ),
-          Flexible(
-            child: ConstrainedBox(
+      child: Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment:
+              isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (groupChat && !isMine)
+              SizedBox(
+                width: 32,
+                child: _showAvatar
+                    ? Padding(
+                        padding: const EdgeInsets.only(bottom: 2, right: 6),
+                        child: _Avatar(name: userName, radius: 14),
+                      )
+                    : null,
+              ),
+            ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxWidth),
               child: GestureDetector(
                 onLongPress: onLongPress ?? onReply,
                 child: Column(
-                  crossAxisAlignment:
-                      isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: isMine
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
                   children: [
                     if (_showSenderName)
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
                         child: Text(
                           userName,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12.5,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12.5,
+                                  ),
                         ),
                       ),
                     Stack(
                       clipBehavior: Clip.none,
+                      alignment: Alignment.bottomCenter,
                       children: [
                         _ChatBubble(
                           isMine: isMine,
@@ -183,8 +190,8 @@ class ChatMessageRow extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -289,6 +296,7 @@ class _ChatBubble extends StatelessWidget {
           hasMedia ? 4 : 5,
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (replyPreview != null) ...[
@@ -512,6 +520,7 @@ class _AttachmentList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: attachments.map((attachment) {
         final url = chatAttachmentUrl(attachment.url);
@@ -522,31 +531,22 @@ class _AttachmentList extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               onTap: () => _openUrl(url),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 240, minWidth: 180),
-                child: Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return SizedBox(
-                      height: 160,
-                      width: double.infinity,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: progress.expectedTotalBytes != null
-                              ? progress.cumulativeBytesLoaded /
-                                  progress.expectedTotalBytes!
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return _FileLink(name: attachment.originalName, url: url);
-                  },
-                ),
+              child: Image.network(
+                url,
+                width: 240,
+                height: 180,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const SizedBox(
+                    width: 240,
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return _FileLink(name: attachment.originalName, url: url);
+                },
               ),
             ),
           );
