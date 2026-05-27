@@ -5,6 +5,7 @@ import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import UpdatePasswordForm from "./Partials/UpdatePasswordForm.vue";
 import NotificationPreferencesForm from "./Partials/NotificationPreferencesForm.vue";
 import TwoFactorSetup from "./Partials/TwoFactorSetup.vue";
+import DesktopAppPromo from "@/Components/DesktopAppPromo.vue";
 import { Avatar } from "@/Components/ui/avatar";
 import {
   Card,
@@ -108,6 +109,10 @@ const initials = computed(() => {
 
       <div class="lg:col-span-2">
         <TwoFactorSetup :enabled="two_factor_enabled" />
+      </div>
+
+      <div class="lg:col-span-2">
+        <DesktopAppPromo variant="card" />
       </div>
     </div>
   </AuthenticatedLayout>

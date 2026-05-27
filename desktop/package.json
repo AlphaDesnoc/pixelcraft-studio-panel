@@ -1,0 +1,49 @@
+{
+  "name": "pixelcraft-studio-panel-desktop",
+  "version": "1.0.0",
+  "description": "Application bureau PixelCraft Studio Panel — panel web complet en fenêtre native",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:local": "cross-env PANEL_URL=http://127.0.0.1:8000 electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "publish:win": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "fr.pixelcraftstudios.panel",
+    "productName": "PixelCraft Panel",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "AlphaDesnoc",
+      "repo": "pixelcraft-studio-panel",
+      "releaseType": "release"
+    }
+  }
+}
