@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/app_config.dart';
 import '../models/attachment.dart';
+import '../services/auth_session.dart';
 import '../utils/format.dart';
+import 'chat_attachment_image.dart';
 import 'reaction_bar.dart';
 
 bool chatShouldShowBody(String body, List<PanelAttachment> attachments) {
@@ -111,11 +114,13 @@ class ChatMessageRow extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
-      child: Row(
-        mainAxisAlignment:
-            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
+      child: Align(
+        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+        heightFactor: 1,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
           if (groupChat && !isMine)
             SizedBox(
               width: 32,
@@ -178,7 +183,8 @@ class ChatMessageRow extends StatelessWidget {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -282,47 +288,46 @@ class _ChatBubble extends StatelessWidget {
           hasMedia ? 4 : 8,
           hasMedia ? 4 : 5,
         ),
-        child: IntrinsicWidth(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (replyPreview != null) ...[
-                _ReplyPreview(preview: replyPreview!, isMine: isMine),
-                const SizedBox(height: 4),
-              ],
-              if (editingChild != null)
-                editingChild!
-              else ...[
-                if (showBody)
-                  _MessageText(
-                    body: body,
-                    emojiOnly: emojiOnly,
-                    textColor: textColor,
-                  ),
-                if (attachments.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(top: showBody ? 4 : 0),
-                    child: _AttachmentList(attachments: attachments),
-                  ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  heightFactor: 1,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 2, left: 8),
-                    child: _MetaRow(
-                      createdAt: createdAt,
-                      editedAt: editedAt,
-                      isRead: isMine ? isRead : null,
-                      pinned: pinned,
-                      metaColor: metaColor,
-                      scheme: scheme,
-                    ),
-                  ),
-                ),
-              ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (replyPreview != null) ...[
+              _ReplyPreview(preview: replyPreview!, isMine: isMine),
+              const SizedBox(height: 4),
             ],
-          ),
+            if (editingChild != null)
+              editingChild!
+            else ...[
+              if (showBody)
+                _MessageText(
+                  body: body,
+                  emojiOnly: emojiOnly,
+                  textColor: textColor,
+                ),
+              if (attachments.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: showBody ? 4 : 0),
+                  child: _AttachmentList(attachments: attachments),
+                ),
+              if (!showBody && attachments.isEmpty)
+                const SizedBox.shrink(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _MetaRow(
+                    createdAt: createdAt,
+                    editedAt: editedAt,
+                    isRead: isMine ? isRead : null,
+                    pinned: pinned,
+                    metaColor: metaColor,
+                    scheme: scheme,
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -510,55 +515,46 @@ class _AttachmentList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: attachments.map((attachment) {
-        final url = chatAttachmentUrl(attachment.url);
-        if (url.isEmpty) return const SizedBox.shrink();
-
-        if (chatIsImageAttachment(attachment)) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: InkWell(
-              onTap: () => _openUrl(url),
-              child: AspectRatio(
-                aspectRatio: 4 / 3,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 260),
-                  child: Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    loadingBuilder: (context, child, progress) {
-                      if (progress == null) return child;
-                      return ColoredBox(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        child: const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return _FileLink(
-                        name: attachment.originalName,
-                        url: url,
-                      );
-                    },
-                  ),
+    return FutureBuilder<String?>(
+      future: context.read<AuthSession>().api.client.readToken(),
+      builder: (context, snapshot) {
+        final token = snapshot.data;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: attachments.map((attachment) {
+            final url = chatAttachmentUrl(attachment.url);
+            if (url.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  attachment.originalName,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 13,
+                      ),
                 ),
-              ),
-            ),
-          );
-        }
+              );
+            }
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: _FileLink(name: attachment.originalName, url: url),
+            if (chatIsImageAttachment(attachment)) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: ChatAttachmentImage(
+                  url: url,
+                  name: attachment.originalName,
+                  token: token,
+                  onOpen: () => _openUrl(url),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _FileLink(name: attachment.originalName, url: url),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 
