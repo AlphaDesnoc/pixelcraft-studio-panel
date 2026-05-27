@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\CalendarEvent;
 use App\Models\Project;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,14 +14,15 @@ use Illuminate\Validation\Rule;
 class CalendarEventController extends Controller
 {
     use EnsuresProjectFeature;
+    use RespondsForApi;
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'calendar');
 
         $validated = $this->validateData($request);
 
-        $project->events()->create([
+        $event = $project->events()->create([
             'creator_id' => $request->user()->id,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
@@ -30,10 +33,10 @@ class CalendarEventController extends Controller
             'rank_id' => $validated['rank_id'] ?? null,
         ]);
 
-        return back();
+        return $this->apiOrBack($request, ['event' => $this->eventPayload($event)]);
     }
 
-    public function update(Request $request, Project $project, CalendarEvent $event): RedirectResponse
+    public function update(Request $request, Project $project, CalendarEvent $event): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'calendar');
         abort_unless($event->project_id === $project->id, 404);
@@ -49,17 +52,34 @@ class CalendarEventController extends Controller
             'color' => $validated['color'] ?? $event->color,
         ]);
 
-        return back();
+        return $this->apiOrBack($request, ['event' => $this->eventPayload($event->fresh())]);
     }
 
-    public function destroy(Request $request, Project $project, CalendarEvent $event): RedirectResponse
+    public function destroy(Request $request, Project $project, CalendarEvent $event): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'calendar');
         abort_unless($event->project_id === $project->id, 404);
 
+        $eventId = $event->id;
         $event->delete();
 
-        return back();
+        return $this->apiOrBack($request, ['event_id' => $eventId]);
+    }
+
+    /** @return array<string, mixed> */
+    private function eventPayload(CalendarEvent $event): array
+    {
+        return [
+            'id' => $event->id,
+            'title' => $event->title,
+            'description' => $event->description,
+            'start_at' => optional($event->start_at)?->toIso8601String(),
+            'end_at' => optional($event->end_at)?->toIso8601String(),
+            'all_day' => (bool) $event->all_day,
+            'color' => $event->color,
+            'creator_id' => $event->creator_id,
+            'rank_id' => $event->rank_id,
+        ];
     }
 
     private function validateData(Request $request): array

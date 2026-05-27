@@ -8,16 +8,29 @@ use App\Models\Project;
 use App\Models\Task;
 use App\Support\BugSla;
 use App\Support\ProjectAccess;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RankDashboardController extends Controller
 {
-    public function index(Request $request, Project $project): Response
+    public function index(Request $request, Project $project): Response|JsonResponse
     {
         ProjectAccess::ensureAccess($request->user(), $project);
 
+        $payload = $this->buildPayload($project);
+
+        if ($request->is('api/*') || $request->expectsJson()) {
+            return response()->json($payload);
+        }
+
+        return Inertia::render('Projects/RankDashboard', $payload);
+    }
+
+    /** @return array<string, mixed> */
+    public function buildPayload(Project $project): array
+    {
         $since = now()->subDays(14);
 
         $ranks = $project->ranks()
@@ -103,13 +116,13 @@ class RankDashboardController extends Controller
                 ];
             });
 
-        return Inertia::render('Projects/RankDashboard', [
+        return [
             'project' => [
                 'id' => $project->id,
                 'name' => $project->name,
                 'slug' => $project->slug,
             ],
             'ranks' => $ranks,
-        ]);
+        ];
     }
 }

@@ -35,6 +35,7 @@ use App\Http\Controllers\DirectMessageReactionController;
 use App\Http\Controllers\ProfileThemeController;
 use App\Http\Controllers\ProfileDashboardWidgetsController;
 use App\Http\Controllers\TaskTemplateController;
+use App\Http\Controllers\Api\PanelSessionController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,9 @@ Route::get('/', function () {
         ? redirect()->route('dashboard')
         : redirect()->route('login');
 });
+
+Route::get('/mobile/enter/{token}', [PanelSessionController::class, 'enter'])
+    ->name('mobile.enter');
 
 Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');

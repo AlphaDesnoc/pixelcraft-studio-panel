@@ -1,0 +1,98 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
+import 'services/auth_session.dart';
+import 'services/realtime_service.dart';
+import 'theme/app_theme.dart';
+
+void main() {
+  runApp(const PixelCraftPanelApp());
+}
+
+class PixelCraftPanelApp extends StatelessWidget {
+  const PixelCraftPanelApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthSession()..bootstrap()),
+        ChangeNotifierProvider(create: (_) => RealtimeService()),
+      ],
+      child: const _AppRoot(),
+    );
+  }
+}
+
+class _AppRoot extends StatefulWidget {
+  const _AppRoot();
+
+  @override
+  State<_AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<_AppRoot> {
+  AuthSession? _session;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _session = context.read<AuthSession>();
+      final realtime = context.read<RealtimeService>();
+      if (_session!.isAuthenticated) {
+        realtime.start();
+      }
+      _session!.addListener(_onSessionChanged);
+    });
+  }
+
+  void _onSessionChanged() {
+    if (_session == null || !mounted) return;
+    final realtime = context.read<RealtimeService>();
+    if (_session!.isAuthenticated) {
+      realtime.start();
+    } else {
+      realtime.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _session?.removeListener(_onSessionChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'PixelCraft Panel',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.dark,
+      home: const _RootScreen(),
+    );
+  }
+}
+
+class _RootScreen extends StatelessWidget {
+  const _RootScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<AuthSession>();
+
+    if (session.bootstrapping) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (session.isAuthenticated) {
+      return const HomeScreen();
+    }
+
+    return const LoginScreen();
+  }
+}

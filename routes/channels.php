@@ -11,6 +11,7 @@ use App\Support\ProjectPermissions;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::routes(['middleware' => ['web', 'auth']]);
+Broadcast::routes(['middleware' => ['auth:sanctum'], 'prefix' => 'api/v1', 'as' => 'api.']);
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;

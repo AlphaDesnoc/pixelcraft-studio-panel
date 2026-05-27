@@ -34,6 +34,8 @@ class PanelNotifier
 
         UserNotificationSent::dispatch($notification);
 
+        PushNotifier::send($notification);
+
         return $notification;
     }
 

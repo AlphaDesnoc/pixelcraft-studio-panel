@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Project;
 use App\Models\Rank;
 use App\Models\Task;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,7 +15,21 @@ use Inertia\Response;
 
 class RankController extends Controller
 {
-    public function index(Request $request, Project $project): Response
+    use RespondsForApi;
+
+    public function index(Request $request, Project $project): Response|JsonResponse
+    {
+        $payload = $this->buildIndexPayload($request, $project);
+
+        if ($request->is('api/*') || $request->expectsJson()) {
+            return response()->json($payload);
+        }
+
+        return Inertia::render('Projects/Ranks', $payload);
+    }
+
+    /** @return array<string, mixed> */
+    public function buildIndexPayload(Request $request, Project $project): array
     {
         $user = $request->user();
         $isAdmin = $user->is_admin;
@@ -39,7 +55,7 @@ class RankController extends Controller
             ->map(fn ($rank) => $this->serializeRank($rank, $user))
             ->values();
 
-        return Inertia::render('Projects/Ranks', [
+        return [
             'project' => [
                 'id' => $project->id,
                 'name' => $project->name,
@@ -50,10 +66,10 @@ class RankController extends Controller
             'ranks' => $ranks,
             'members' => $members,
             'canEdit' => $isAdmin,
-        ]);
+        ];
     }
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureCanEdit($request, $project);
 
@@ -65,7 +81,7 @@ class RankController extends Controller
 
         $maxPos = (int) $project->ranks()->max('position');
 
-        $project->ranks()->create([
+        $rank = $project->ranks()->create([
             'name' => $validated['name'],
             'slug' => Rank::uniqueSlug($project->id, $validated['name']),
             'description' => $validated['description'] ?? null,
@@ -73,10 +89,12 @@ class RankController extends Controller
             'position' => $maxPos + 1,
         ]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+        ]);
     }
 
-    public function update(Request $request, Project $project, Rank $rank): RedirectResponse
+    public function update(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
     {
         $this->ensureCanEdit($request, $project);
         abort_unless($rank->project_id === $project->id, 404);
@@ -107,14 +125,17 @@ class RankController extends Controller
             $rank->update($update);
         }
 
-        return back();
+        return $this->apiOrBack($request, [
+            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+        ]);
     }
 
-    public function destroy(Request $request, Project $project, Rank $rank): RedirectResponse
+    public function destroy(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
     {
         $this->ensureCanEdit($request, $project);
         abort_unless($rank->project_id === $project->id, 404);
 
+        $rankId = $rank->id;
         $rank->delete();
 
         $project->ranks()
@@ -122,10 +143,10 @@ class RankController extends Controller
             ->get()
             ->each(fn ($r, $idx) => $r->update(['position' => $idx]));
 
-        return back();
+        return $this->apiOrBack($request, ['rank_id' => $rankId]);
     }
 
-    public function addMember(Request $request, Project $project, Rank $rank): RedirectResponse
+    public function addMember(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
     {
         $this->ensureCanManageRankMembers($request, $project, $rank);
         abort_unless($rank->project_id === $project->id, 404);
@@ -142,10 +163,12 @@ class RankController extends Controller
 
         $rank->members()->syncWithoutDetaching([$validated['user_id']]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+        ]);
     }
 
-    public function removeMember(Request $request, Project $project, Rank $rank, int $userId): RedirectResponse
+    public function removeMember(Request $request, Project $project, Rank $rank, int $userId): JsonResponse|RedirectResponse
     {
         $this->ensureCanManageRankMembers($request, $project, $rank);
         abort_unless($rank->project_id === $project->id, 404);
@@ -159,10 +182,12 @@ class RankController extends Controller
             $rank->update(['responsible_id' => null]);
         }
 
-        return back();
+        return $this->apiOrBack($request, [
+            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+        ]);
     }
 
-    public function setResponsible(Request $request, Project $project, Rank $rank): RedirectResponse
+    public function setResponsible(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
     {
         $this->ensureCanEdit($request, $project);
         abort_unless($rank->project_id === $project->id, 404);
@@ -183,17 +208,21 @@ class RankController extends Controller
 
         $rank->update(['responsible_id' => $userId]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+        ]);
     }
 
-    public function toggleBugs(Request $request, Project $project, Rank $rank): RedirectResponse
+    public function toggleBugs(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
     {
         $this->ensureCanEdit($request, $project);
         abort_unless($rank->project_id === $project->id, 404);
 
         $rank->update(['manages_bugs' => ! $rank->manages_bugs]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+        ]);
     }
 
     private function ensureDefaultRanks(Project $project): void

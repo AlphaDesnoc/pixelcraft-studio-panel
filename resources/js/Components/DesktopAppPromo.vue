@@ -22,7 +22,10 @@ const page = usePage();
 
 const downloadUrl = computed(() => page.props.desktop?.downloadUrl ?? "");
 const isDesktop = computed(() => Boolean(page.props.desktop?.isDesktop));
-const showPromo = computed(() => !isDesktop.value && Boolean(downloadUrl.value));
+const isMobileApp = computed(() => Boolean(page.props.mobile?.isMobileApp));
+const showPromo = computed(
+  () => !isDesktop.value && !isMobileApp.value && Boolean(downloadUrl.value),
+);
 </script>
 
 <template>

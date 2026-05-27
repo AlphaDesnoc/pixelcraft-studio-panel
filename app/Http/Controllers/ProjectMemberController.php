@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\AuditLogger;
 use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,8 +17,9 @@ use Illuminate\Validation\Rule;
 class ProjectMemberController extends Controller
 {
     use EnsuresProjectFeature;
+    use RespondsForApi;
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
@@ -63,10 +66,17 @@ class ProjectMemberController extends Controller
             $request,
         );
 
-        return back();
+        return $this->apiOrBack($request, [
+            'member' => [
+                'id' => $member->id,
+                'name' => $member->name,
+                'email' => $member->email,
+                'role' => $role,
+            ],
+        ]);
     }
 
-    public function update(Request $request, Project $project, User $user): RedirectResponse
+    public function update(Request $request, Project $project, User $user): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
@@ -118,10 +128,15 @@ class ProjectMemberController extends Controller
             );
         }
 
-        return back();
+        return $this->apiOrBack($request, [
+            'member' => [
+                'id' => $user->id,
+                'role' => $validated['role'],
+            ],
+        ]);
     }
 
-    public function permissions(Request $request, Project $project, User $user): RedirectResponse
+    public function permissions(Request $request, Project $project, User $user): JsonResponse|RedirectResponse
     {
         $this->ensureFeature($request, $project, 'team');
         abort_unless($request->user()->is_admin, 403);
@@ -136,10 +151,12 @@ class ProjectMemberController extends Controller
             'permissions' => ProjectPermissions::sanitize($validated['permissions']),
         ]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'permissions' => ProjectPermissions::sanitize($validated['permissions']),
+        ]);
     }
 
-    public function destroy(Request $request, Project $project, User $user): RedirectResponse
+    public function destroy(Request $request, Project $project, User $user): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'team');
         ProjectAccess::ensureCanManageTeam($request->user(), $project);
@@ -179,6 +196,6 @@ class ProjectMemberController extends Controller
             $request,
         );
 
-        return back();
+        return $this->apiOrBack($request, ['user_id' => $user->id]);
     }
 }

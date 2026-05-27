@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Events\TaskKanbanUpdated;
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskList;
@@ -12,6 +13,7 @@ use App\Models\UserNotification;
 use App\Support\ActivityLogger;
 use App\Support\PanelNotifier;
 use App\Support\TaskKanbanPayload;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +22,9 @@ use Illuminate\Validation\Rule;
 class TaskController extends Controller
 {
     use EnsuresProjectFeature;
+    use RespondsForApi;
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
 
@@ -77,10 +80,12 @@ class TaskController extends Controller
             'list_id' => $task->list_id,
         ], $request->user()->id);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'task' => TaskKanbanPayload::from($task->fresh()),
+        ]);
     }
 
-    public function update(Request $request, Project $project, Task $task): RedirectResponse
+    public function update(Request $request, Project $project, Task $task): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
@@ -158,10 +163,12 @@ class TaskController extends Controller
             'list_id' => $task->list_id,
         ], $request->user()->id);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'task' => TaskKanbanPayload::from($task->fresh()),
+        ]);
     }
 
-    public function duplicate(Request $request, Project $project, Task $task): RedirectResponse
+    public function duplicate(Request $request, Project $project, Task $task): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
@@ -198,10 +205,12 @@ class TaskController extends Controller
             ], $request->user()->id);
         }
 
-        return back();
+        return $this->apiOrBack($request, $clone ? [
+            'task' => TaskKanbanPayload::from($clone->fresh()),
+        ] : ['ok' => true]);
     }
 
-    public function archive(Request $request, Project $project, Task $task): RedirectResponse
+    public function archive(Request $request, Project $project, Task $task): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
@@ -221,10 +230,10 @@ class TaskController extends Controller
             'list_id' => $task->list_id,
         ], $request->user()->id);
 
-        return back();
+        return $this->apiOrBack($request, ['task_id' => $task->id]);
     }
 
-    public function unarchive(Request $request, Project $project, Task $task): RedirectResponse
+    public function unarchive(Request $request, Project $project, Task $task): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
@@ -244,10 +253,12 @@ class TaskController extends Controller
             'list_id' => $task->list_id,
         ], $request->user()->id);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'task' => TaskKanbanPayload::from($task->fresh()),
+        ]);
     }
 
-    public function destroy(Request $request, Project $project, Task $task): RedirectResponse
+    public function destroy(Request $request, Project $project, Task $task): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
@@ -282,10 +293,10 @@ class TaskController extends Controller
             'list_id' => $listId,
         ], $request->user()->id);
 
-        return back();
+        return $this->apiOrBack($request, ['task_id' => $taskId]);
     }
 
-    public function move(Request $request, Project $project, Task $task): RedirectResponse
+    public function move(Request $request, Project $project, Task $task): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'kanban');
         $this->ensureBelongs($project, $task);
@@ -353,7 +364,11 @@ class TaskController extends Controller
             'task' => TaskKanbanPayload::from($task),
         ], $request->user()->id);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'task' => TaskKanbanPayload::from($task),
+            'list_id' => (int) $validated['list_id'],
+            'order' => array_values(array_map('intval', $validated['order'])),
+        ]);
     }
 
     private function logTask(

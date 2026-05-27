@@ -25,6 +25,12 @@ class ProjectController extends Controller
 {
     public function show(Request $request, Project $project): Response
     {
+        return Inertia::render('Projects/Show', $this->buildShowPayload($request, $project));
+    }
+
+    /** @return array<string, mixed> */
+    public function buildShowPayload(Request $request, Project $project): array
+    {
         $user = $request->user();
         $isAdmin = $user->is_admin;
         $canManageTeam = ProjectAccess::canManageTeam($user, $project);
@@ -345,7 +351,7 @@ class ProjectController extends Controller
                 ->values()
             : collect();
 
-        return Inertia::render('Projects/Show', [
+        return [
             'project' => [
                 'id' => $project->id,
                 'name' => $project->name,
@@ -408,7 +414,7 @@ class ProjectController extends Controller
                 TaskList::STATUS_DONE => 'Terminée',
             ],
             'globalKanban' => $space->isFull,
-        ]);
+        ];
     }
 
     private function mapLists($lists)

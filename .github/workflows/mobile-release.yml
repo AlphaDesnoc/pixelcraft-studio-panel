@@ -1,0 +1,128 @@
+name: Mobile release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - 'public/images/logo.png'
+      - '.github/workflows/mobile-release.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-release
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  PANEL_BASE_URL: https://panel.pixelcraft-studios.fr
+
+jobs:
+  release-android:
+    name: Build & publish Android APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set release version
+        id: version
+        run: |
+          BUILD="${GITHUB_RUN_NUMBER}"
+          echo "build_number=${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "version_name=1.0.${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "tag=mobile-v1.0.${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "Release version: 1.0.${BUILD} (${BUILD})"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret — APK signed with debug key"
+            exit 0
+          fi
+
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+          cat > android/key.properties <<EOF
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=app/release.keystore
+          EOF
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build release APK
+        run: |
+          flutter build apk --release \
+            --build-name="${{ steps.version.outputs.version_name }}" \
+            --build-number="${{ steps.version.outputs.build_number }}" \
+            --dart-define=PANEL_BASE_URL=${PANEL_BASE_URL}
+
+      - name: Rename APK
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "../pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: PixelCraft Panel Mobile v${{ steps.version.outputs.version_name }}
+          body: |
+            ## PixelCraft Panel — Mobile (Android)
+
+            Application **100 % native** (Flutter).
+
+            - **Panel** : ${{ env.PANEL_BASE_URL }}
+            - **Version** : ${{ steps.version.outputs.version_name }} (build ${{ steps.version.outputs.build_number }})
+
+            ### Installation
+
+            1. Téléchargez le fichier `.apk`
+            2. Autorisez l'installation depuis sources inconnues (Android)
+            3. Connectez-vous avec votre compte panel
+
+            > APK signé debug par défaut. Pour Play Store, ajoutez les secrets `ANDROID_KEYSTORE_*` au dépôt.
+          files: |
+            pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixelcraft-panel-android
+          path: pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk
+          if-no-files-found: error
