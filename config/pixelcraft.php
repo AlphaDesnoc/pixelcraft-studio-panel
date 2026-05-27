@@ -24,4 +24,6 @@ return [
         'DESKTOP_DOWNLOAD_URL',
         'https://github.com/AlphaDesnoc/pixelcraft-studio-panel/releases/latest',
     ),
+
+    'fcm_server_key' => env('PIXELCRAFT_FCM_SERVER_KEY'),
 ];

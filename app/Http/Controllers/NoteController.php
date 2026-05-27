@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Note;
 use App\Models\Project;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,8 +14,9 @@ use Illuminate\Validation\Rule;
 class NoteController extends Controller
 {
     use EnsuresProjectFeature;
+    use RespondsForApi;
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'notes');
 
@@ -28,7 +31,7 @@ class NoteController extends Controller
             ],
         ]);
 
-        $project->notes()->create([
+        $note = $project->notes()->create([
             'creator_id' => $request->user()->id,
             'title' => $validated['title'],
             'content' => $validated['content'] ?? null,
@@ -36,10 +39,12 @@ class NoteController extends Controller
             'rank_id' => $validated['rank_id'] ?? null,
         ]);
 
-        return back();
+        $note->load('creator:id,name,email');
+
+        return $this->apiOrBack($request, ['note' => $this->notePayload($note)]);
     }
 
-    public function update(Request $request, Project $project, Note $note): RedirectResponse
+    public function update(Request $request, Project $project, Note $note): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'notes');
         abort_unless($note->project_id === $project->id, 404);
@@ -56,20 +61,23 @@ class NoteController extends Controller
             'color' => $validated['color'] ?? $note->color,
         ]);
 
-        return back();
+        $note->load('creator:id,name,email');
+
+        return $this->apiOrBack($request, ['note' => $this->notePayload($note->fresh())]);
     }
 
-    public function destroy(Request $request, Project $project, Note $note): RedirectResponse
+    public function destroy(Request $request, Project $project, Note $note): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'notes');
         abort_unless($note->project_id === $project->id, 404);
 
+        $noteId = $note->id;
         $note->delete();
 
-        return back();
+        return $this->apiOrBack($request, ['note_id' => $noteId]);
     }
 
-    public function togglePin(Request $request, Project $project, Note $note): RedirectResponse
+    public function togglePin(Request $request, Project $project, Note $note): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'notes');
         abort_unless($note->project_id === $project->id, 404);
@@ -80,7 +88,27 @@ class NoteController extends Controller
             'pinned_at' => $willPin ? now() : null,
         ]);
 
-        return back();
+        return $this->apiOrBack($request, ['note' => $this->notePayload($note->fresh())]);
+    }
+
+    /** @return array<string, mixed> */
+    private function notePayload(Note $note): array
+    {
+        return [
+            'id' => $note->id,
+            'title' => $note->title,
+            'content' => $note->content,
+            'color' => $note->color,
+            'pinned' => (bool) $note->pinned,
+            'pinned_at' => optional($note->pinned_at)?->toIso8601String(),
+            'created_at' => optional($note->created_at)?->toIso8601String(),
+            'updated_at' => optional($note->updated_at)?->toIso8601String(),
+            'rank_id' => $note->rank_id,
+            'creator' => $note->creator ? [
+                'id' => $note->creator->id,
+                'name' => $note->creator->name,
+            ] : null,
+        ];
     }
 
     private function ensureCanEdit(Request $request, Project $project): void

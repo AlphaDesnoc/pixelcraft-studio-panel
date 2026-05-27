@@ -69,6 +69,10 @@ class HandleInertiaRequests extends Middleware
                     || str_contains($request->userAgent() ?? '', 'PixelCraftPanel'),
                 'downloadUrl' => config('pixelcraft.desktop_download_url'),
             ],
+            'mobile' => [
+                'isMobileApp' => $request->header('X-PixelCraft-Mobile') === '1'
+                    || str_contains($request->userAgent() ?? '', 'PixelCraftPanelMobile'),
+            ],
         ];
     }
 }

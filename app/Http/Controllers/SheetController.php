@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Project;
 use App\Models\Sheet;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,8 +14,9 @@ use Illuminate\Validation\Rule;
 class SheetController extends Controller
 {
     use EnsuresProjectFeature;
+    use RespondsForApi;
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'spreadsheet');
 
@@ -31,7 +34,7 @@ class SheetController extends Controller
         $maxPos = (int) $scoped->max('position');
         $count = $scoped->count();
 
-        $project->sheets()->create([
+        $sheet = $project->sheets()->create([
             'name' => $validated['name'] ?? ('Feuille '.($count + 1)),
             'position' => $maxPos + 1,
             'rows' => 50,
@@ -40,10 +43,10 @@ class SheetController extends Controller
             'rank_id' => $rankId,
         ]);
 
-        return back();
+        return $this->apiOrBack($request, ['sheet' => $this->sheetPayload($sheet)]);
     }
 
-    public function update(Request $request, Project $project, Sheet $sheet): RedirectResponse
+    public function update(Request $request, Project $project, Sheet $sheet): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'spreadsheet');
         abort_unless($sheet->project_id === $project->id, 404);
@@ -73,10 +76,10 @@ class SheetController extends Controller
             $sheet->update($update);
         }
 
-        return back();
+        return $this->apiOrBack($request, ['sheet' => $this->sheetPayload($sheet->fresh())]);
     }
 
-    public function destroy(Request $request, Project $project, Sheet $sheet): RedirectResponse
+    public function destroy(Request $request, Project $project, Sheet $sheet): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'spreadsheet');
         abort_unless($sheet->project_id === $project->id, 404);
@@ -85,6 +88,7 @@ class SheetController extends Controller
             abort(422, 'Impossible de supprimer la dernière feuille.');
         }
 
+        $sheetId = $sheet->id;
         $sheet->delete();
 
         $project->sheets()
@@ -93,10 +97,10 @@ class SheetController extends Controller
             ->get()
             ->each(fn ($s, $idx) => $s->update(['position' => $idx]));
 
-        return back();
+        return $this->apiOrBack($request, ['sheet_id' => $sheetId]);
     }
 
-    public function reorder(Request $request, Project $project): RedirectResponse
+    public function reorder(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'spreadsheet');
 
@@ -121,14 +125,27 @@ class SheetController extends Controller
             $project->sheets()->whereKey($id)->update(['position' => $idx]);
         }
 
-        return back();
+        $sheets = $project->sheets()
+            ->where('rank_id', $rankId)
+            ->orderBy('position')
+            ->get()
+            ->map(fn (Sheet $s) => $this->sheetPayload($s))
+            ->values();
+
+        return $this->apiOrBack($request, ['sheets' => $sheets]);
     }
 
-    private function ensureCanEdit(Request $request, Project $project): void
+    /** @return array<string, mixed> */
+    public function sheetPayload(Sheet $sheet): array
     {
-        $user = $request->user();
-        $isAdmin = $user->is_admin;
-        $isMember = $project->members()->whereKey($user->id)->exists();
-        abort_unless($isAdmin || $isMember, 403);
+        return [
+            'id' => $sheet->id,
+            'name' => $sheet->name,
+            'position' => (int) $sheet->position,
+            'rows' => (int) $sheet->rows,
+            'cols' => (int) $sheet->cols,
+            'data' => $sheet->data ?: new \stdClass,
+            'rank_id' => $sheet->rank_id,
+        ];
     }
 }

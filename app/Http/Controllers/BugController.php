@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
+use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
@@ -13,6 +14,7 @@ use App\Models\UserNotification;
 use App\Support\ActivityLogger;
 use App\Support\BugVisibility;
 use App\Support\PanelNotifier;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -21,8 +23,9 @@ use Illuminate\Validation\Rule;
 class BugController extends Controller
 {
     use EnsuresProjectFeature;
+    use RespondsForApi;
 
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
         $this->ensureMember($request, $project);
         $this->ensureFeature($request, $project, 'bugs');
@@ -83,10 +86,12 @@ class BugController extends Controller
             }
         }
 
-        return back();
+        return $this->apiOrBack($request, [
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+        ]);
     }
 
-    public function update(Request $request, Project $project, Bug $bug): RedirectResponse
+    public function update(Request $request, Project $project, Bug $bug): JsonResponse|RedirectResponse
     {
         $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
@@ -251,10 +256,12 @@ class BugController extends Controller
             );
         }
 
-        return back();
+        return $this->apiOrBack($request, [
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+        ]);
     }
 
-    public function linkTask(Request $request, Project $project, Bug $bug): RedirectResponse
+    public function linkTask(Request $request, Project $project, Bug $bug): JsonResponse|RedirectResponse
     {
         $this->ensureCanManageBug($request, $project, $bug);
         $this->ensureFeature($request, $project, 'bugs');
@@ -269,10 +276,12 @@ class BugController extends Controller
 
         $bug->update(['task_id' => $task->id]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+        ]);
     }
 
-    public function createTaskFromBug(Request $request, Project $project, Bug $bug): RedirectResponse
+    public function createTaskFromBug(Request $request, Project $project, Bug $bug): JsonResponse|RedirectResponse
     {
         $this->ensureCanManageBug($request, $project, $bug);
         $this->ensureFeature($request, $project, 'bugs');
@@ -303,7 +312,10 @@ class BugController extends Controller
 
         $bug->update(['task_id' => $task->id]);
 
-        return back();
+        return $this->apiOrBack($request, [
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+            'task_id' => $task->id,
+        ]);
     }
 
     /** @todo share with TaskController */
@@ -322,7 +334,7 @@ class BugController extends Controller
         return (int) round(($idx / ($count - 1)) * 100);
     }
 
-    public function destroy(Request $request, Project $project, Bug $bug): RedirectResponse
+    public function destroy(Request $request, Project $project, Bug $bug): JsonResponse|RedirectResponse
     {
         $this->ensureCanManageBug($request, $project, $bug);
         $this->ensureFeature($request, $project, 'bugs');
@@ -332,9 +344,32 @@ class BugController extends Controller
             Storage::disk('public')->delete($path);
         }
 
+        $bugId = $bug->id;
         $bug->delete();
 
-        return back();
+        return $this->apiOrBack($request, ['bug_id' => $bugId]);
+    }
+
+    /** @return array<string, mixed> */
+    private function bugPayload(Bug $bug): array
+    {
+        return [
+            'id' => $bug->id,
+            'title' => $bug->title,
+            'description' => $bug->description,
+            'priority' => $bug->priority,
+            'status' => $bug->status,
+            'task_id' => $bug->task_id,
+            'sla_due_at' => optional($bug->sla_due_at)?->toIso8601String(),
+            'is_sla_breached' => $bug->sla_due_at
+                && $bug->sla_due_at->isPast()
+                && $bug->status !== Bug::STATUS_CLOSED,
+            'created_at' => optional($bug->created_at)?->toIso8601String(),
+            'reporter' => $bug->reporter ? ['id' => $bug->reporter->id, 'name' => $bug->reporter->name] : null,
+            'assignee' => $bug->assignee ? ['id' => $bug->assignee->id, 'name' => $bug->assignee->name] : null,
+            'assigned_rank' => $bug->assignedRank ? ['id' => $bug->assignedRank->id, 'name' => $bug->assignedRank->name] : null,
+            'screenshots' => collect($bug->screenshots ?? [])->map(fn ($p) => '/storage/'.ltrim($p, '/'))->values(),
+        ];
     }
 
     private function ensureMember(Request $request, Project $project): void
