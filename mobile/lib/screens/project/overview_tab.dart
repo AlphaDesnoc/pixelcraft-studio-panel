@@ -41,13 +41,13 @@ class OverviewTab extends StatelessWidget {
             const SizedBox(height: 24),
             Text('Par statut', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            ...workspace.byStatus.entries.map(
-              (e) => Padding(
+            ...workspace.byStatus.map(
+              (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(child: Text(e.key.toString())),
-                    Chip(label: Text('${e.value}')),
+                    Expanded(child: Text(item.label)),
+                    Chip(label: Text('${item.count}')),
                   ],
                 ),
               ),
@@ -57,18 +57,13 @@ class OverviewTab extends StatelessWidget {
             const SizedBox(height: 16),
             Text('Par priorité', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            ...workspace.byPriority.entries.map(
-              (e) => Padding(
+            ...workspace.byPriority.map(
+              (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: Text(
-                        workspace.priorities[e.key.toString()] ??
-                            e.key.toString(),
-                      ),
-                    ),
-                    Chip(label: Text('${e.value}')),
+                    Expanded(child: Text(item.label)),
+                    Chip(label: Text('${item.count}')),
                   ],
                 ),
               ),

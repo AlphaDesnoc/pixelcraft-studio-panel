@@ -31,8 +31,8 @@ class ProjectWorkspace {
     this.taskTemplates = const [],
     this.activityLogs = const [],
     this.teamCandidates = const [],
-    this.byStatus = const {},
-    this.byPriority = const {},
+    this.byStatus = const [],
+    this.byPriority = const [],
   });
 
   final WorkspaceProject project;
@@ -63,8 +63,8 @@ class ProjectWorkspace {
   final List<Map<String, dynamic>> taskTemplates;
   final List<ActivityLogEntry> activityLogs;
   final List<WorkspaceMember> teamCandidates;
-  final Map<String, dynamic> byStatus;
-  final Map<String, dynamic> byPriority;
+  final List<WorkspaceBreakdownItem> byStatus;
+  final List<WorkspaceBreakdownItem> byPriority;
 
   factory ProjectWorkspace.fromJson(Map<String, dynamic> json) {
     return ProjectWorkspace(
@@ -128,9 +128,18 @@ class ProjectWorkspace {
       teamCandidates: (json['teamCandidates'] as List<dynamic>? ?? [])
           .map((e) => WorkspaceMember.fromJson(e as Map<String, dynamic>))
           .toList(),
-      byStatus: json['byStatus'] as Map<String, dynamic>? ?? {},
-      byPriority: json['byPriority'] as Map<String, dynamic>? ?? {},
+      byStatus: _breakdownList(json['byStatus']),
+      byPriority: _breakdownList(json['byPriority']),
     );
+  }
+
+  static List<WorkspaceBreakdownItem> _breakdownList(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((e) => WorkspaceBreakdownItem.fromJson(
+              e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e as Map),
+            ))
+        .toList();
   }
 
   bool canRead(String feature) => myPermissions[feature] != false;
@@ -143,6 +152,26 @@ class ProjectWorkspace {
   static Map<String, String> _stringMap(dynamic raw) {
     if (raw is! Map) return {};
     return raw.map((key, value) => MapEntry(key.toString(), value.toString()));
+  }
+}
+
+class WorkspaceBreakdownItem {
+  const WorkspaceBreakdownItem({
+    required this.key,
+    required this.label,
+    required this.count,
+  });
+
+  final String key;
+  final String label;
+  final int count;
+
+  factory WorkspaceBreakdownItem.fromJson(Map<String, dynamic> json) {
+    return WorkspaceBreakdownItem(
+      key: json['key'] as String? ?? '',
+      label: json['label'] as String? ?? '',
+      count: json['count'] as int? ?? 0,
+    );
   }
 }
 
