@@ -140,8 +140,18 @@ Utile pour mobile / intégrations, pas requis pour le logiciel desktop actuel.
 
 ## Évolutions
 
-- Icône applicative personnalisée dans `desktop/build/`
 - NativePHP quand compatible Laravel 13
+
+### Icône applicative
+
+L'icône est générée automatiquement depuis `public/images/logo.png` :
+
+```bash
+cd desktop
+npm run sync:icon
+```
+
+Elle est utilisée pour la fenêtre, la barre des tâches, l'installateur Windows et les notifications. Le script crée un carré 512×512 (fond noir) puis un `.ico` pour Windows.
 
 ---
 

@@ -32,6 +32,18 @@ function loadConfig() {
 
 const config = loadConfig();
 
+const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
+
+function loadAppIcon() {
+  if (!fs.existsSync(APP_ICON_PATH)) {
+    return null;
+  }
+
+  const image = nativeImage.createFromPath(APP_ICON_PATH);
+
+  return image.isEmpty() ? null : image;
+}
+
 function resolvePanelOrigin() {
   try {
     return new URL(config.panelUrl).origin;
@@ -50,6 +62,7 @@ function isPanelUrl(url) {
 
 function createWindow() {
   panelOrigin = resolvePanelOrigin();
+  const appIcon = loadAppIcon();
 
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -57,6 +70,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'PixelCraft Panel',
+    icon: appIcon ?? undefined,
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -237,6 +251,11 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     if (process.platform === 'win32') {
       app.setAppUserModelId('fr.pixelcraftstudios.panel');
+    }
+
+    const appIcon = loadAppIcon();
+    if (appIcon && process.platform === 'darwin' && app.dock) {
+      app.dock.setIcon(appIcon);
     }
 
     createWindow();
