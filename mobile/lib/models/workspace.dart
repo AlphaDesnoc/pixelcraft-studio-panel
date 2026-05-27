@@ -1,3 +1,4 @@
+import 'attachment.dart';
 import 'extras.dart';
 
 class ProjectWorkspace {
@@ -26,6 +27,12 @@ class ProjectWorkspace {
     required this.bugStatuses,
     required this.bugPriorities,
     required this.priorities,
+    this.tags = const [],
+    this.taskTemplates = const [],
+    this.activityLogs = const [],
+    this.teamCandidates = const [],
+    this.byStatus = const {},
+    this.byPriority = const {},
   });
 
   final WorkspaceProject project;
@@ -52,6 +59,12 @@ class ProjectWorkspace {
   final Map<String, String> bugStatuses;
   final Map<String, String> bugPriorities;
   final Map<String, String> priorities;
+  final List<TaskTag> tags;
+  final List<Map<String, dynamic>> taskTemplates;
+  final List<ActivityLogEntry> activityLogs;
+  final List<WorkspaceMember> teamCandidates;
+  final Map<String, dynamic> byStatus;
+  final Map<String, dynamic> byPriority;
 
   factory ProjectWorkspace.fromJson(Map<String, dynamic> json) {
     return ProjectWorkspace(
@@ -103,6 +116,20 @@ class ProjectWorkspace {
       bugStatuses: _stringMap(json['bugStatuses']),
       bugPriorities: _stringMap(json['bugPriorities']),
       priorities: _stringMap(json['priorities']),
+      tags: (json['tags'] as List<dynamic>? ?? [])
+          .map((e) => TaskTag.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      taskTemplates: (json['taskTemplates'] as List<dynamic>? ?? [])
+          .map((e) => e as Map<String, dynamic>)
+          .toList(),
+      activityLogs: (json['activityLogs'] as List<dynamic>? ?? [])
+          .map((e) => ActivityLogEntry.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      teamCandidates: (json['teamCandidates'] as List<dynamic>? ?? [])
+          .map((e) => WorkspaceMember.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      byStatus: json['byStatus'] as Map<String, dynamic>? ?? {},
+      byPriority: json['byPriority'] as Map<String, dynamic>? ?? {},
     );
   }
 
@@ -222,8 +249,19 @@ class KanbanTask {
     required this.priority,
     required this.status,
     this.dueDate,
+    this.startDate,
     required this.isOverdue,
     this.assigneeId,
+    this.position = 0,
+    this.progress = 0,
+    this.archivedAt,
+    this.dependencyIds = const [],
+    this.isBlocked = false,
+    this.tags = const [],
+    this.checklists = const [],
+    this.comments = const [],
+    this.attachments = const [],
+    this.checklistProgress = const {'done': 0, 'total': 0},
   });
 
   final int id;
@@ -233,10 +271,22 @@ class KanbanTask {
   final String priority;
   final String status;
   final String? dueDate;
+  final String? startDate;
   final bool isOverdue;
   final int? assigneeId;
+  final int position;
+  final int progress;
+  final String? archivedAt;
+  final List<int> dependencyIds;
+  final bool isBlocked;
+  final List<TaskTag> tags;
+  final List<TaskChecklist> checklists;
+  final List<TaskComment> comments;
+  final List<PanelAttachment> attachments;
+  final Map<String, int> checklistProgress;
 
   factory KanbanTask.fromJson(Map<String, dynamic> json) {
+    final cp = json['checklist_progress'];
     return KanbanTask(
       id: json['id'] as int,
       listId: json['list_id'] as int? ?? 0,
@@ -245,8 +295,164 @@ class KanbanTask {
       priority: json['priority'] as String? ?? 'medium',
       status: json['status'] as String? ?? 'todo',
       dueDate: json['due_date'] as String?,
+      startDate: json['start_date'] as String?,
       isOverdue: json['is_overdue'] as bool? ?? false,
       assigneeId: json['assignee_id'] as int?,
+      position: json['position'] as int? ?? 0,
+      progress: json['progress'] as int? ?? 0,
+      archivedAt: json['archived_at'] as String?,
+      dependencyIds: (json['dependency_ids'] as List<dynamic>? ?? [])
+          .map((e) => e as int)
+          .toList(),
+      isBlocked: json['is_blocked'] as bool? ?? false,
+      tags: (json['tags'] as List<dynamic>? ?? [])
+          .map((e) => TaskTag.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      checklists: (json['checklists'] as List<dynamic>? ?? [])
+          .map((e) => TaskChecklist.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      comments: (json['comments'] as List<dynamic>? ?? [])
+          .map((e) => TaskComment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      attachments: (json['attachments'] as List<dynamic>? ?? [])
+          .map((e) => PanelAttachment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      checklistProgress: cp is Map
+          ? {
+              'done': cp['done'] as int? ?? 0,
+              'total': cp['total'] as int? ?? 0,
+            }
+          : const {'done': 0, 'total': 0},
+    );
+  }
+}
+
+class TaskTag {
+  const TaskTag({required this.id, required this.name, required this.color});
+
+  final int id;
+  final String name;
+  final String color;
+
+  factory TaskTag.fromJson(Map<String, dynamic> json) {
+    return TaskTag(
+      id: json['id'] as int,
+      name: json['name'] as String? ?? '',
+      color: json['color'] as String? ?? '#64748b',
+    );
+  }
+}
+
+class TaskComment {
+  const TaskComment({
+    required this.id,
+    required this.body,
+    this.userName,
+    this.createdAt,
+  });
+
+  final int id;
+  final String body;
+  final String? userName;
+  final String? createdAt;
+
+  factory TaskComment.fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+    return TaskComment(
+      id: json['id'] as int,
+      body: json['body'] as String? ?? '',
+      userName: user is Map ? user['name'] as String? : null,
+      createdAt: json['created_at'] as String?,
+    );
+  }
+}
+
+class TaskChecklist {
+  const TaskChecklist({
+    required this.id,
+    required this.name,
+    required this.items,
+  });
+
+  final int id;
+  final String name;
+  final List<TaskChecklistItem> items;
+
+  factory TaskChecklist.fromJson(Map<String, dynamic> json) {
+    return TaskChecklist(
+      id: json['id'] as int,
+      name: json['name'] as String? ?? '',
+      items: (json['items'] as List<dynamic>? ?? [])
+          .map((e) => TaskChecklistItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class TaskChecklistItem {
+  const TaskChecklistItem({
+    required this.id,
+    required this.content,
+    required this.isDone,
+  });
+
+  final int id;
+  final String content;
+  final bool isDone;
+
+  factory TaskChecklistItem.fromJson(Map<String, dynamic> json) {
+    return TaskChecklistItem(
+      id: json['id'] as int,
+      content: json['content'] as String? ?? '',
+      isDone: json['is_done'] == true,
+    );
+  }
+}
+
+class ActivityLogEntry {
+  const ActivityLogEntry({
+    required this.id,
+    required this.message,
+    this.userName,
+    this.createdAt,
+  });
+
+  final int id;
+  final String message;
+  final String? userName;
+  final String? createdAt;
+
+  factory ActivityLogEntry.fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+    return ActivityLogEntry(
+      id: json['id'] as int,
+      message: json['message'] as String? ?? '',
+      userName: user is Map ? user['name'] as String? : null,
+      createdAt: json['created_at'] as String?,
+    );
+  }
+}
+
+class BugMessage {
+  const BugMessage({
+    required this.id,
+    required this.body,
+    this.userName,
+    this.createdAt,
+  });
+
+  final int id;
+  final String body;
+  final String? userName;
+  final String? createdAt;
+
+  factory BugMessage.fromJson(Map<String, dynamic> json) {
+    final user = json['user'];
+    return BugMessage(
+      id: json['id'] as int,
+      body: json['body'] as String? ?? '',
+      userName: user is Map ? user['name'] as String? : null,
+      createdAt: json['created_at'] as String?,
     );
   }
 }
@@ -383,15 +589,27 @@ class WorkspaceChatMessage {
     required this.id,
     required this.body,
     this.userName,
+    this.userId,
     required this.createdAt,
     required this.pinned,
+    this.replyPreview,
+    this.reactions = const [],
+    this.attachments = const [],
+    this.canEdit = false,
+    this.editedAt,
   });
 
   final int id;
   final String body;
   final String? userName;
+  final int? userId;
   final String? createdAt;
   final bool pinned;
+  final ReplyPreview? replyPreview;
+  final List<MessageReaction> reactions;
+  final List<PanelAttachment> attachments;
+  final bool canEdit;
+  final String? editedAt;
 
   factory WorkspaceChatMessage.fromJson(Map<String, dynamic> json) {
     final user = json['user'];
@@ -399,8 +617,20 @@ class WorkspaceChatMessage {
       id: json['id'] as int,
       body: json['body'] as String? ?? '',
       userName: user is Map ? user['name'] as String? : null,
+      userId: user is Map ? user['id'] as int? : null,
       createdAt: json['created_at'] as String?,
       pinned: json['is_pinned'] as bool? ?? json['pinned_at'] != null,
+      replyPreview: json['reply_preview'] is Map<String, dynamic>
+          ? ReplyPreview.fromJson(json['reply_preview'] as Map<String, dynamic>)
+          : null,
+      reactions: (json['reactions'] as List<dynamic>? ?? [])
+          .map((e) => MessageReaction.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      attachments: (json['attachments'] as List<dynamic>? ?? [])
+          .map((e) => PanelAttachment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      canEdit: json['can_edit'] == true,
+      editedAt: json['edited_at'] as String?,
     );
   }
 }

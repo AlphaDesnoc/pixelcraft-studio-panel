@@ -12,6 +12,8 @@ import 'project/spreadsheet_tab.dart';
 import 'project/team_tab.dart';
 import 'project/ranks_tab.dart';
 import 'project/files_tab.dart';
+import 'project/overview_tab.dart';
+import 'project/gantt_tab.dart';
 
 class ProjectScreen extends StatefulWidget {
   const ProjectScreen({
@@ -27,8 +29,7 @@ class ProjectScreen extends StatefulWidget {
   State<ProjectScreen> createState() => _ProjectScreenState();
 }
 
-class _ProjectScreenState extends State<ProjectScreen>
-    with SingleTickerProviderStateMixin {
+class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProviderStateMixin {
   ProjectWorkspace? _workspace;
   bool _loading = true;
   String? _error;
@@ -75,23 +76,29 @@ class _ProjectScreenState extends State<ProjectScreen>
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   List<_ProjectTab> _buildTabs(ProjectWorkspace ws) {
     final tabs = <_ProjectTab>[];
 
+    tabs.add(_ProjectTab(
+      label: 'Aperçu',
+      icon: Icons.dashboard_outlined,
+      builder: () => OverviewTab(workspace: ws),
+    ));
+
     if (ws.canRead('kanban')) {
       tabs.add(_ProjectTab(
         label: 'Kanban',
         icon: Icons.view_kanban_outlined,
-        builder: () => KanbanTab(
-          workspace: ws,
-          onChanged: _load,
-        ),
+        builder: () => KanbanTab(workspace: ws, onChanged: _load),
+      ));
+      tabs.add(_ProjectTab(
+        label: 'Gantt',
+        icon: Icons.timeline_outlined,
+        builder: () => GanttTab(workspace: ws),
       ));
     }
 
@@ -99,11 +106,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Chat',
         icon: Icons.forum_outlined,
-        builder: () => ChatTab(
-          projectSlug: ws.project.slug,
-          initialMessages: ws.chatMessages,
-          canWrite: ws.canWrite('chat'),
-        ),
+        builder: () => ChatTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -111,12 +114,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Notes',
         icon: Icons.sticky_note_2_outlined,
-        builder: () => NotesTab(
-          projectSlug: ws.project.slug,
-          notes: ws.notes,
-          canWrite: ws.canWrite('notes'),
-          onChanged: _load,
-        ),
+        builder: () => NotesTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -124,12 +122,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Calendrier',
         icon: Icons.calendar_month_outlined,
-        builder: () => CalendarTab(
-          projectSlug: ws.project.slug,
-          events: ws.events,
-          canWrite: ws.canWrite('calendar'),
-          onChanged: _load,
-        ),
+        builder: () => CalendarTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -137,15 +130,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Bugs',
         icon: Icons.bug_report_outlined,
-        builder: () => BugsTab(
-          projectSlug: ws.project.slug,
-          bugs: ws.bugs,
-          canReport: ws.canReportBugs,
-          canManage: ws.canManageBugs,
-          statuses: ws.bugStatuses,
-          priorities: ws.bugPriorities,
-          onChanged: _load,
-        ),
+        builder: () => BugsTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -166,12 +151,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Équipe',
         icon: Icons.group_outlined,
-        builder: () => TeamTab(
-          projectSlug: ws.project.slug,
-          initialMembers: ws.teamMembers,
-          canManage: ws.canManageTeam,
-          onChanged: _load,
-        ),
+        builder: () => TeamTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -179,10 +159,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Ranks',
         icon: Icons.military_tech_outlined,
-        builder: () => RanksTab(
-          projectSlug: ws.project.slug,
-          canEdit: ws.canManageRanks,
-        ),
+        builder: () => RanksTab(workspace: ws),
       ));
     }
 
@@ -190,15 +167,7 @@ class _ProjectScreenState extends State<ProjectScreen>
       tabs.add(_ProjectTab(
         label: 'Fichiers',
         icon: Icons.folder_outlined,
-        builder: () => FilesTab(fileNodes: ws.fileNodes),
-      ));
-    }
-
-    if (tabs.isEmpty) {
-      tabs.add(_ProjectTab(
-        label: 'Aperçu',
-        icon: Icons.info_outline,
-        builder: () => _OverviewTab(workspace: ws),
+        builder: () => FilesTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -244,10 +213,7 @@ class _ProjectScreenState extends State<ProjectScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(ws.project.name),
-            Text(
-              ws.spaceLabel,
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
+            Text(ws.spaceLabel, style: Theme.of(context).textTheme.labelSmall),
           ],
         ),
         actions: [
@@ -257,35 +223,21 @@ class _ProjectScreenState extends State<ProjectScreen>
               onSelected: _changeSpace,
               itemBuilder: (context) => [
                 ...ws.spaces.map(
-                  (space) => PopupMenuItem<String?>(
-                    value: space.key,
-                    child: Text(space.label),
-                  ),
+                  (space) => PopupMenuItem<String?>(value: space.key, child: Text(space.label)),
                 ),
                 ...ws.ranks.map(
-                  (rank) => PopupMenuItem<String?>(
-                    value: rank.key,
-                    child: Text(rank.label),
-                  ),
+                  (rank) => PopupMenuItem<String?>(value: rank.key, child: Text(rank.label)),
                 ),
               ],
               icon: const Icon(Icons.layers_outlined),
             ),
-          IconButton(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
         bottom: TabBar(
           controller: controller,
           isScrollable: true,
           tabs: _tabs
-              .map(
-                (tab) => Tab(
-                  icon: Icon(tab.icon, size: 20),
-                  text: tab.label,
-                ),
-              )
+              .map((tab) => Tab(icon: Icon(tab.icon, size: 20), text: tab.label))
               .toList(),
         ),
       ),
@@ -307,48 +259,4 @@ class _ProjectTab {
   final String label;
   final IconData icon;
   final Widget Function() builder;
-}
-
-class _OverviewTab extends StatelessWidget {
-  const _OverviewTab({required this.workspace});
-
-  final ProjectWorkspace workspace;
-
-  @override
-  Widget build(BuildContext context) {
-    final stats = workspace.stats;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        LinearProgressIndicator(value: workspace.progress / 100),
-        const SizedBox(height: 8),
-        Text('${workspace.progress}% terminé'),
-        const SizedBox(height: 24),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _StatChip(label: 'Tâches', value: '${stats['tasks_total'] ?? 0}'),
-            _StatChip(label: 'Terminées', value: '${stats['tasks_done'] ?? 0}'),
-            _StatChip(label: 'En retard', value: '${stats['tasks_overdue'] ?? 0}'),
-            _StatChip(label: 'Membres', value: '${stats['members'] ?? 0}'),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      label: Text('$label : $value'),
-    );
-  }
 }

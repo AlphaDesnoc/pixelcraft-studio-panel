@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\MyTasksController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PanelSessionController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ProfileThemeController;
+use App\Http\Controllers\Api\ProfileTwoFactorController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectWorkspaceController;
@@ -20,6 +22,8 @@ use App\Http\Controllers\BugMessageController;
 use App\Http\Controllers\CalendarEventController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ChatReactionController;
+use App\Http\Controllers\DirectMessageReactionController;
+use App\Http\Controllers\ExportController;
 use App\Http\Controllers\FileNodeController;
 use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\NoteController;
@@ -51,6 +55,16 @@ Route::prefix('v1')->group(function (): void {
 
         Route::get('/profile/notifications', [ProfileController::class, 'notifications']);
         Route::put('/profile/notifications', [ProfileController::class, 'updateNotifications']);
+        Route::put('/profile/password', [ProfileController::class, 'updatePassword']);
+        Route::put('/profile/theme', [ProfileThemeController::class, 'update']);
+        Route::post('/profile/two-factor/setup', [ProfileTwoFactorController::class, 'setup']);
+        Route::post('/profile/two-factor/confirm', [ProfileTwoFactorController::class, 'confirm']);
+        Route::delete('/profile/two-factor', [ProfileTwoFactorController::class, 'destroy']);
+
+        Route::get('/export/my-tasks', [ExportController::class, 'myTasks']);
+        Route::get('/export/audit', [ExportController::class, 'audit']);
+        Route::get('/export/bugs/{project:slug}', [ExportController::class, 'bugs']);
+        Route::get('/export/activity/{project:slug}', [ExportController::class, 'projectActivity']);
 
         Route::post('/push-tokens', [PushTokenController::class, 'store']);
         Route::delete('/push-tokens', [PushTokenController::class, 'destroy']);
@@ -62,7 +76,10 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/conversations', [ConversationController::class, 'index']);
         Route::get('/conversations/{conversation}/messages', [ConversationController::class, 'messages']);
         Route::post('/conversations/{conversation}/read', [ConversationController::class, 'markRead']);
+        Route::post('/conversations/{conversation}/attachments', [ConversationController::class, 'storeAttachment'])
+            ->middleware('throttle:panel-uploads');
         Route::post('/messages', [ConversationController::class, 'store']);
+        Route::post('/messages/{message}/reactions', [DirectMessageReactionController::class, 'toggle']);
 
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
@@ -70,8 +87,14 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('admin')->prefix('admin')->group(function (): void {
             Route::get('/users', [AdminUserController::class, 'index']);
+            Route::post('/users', [AdminUserController::class, 'store']);
+            Route::put('/users/{user}', [AdminUserController::class, 'update']);
+            Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
             Route::post('/users/{user}/toggle-active', [AdminUserController::class, 'toggleActive']);
             Route::get('/projects', [AdminProjectController::class, 'index']);
+            Route::post('/projects', [AdminProjectController::class, 'store']);
+            Route::put('/projects/{project}', [AdminProjectController::class, 'update']);
+            Route::delete('/projects/{project}', [AdminProjectController::class, 'destroy']);
             Route::get('/audit', [AdminAuditLogController::class, 'index']);
         });
 

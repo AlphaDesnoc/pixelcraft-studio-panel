@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,7 +12,7 @@ import '../services/realtime_service.dart';
 import '../utils/format.dart';
 import 'admin_screen.dart';
 import 'chat_screen.dart';
-import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'project_screen.dart';
 import 'search_screen.dart';
 
@@ -23,6 +25,45 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
+  int _unreadMessages = 0;
+  int _unreadNotifications = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBadges();
+    context.read<RealtimeService>().addListener(_onRealtime);
+  }
+
+  @override
+  void dispose() {
+    context.read<RealtimeService>().removeListener(_onRealtime);
+    super.dispose();
+  }
+
+  void _onRealtime() {
+    final realtime = context.read<RealtimeService>();
+    setState(() {
+      _unreadMessages = realtime.unreadMessages;
+      _unreadNotifications = realtime.unreadNotifications;
+    });
+  }
+
+  Future<void> _loadBadges() async {
+    try {
+      final api = context.read<AuthSession>().api;
+      final conversations = await api.fetchConversations();
+      final notifications = await api.fetchNotifications();
+      if (!mounted) return;
+      setState(() {
+        _unreadMessages = conversations.conversations.fold<int>(
+          0,
+          (sum, c) => sum + c.unreadCount,
+        );
+        _unreadNotifications = notifications.unreadCount;
+      });
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _ => 'Compte',
         }),
         actions: [
+          if (context.watch<RealtimeService>().isLive)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Icon(Icons.circle, color: Colors.greenAccent, size: 10),
+            ),
           if (user?.isAdmin == true)
             IconButton(
               onPressed: () {
@@ -60,10 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: Center(
-                child: Text(
-                  user.name,
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
+                child: Text(user.name, style: Theme.of(context).textTheme.labelLarge),
               ),
             ),
         ],
@@ -75,40 +118,71 @@ class _HomeScreenState extends State<HomeScreen> {
           MyTasksTab(),
           _MessagesTab(),
           _NotificationsTab(),
-          _ProfileTab(),
+          ProfileScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
+        onDestinationSelected: (value) {
+          setState(() => _index = value);
+          if (value == 2 || value == 3) _loadBadges();
+        },
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.task_alt_outlined),
             selectedIcon: Icon(Icons.task_alt),
             label: 'Tâches',
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
+            icon: _BadgeIcon(
+              icon: Icons.chat_bubble_outline,
+              count: _unreadMessages,
+            ),
+            selectedIcon: _BadgeIcon(
+              icon: Icons.chat_bubble,
+              count: _unreadMessages,
+            ),
             label: 'Messages',
           ),
           NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
+            icon: _BadgeIcon(
+              icon: Icons.notifications_outlined,
+              count: _unreadNotifications,
+            ),
+            selectedIcon: _BadgeIcon(
+              icon: Icons.notifications,
+              count: _unreadNotifications,
+            ),
             label: 'Notifs',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'Compte',
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BadgeIcon extends StatelessWidget {
+  const _BadgeIcon({required this.icon, required this.count});
+
+  final IconData icon;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Badge(
+      isLabelVisible: count > 0,
+      label: Text(count > 99 ? '99+' : '$count'),
+      child: Icon(icon),
     );
   }
 }
@@ -145,21 +219,14 @@ class _DashboardTabState extends State<_DashboardTab> {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_error != null) {
-      return _ErrorState(message: _error!, onRetry: _load);
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _ErrorState(message: _error!, onRetry: _load);
 
     final data = _data!;
     return RefreshIndicator(
@@ -178,10 +245,7 @@ class _DashboardTabState extends State<_DashboardTab> {
             ],
           ),
           const SizedBox(height: 24),
-          Text(
-            'Projets',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Projets', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           ...data.projects.map((project) => _ProjectTile(project: project)),
         ],
@@ -199,13 +263,30 @@ class _MessagesTab extends StatefulWidget {
 
 class _MessagesTabState extends State<_MessagesTab> {
   List<Conversation> _conversations = [];
+  List<ConversationParticipant> _contacts = [];
   bool _loading = true;
   String? _error;
+  StreamSubscription<Map<String, dynamic>>? _liveEvents;
 
   @override
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = context.read<AuthSession>().user;
+      if (user != null) {
+        context.read<RealtimeService>().subscribeInbox(user.id);
+      }
+      _liveEvents = context.read<RealtimeService>().directMessageEvents.listen((_) {
+        _load();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveEvents?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -215,75 +296,84 @@ class _MessagesTabState extends State<_MessagesTab> {
     });
 
     try {
-      final data =
-          await context.read<AuthSession>().api.fetchConversations();
+      final data = await context.read<AuthSession>().api.fetchConversations();
       if (!mounted) return;
-      setState(() => _conversations = data.conversations);
+      setState(() {
+        _conversations = data.conversations;
+        _contacts = data.contacts;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _ErrorState(message: _error!, onRetry: _load);
 
-    if (_error != null) {
-      return _ErrorState(message: _error!, onRetry: _load);
-    }
+    return Scaffold(
+      body: _conversations.isEmpty
+          ? RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                children: const [
+                  SizedBox(height: 120),
+                  Center(child: Text('Aucune conversation')),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                itemCount: _conversations.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final conversation = _conversations[index];
+                  final participant = conversation.participant;
+                  final preview = conversation.lastMessage?.body ?? 'Aucun message';
 
-    if (_conversations.isEmpty) {
-      return const Center(child: Text('Aucune conversation'));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        itemCount: _conversations.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final conversation = _conversations[index];
-          final participant = conversation.participant;
-          final preview = conversation.lastMessage?.body ?? 'Aucun message';
-
-          return ListTile(
-            leading: CircleAvatar(
-              child: Text(initialsFromName(participant?.name ?? '?')),
+                  return ListTile(
+                    leading: CircleAvatar(child: Text(initialsFromName(participant?.name ?? '?'))),
+                    title: Text(participant?.name ?? 'Conversation'),
+                    subtitle: Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: conversation.unreadCount > 0
+                        ? CircleAvatar(
+                            radius: 12,
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            child: Text('${conversation.unreadCount}', style: const TextStyle(fontSize: 11)),
+                          )
+                        : Text(formatRelativeTime(conversation.lastMessageAt)),
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(
+                            conversation: conversation,
+                            contacts: _contacts,
+                          ),
+                        ),
+                      );
+                      _load();
+                    },
+                  );
+                },
+              ),
             ),
-            title: Text(participant?.name ?? 'Conversation'),
-            subtitle: Text(
-              preview,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: conversation.unreadCount > 0
-                ? CircleAvatar(
-                    radius: 12,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: Text(
-                      '${conversation.unreadCount}',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  )
-                : Text(formatRelativeTime(conversation.lastMessageAt)),
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ChatScreen(conversation: conversation),
-                ),
-              );
-              _load();
-            },
-          );
-        },
-      ),
+      floatingActionButton: _contacts.isNotEmpty
+          ? FloatingActionButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NewConversationScreen(contacts: _contacts),
+                  ),
+                ).then((_) => _load());
+              },
+              child: const Icon(Icons.edit_outlined),
+            )
+          : null,
     );
   }
 }
@@ -299,11 +389,29 @@ class _NotificationsTabState extends State<_NotificationsTab> {
   List<PanelNotification> _notifications = [];
   bool _loading = true;
   String? _error;
+  StreamSubscription<PanelNotification>? _notificationSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _notificationSub = context.read<RealtimeService>().notificationEvents.listen(
+      (notification) {
+        if (!mounted) return;
+        setState(() {
+          _notifications = [
+            notification,
+            ..._notifications.where((n) => n.id != notification.id),
+          ];
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -313,17 +421,14 @@ class _NotificationsTabState extends State<_NotificationsTab> {
     });
 
     try {
-      final data =
-          await context.read<AuthSession>().api.fetchNotifications();
+      final data = await context.read<AuthSession>().api.fetchNotifications();
       if (!mounted) return;
       setState(() => _notifications = data.notifications);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -334,13 +439,8 @@ class _NotificationsTabState extends State<_NotificationsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_error != null) {
-      return _ErrorState(message: _error!, onRetry: _load);
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _ErrorState(message: _error!, onRetry: _load);
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -349,10 +449,7 @@ class _NotificationsTabState extends State<_NotificationsTab> {
           if (_notifications.any((n) => n.isUnread))
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _markAllRead,
-                child: const Text('Tout marquer lu'),
-              ),
+              child: TextButton(onPressed: _markAllRead, child: const Text('Tout marquer lu')),
             ),
           Expanded(
             child: _notifications.isEmpty
@@ -370,15 +467,10 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                       return ListTile(
                         title: Text(notification.title),
                         subtitle: Text(notification.body),
-                        trailing: notification.isUnread
-                            ? const Icon(Icons.circle, size: 10)
-                            : null,
+                        trailing: notification.isUnread ? const Icon(Icons.circle, size: 10) : null,
                         onTap: () async {
                           if (notification.isUnread) {
-                            await context
-                                .read<AuthSession>()
-                                .api
-                                .markNotificationRead(notification.id);
+                            await context.read<AuthSession>().api.markNotificationRead(notification.id);
                             await _load();
                           }
                         },
@@ -388,106 +480,6 @@ class _NotificationsTabState extends State<_NotificationsTab> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ProfileTab extends StatefulWidget {
-  const _ProfileTab();
-
-  @override
-  State<_ProfileTab> createState() => _ProfileTabState();
-}
-
-class _ProfileTabState extends State<_ProfileTab> {
-  Map<String, bool> _preferences = {};
-  Map<String, String> _labels = {};
-  bool _loadingPrefs = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPreferences();
-  }
-
-  Future<void> _loadPreferences() async {
-    try {
-      final data =
-          await context.read<AuthSession>().api.fetchNotificationPreferences();
-      if (!mounted) return;
-      setState(() {
-        _preferences = data.preferences;
-        _labels = data.labels;
-        _loadingPrefs = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loadingPrefs = false);
-    }
-  }
-
-  Future<void> _togglePref(String key, bool value) async {
-    final next = Map<String, bool>.from(_preferences)..[key] = value;
-    setState(() => _preferences = next);
-    await context.read<AuthSession>().api.updateNotificationPreferences(next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = context.watch<AuthSession>().user;
-    if (user == null) {
-      return const SizedBox.shrink();
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  child: Text(initialsFromName(user.name)),
-                ),
-                const SizedBox(height: 12),
-                Text(user.name, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text(user.email),
-                const SizedBox(height: 8),
-                Text('Rôle : ${user.role}${user.isAdmin ? ' (admin)' : ''}'),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text('Notifications', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        if (_loadingPrefs)
-          const Center(child: CircularProgressIndicator())
-        else
-          ..._labels.entries.map(
-            (entry) => SwitchListTile(
-              title: Text(entry.value),
-              value: _preferences[entry.key] ?? true,
-              onChanged: (value) => _togglePref(entry.key, value),
-            ),
-          ),
-        const SizedBox(height: 24),
-        OutlinedButton(
-          onPressed: () async {
-            context.read<RealtimeService>().stop();
-            await context.read<AuthSession>().logout();
-            if (!context.mounted) return;
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (_) => false,
-            );
-          },
-          child: const Text('Se déconnecter'),
-        ),
-      ],
     );
   }
 }
@@ -530,16 +522,11 @@ class _ProjectTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         title: Text(project.name),
-        subtitle: Text(
-          '${project.tasksDone}/${project.tasksTotal} tâches · '
-          '${project.membersCount} membres',
-        ),
+        subtitle: Text('${project.tasksDone}/${project.tasksTotal} tâches · ${project.membersCount} membres'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ProjectScreen(slug: project.slug),
-            ),
+            MaterialPageRoute(builder: (_) => ProjectScreen(slug: project.slug)),
           );
         },
       ),

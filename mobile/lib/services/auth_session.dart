@@ -44,4 +44,9 @@ class AuthSession extends ChangeNotifier {
     _user = null;
     notifyListeners();
   }
+
+  Future<void> refreshUser() async {
+    _user = await _api.fetchUser();
+    notifyListeners();
+  }
 }

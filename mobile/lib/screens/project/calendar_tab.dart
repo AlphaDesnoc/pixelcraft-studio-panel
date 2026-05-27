@@ -1,104 +1,124 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:table_calendar/table_calendar.dart';
 
+import '../../api/panel_api_extensions.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
-import '../../utils/format.dart';
 
-class CalendarTab extends StatelessWidget {
+class CalendarTab extends StatefulWidget {
   const CalendarTab({
     super.key,
-    required this.projectSlug,
-    required this.events,
-    required this.canWrite,
+    required this.workspace,
     required this.onChanged,
   });
 
-  final String projectSlug;
-  final List<WorkspaceEvent> events;
-  final bool canWrite;
+  final ProjectWorkspace workspace;
   final Future<void> Function() onChanged;
 
-  Future<void> _createEvent(BuildContext context) async {
-    final api = context.read<AuthSession>().api;
-    final titleController = TextEditingController();
-    final now = DateTime.now();
-    final start = now.toIso8601String();
-    final end = now.add(const Duration(hours: 1)).toIso8601String();
+  @override
+  State<CalendarTab> createState() => _CalendarTabState();
+}
 
-    final created = await showDialog<bool>(
+class _CalendarTabState extends State<CalendarTab> {
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+  CalendarFormat _format = CalendarFormat.month;
+
+  bool get _canWrite => widget.workspace.canWrite('calendar');
+  String get _slug => widget.workspace.project.slug;
+
+  DateTime? _parseEventDate(String? iso) {
+    if (iso == null || iso.isEmpty) return null;
+    return DateTime.tryParse(iso)?.toLocal();
+  }
+
+  List<WorkspaceEvent> _eventsForDay(DateTime day) {
+    return widget.workspace.events.where((event) {
+      final start = _parseEventDate(event.startAt);
+      if (start == null) return false;
+      return start.year == day.year && start.month == day.month && start.day == day.day;
+    }).toList();
+  }
+
+  Future<void> _showEventForm({WorkspaceEvent? event}) async {
+    final isEdit = event != null;
+    final titleController = TextEditingController(text: event?.title ?? '');
+    final descriptionController = TextEditingController(text: event?.description ?? '');
+    final start = _parseEventDate(event?.startAt) ?? _selectedDay ?? DateTime.now();
+    final end = _parseEventDate(event?.endAt) ?? start.add(const Duration(hours: 1));
+
+    final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Nouvel événement'),
-        content: TextField(
-          controller: titleController,
-          decoration: const InputDecoration(labelText: 'Titre'),
+        title: Text(isEdit ? 'Modifier l\'événement' : 'Nouvel événement'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Titre'),
+            ),
+            TextField(
+              controller: descriptionController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(labelText: 'Description'),
+            ),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Créer'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Enregistrer')),
         ],
       ),
     );
 
-    if (created != true || titleController.text.trim().isEmpty) return;
+    if (saved != true || titleController.text.trim().isEmpty) return;
 
-    await api.createEvent(
-          projectSlug: projectSlug,
-          title: titleController.text.trim(),
-          startAt: start,
-          endAt: end,
-        );
-    await onChanged();
+    final api = context.read<AuthSession>().api;
+    if (isEdit) {
+      final existing = event;
+      await api.updateEvent(
+        projectSlug: _slug,
+        eventId: existing.id,
+        fields: {
+          'title': titleController.text.trim(),
+          'description': descriptionController.text.trim(),
+          'start_at': start.toIso8601String(),
+          'end_at': end.toIso8601String(),
+        },
+      );
+    } else {
+      await api.createEvent(
+        projectSlug: _slug,
+        title: titleController.text.trim(),
+        startAt: start.toIso8601String(),
+        endAt: end.toIso8601String(),
+        description: descriptionController.text.trim(),
+      );
+    }
+    await widget.onChanged();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final sorted = List<WorkspaceEvent>.from(events)
-      ..sort((a, b) => (a.startAt ?? '').compareTo(b.startAt ?? ''));
-
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: onChanged,
-        child: sorted.isEmpty
-            ? ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  Center(child: Text('Aucun événement')),
-                ],
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(12),
-                itemCount: sorted.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final event = sorted[index];
-                  return Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: _parseColor(event.color),
-                        child: const Icon(Icons.event, size: 18),
-                      ),
-                      title: Text(event.title),
-                      subtitle: Text(formatRelativeTime(event.startAt)),
-                    ),
-                  );
-                },
-              ),
+  Future<void> _deleteEvent(WorkspaceEvent event) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer l\'événement ?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
+        ],
       ),
-      floatingActionButton: canWrite
-          ? FloatingActionButton(
-              onPressed: () => _createEvent(context),
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
+    if (ok != true) return;
+
+    await context.read<AuthSession>().api.deleteEvent(
+          projectSlug: _slug,
+          eventId: event.id,
+        );
+    await widget.onChanged();
   }
 
   Color _parseColor(String hex) {
@@ -106,6 +126,90 @@ class CalendarTab extends StatelessWidget {
     if (value.length == 6) {
       return Color(int.parse('FF$value', radix: 16));
     }
-    return ThemeData.dark().colorScheme.primary;
+    return Theme.of(context).colorScheme.primary;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _selectedDay ?? _focusedDay;
+    final dayEvents = _eventsForDay(selected);
+
+    return Column(
+      children: [
+        TableCalendar<WorkspaceEvent>(
+          firstDay: DateTime.utc(2020),
+          lastDay: DateTime.utc(2100),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          calendarFormat: _format,
+          eventLoader: _eventsForDay,
+          onDaySelected: (selectedDay, focusedDay) {
+            setState(() {
+              _selectedDay = selectedDay;
+              _focusedDay = focusedDay;
+            });
+          },
+          onFormatChanged: (format) => setState(() => _format = format),
+          onPageChanged: (focusedDay) => _focusedDay = focusedDay,
+          calendarStyle: const CalendarStyle(markersMaxCount: 3),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Événements du ${selected.day}/${selected.month}/${selected.year}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              if (_canWrite)
+                IconButton(
+                  tooltip: 'Ajouter',
+                  onPressed: () => _showEventForm(),
+                  icon: const Icon(Icons.add),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: widget.onChanged,
+            child: dayEvents.isEmpty
+                ? ListView(
+                    children: const [
+                      SizedBox(height: 40),
+                      Center(child: Text('Aucun événement ce jour')),
+                    ],
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: dayEvents.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final event = dayEvents[index];
+                      return Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: _parseColor(event.color),
+                            child: const Icon(Icons.event, size: 18),
+                          ),
+                          title: Text(event.title),
+                          subtitle: Text(event.description ?? ''),
+                          onTap: _canWrite ? () => _showEventForm(event: event) : null,
+                          trailing: _canWrite
+                              ? IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () => _deleteEvent(event),
+                                )
+                              : null,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
   }
 }

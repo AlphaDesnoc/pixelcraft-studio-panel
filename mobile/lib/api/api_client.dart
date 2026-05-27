@@ -58,6 +58,8 @@ class ApiClient {
     return token != null && token.isNotEmpty;
   }
 
+  Future<String?> readToken() => _storage.read(key: _tokenKey);
+
   Future<Map<String, dynamic>> getJson(String path,
       {Map<String, dynamic>? queryParameters}) async {
     return _unwrap(await _dio.get<dynamic>(path, queryParameters: queryParameters));
@@ -79,6 +81,31 @@ class ApiClient {
 
   Future<Map<String, dynamic>> deleteJson(String path) async {
     return _unwrap(await _dio.delete<dynamic>(path));
+  }
+
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    required FormData data,
+  }) async {
+    return _unwrap(
+      await _dio.post<dynamic>(
+        path,
+        data: data,
+        options: Options(contentType: 'multipart/form-data'),
+      ),
+    );
+  }
+
+  Future<List<int>> downloadBytes(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    final response = await _dio.get<List<int>>(
+      path,
+      queryParameters: queryParameters,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? [];
   }
 
   Map<String, dynamic> _unwrap(Response<dynamic> response) {

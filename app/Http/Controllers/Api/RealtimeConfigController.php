@@ -13,6 +13,7 @@ class RealtimeConfigController extends Controller
 
         return response()->json([
             'echo_available' => config('broadcasting.default') === 'reverb',
+            'auth_endpoint' => url('/api/v1/broadcasting/auth'),
             'reverb' => [
                 'key' => $reverb['key'] ?? config('broadcasting.connections.reverb.key'),
                 'host' => $reverb['options']['host'] ?? parse_url(config('app.url'), PHP_URL_HOST),
