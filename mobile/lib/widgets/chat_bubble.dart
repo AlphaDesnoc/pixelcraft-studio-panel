@@ -132,8 +132,7 @@ class ChatMessageRow extends StatelessWidget {
               onLongPress: onLongPress ?? onReply,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment:
-                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (_showSenderName)
                     Padding(
@@ -283,35 +282,35 @@ class _ChatBubble extends StatelessWidget {
           hasMedia ? 4 : 8,
           hasMedia ? 4 : 5,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (replyPreview != null) ...[
-              _ReplyPreview(preview: replyPreview!, isMine: isMine),
-              const SizedBox(height: 4),
-            ],
-            if (editingChild != null)
-              editingChild!
-            else ...[
-              if (showBody)
-                _MessageText(
-                  body: body,
-                  emojiOnly: emojiOnly,
-                  textColor: textColor,
-                ),
-              if (attachments.isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: showBody ? 4 : 0),
-                  child: _AttachmentList(attachments: attachments),
-                ),
-              Padding(
-                padding: const EdgeInsets.only(top: 2, left: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _MetaRow(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (replyPreview != null) ...[
+                _ReplyPreview(preview: replyPreview!, isMine: isMine),
+                const SizedBox(height: 4),
+              ],
+              if (editingChild != null)
+                editingChild!
+              else ...[
+                if (showBody)
+                  _MessageText(
+                    body: body,
+                    emojiOnly: emojiOnly,
+                    textColor: textColor,
+                  ),
+                if (attachments.isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: showBody ? 4 : 0),
+                    child: _AttachmentList(attachments: attachments),
+                  ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  heightFactor: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 2, left: 8),
+                    child: _MetaRow(
                       createdAt: createdAt,
                       editedAt: editedAt,
                       isRead: isMine ? isRead : null,
@@ -319,11 +318,11 @@ class _ChatBubble extends StatelessWidget {
                       metaColor: metaColor,
                       scheme: scheme,
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -523,22 +522,32 @@ class _AttachmentList extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               onTap: () => _openUrl(url),
-              child: SizedBox(
-                width: 240,
-                height: 180,
-                child: Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const ColoredBox(
-                      color: Color(0x1A000000),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return _FileLink(name: attachment.originalName, url: url);
-                  },
+              child: AspectRatio(
+                aspectRatio: 4 / 3,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return ColoredBox(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return _FileLink(
+                        name: attachment.originalName,
+                        url: url,
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
