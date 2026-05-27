@@ -13,4 +13,15 @@ return [
     */
 
     'email_domain' => env('PIXELCRAFT_EMAIL_DOMAIN', 'pixelcraftstudio.fr'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application bureau
+    |--------------------------------------------------------------------------
+    */
+
+    'desktop_download_url' => env(
+        'DESKTOP_DOWNLOAD_URL',
+        'https://github.com/AlphaDesnoc/pixelcraft-studio-panel/releases/latest',
+    ),
 ];

@@ -64,6 +64,11 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
+            'desktop' => [
+                'isDesktop' => $request->header('X-PixelCraft-Desktop') === '1'
+                    || str_contains($request->userAgent() ?? '', 'PixelCraftPanel'),
+                'downloadUrl' => config('pixelcraft.desktop_download_url'),
+            ],
         ];
     }
 }

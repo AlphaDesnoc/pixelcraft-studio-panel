@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import axios from "axios";
 import { bindPresenceHandlers } from "@/lib/presence.js";
+import { showDesktopNotification } from "@/composables/useDesktop.js";
 
 export const onlineUsers = ref([]);
 export const unreadMessages = ref(0);
@@ -67,6 +68,18 @@ function handleInboxEvent(event, { skipUnreadIncrement = false } = {}) {
 
   if (activeConversationId.value !== conversationId) {
     unreadMessages.value += 1;
+
+    const senderName = message?.user?.name ?? inbox?.participant?.name ?? "Quelqu'un";
+    const preview =
+      message?.body ??
+      inbox?.last_message?.body ??
+      "Nouveau message privé";
+
+    showDesktopNotification({
+      title: `Message de ${senderName}`,
+      body: preview,
+      url: conversationId ? `/messages?c=${conversationId}` : "/messages",
+    });
   }
 }
 

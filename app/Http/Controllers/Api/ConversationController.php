@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
 use App\Events\DirectMessageSent;
+use App\Http\Controllers\Controller;
 use App\Models\DirectConversation;
 use App\Models\DirectMessage;
 use App\Models\User;
@@ -13,16 +14,12 @@ use App\Support\MentionParser;
 use App\Support\PanelNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Inertia\Inertia;
-use Inertia\Response;
 
-class MessageController extends Controller
+class ConversationController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $selectedId = $request->integer('c') ?: null;
 
         $conversations = DirectConversation::query()
             ->where(function ($q) use ($user) {
@@ -48,33 +45,9 @@ class MessageController extends Controller
             ])
             ->values();
 
-        $selectedConversation = null;
-        $messages = collect();
-
-        if ($selectedId) {
-            $conv = DirectConversation::query()->find($selectedId);
-            if ($conv && DirectMessageAccess::canAccess($user, $conv)) {
-                $selectedConversation = DirectConversationPayload::serialize(
-                    $conv->load(['userOne:id,name,email', 'userTwo:id,name,email']),
-                    $user,
-                );
-                $messages = $conv->messages()
-                    ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
-                    ->orderBy('created_at')
-                    ->get()
-                    ->map(fn (DirectMessage $m) => $m->toPayload($user))
-                    ->values();
-
-                $conv->markReadFor($user);
-            }
-        }
-
-        return Inertia::render('Messages/Index', [
+        return response()->json([
             'conversations' => $conversations,
             'contacts' => $contacts,
-            'selectedConversationId' => $selectedConversation['id'] ?? null,
-            'selectedConversation' => $selectedConversation,
-            'messages' => $messages,
         ]);
     }
 
@@ -101,60 +74,6 @@ class MessageController extends Controller
         $conversation->markReadFor($request->user());
 
         return response()->json(['ok' => true]);
-    }
-
-    public function storeAttachment(Request $request, DirectConversation $conversation): JsonResponse
-    {
-        $user = $request->user();
-        DirectMessageAccess::ensureAccess($user, $conversation);
-
-        $validated = $request->validate([
-            'file' => ['required', 'file', 'max:10240'],
-            'reply_to_id' => ['nullable', 'integer', 'exists:direct_messages,id'],
-        ]);
-
-        $file = $validated['file'];
-        $path = $file->store("direct/{$conversation->id}", 'public');
-        $mimeType = $file->getMimeType() ?: $file->getClientMimeType();
-
-        $message = $conversation->messages()->create([
-            'user_id' => $user->id,
-            'body' => '',
-            'reply_to_id' => $validated['reply_to_id'] ?? null,
-        ]);
-
-        $attachment = $message->attachments()->create([
-            'user_id' => $user->id,
-            'path' => $path,
-            'original_name' => $file->getClientOriginalName(),
-            'mime_type' => $mimeType,
-            'size' => $file->getSize(),
-        ]);
-
-        $conversation->update(['last_message_at' => $message->created_at]);
-        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
-
-        DirectMessageSent::dispatch($message);
-
-        $recipient = $conversation->otherParticipant($user);
-        if ($recipient && $recipient->id !== $user->id) {
-            PanelNotifier::send(
-                $recipient,
-                UserNotification::TYPE_DIRECT_MESSAGE,
-                'Nouveau message privé',
-                sprintf('%s a envoyé un fichier : %s', $user->name, $attachment->original_name),
-                route('messages.index', ['c' => $conversation->id]),
-                ['conversation_id' => $conversation->id],
-            );
-        }
-
-        return response()->json([
-            'message' => $message->toPayload($user),
-            'conversation' => DirectConversationPayload::serialize(
-                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
-                $user,
-            ),
-        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -230,7 +149,11 @@ class MessageController extends Controller
         return response()->json([
             'message' => $message->toPayload($user),
             'conversation' => DirectConversationPayload::serialize(
-                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
+                $conversation->load([
+                    'userOne:id,name,email',
+                    'userTwo:id,name,email',
+                    'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name'),
+                ]),
                 $user,
             ),
         ]);

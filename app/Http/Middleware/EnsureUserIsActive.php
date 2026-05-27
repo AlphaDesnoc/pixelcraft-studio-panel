@@ -14,6 +14,14 @@ class EnsureUserIsActive
         $user = $request->user();
 
         if ($user && ! $user->is_active) {
+            if ($request->is('api/*')) {
+                $user->currentAccessToken()?->delete();
+
+                return response()->json([
+                    'message' => 'Ce compte a été désactivé. Contactez un administrateur.',
+                ], 403);
+            }
+
             Auth::logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();

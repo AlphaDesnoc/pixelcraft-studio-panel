@@ -4,6 +4,7 @@ import {
   setUnreadNotificationsCount,
   unreadNotifications,
 } from "@/composables/useSiteRealtime.js";
+import { showDesktopNotification } from "@/composables/useDesktop.js";
 
 export const notifications = ref([]);
 export const loadingNotifications = ref(false);
@@ -71,6 +72,11 @@ function handleNotificationEvent(event) {
   const payload = event?.notification;
   if (payload) {
     prependNotification(payload);
+    showDesktopNotification({
+      title: payload.title ?? "Notification",
+      body: payload.body ?? "",
+      url: payload.url,
+    });
   }
   if (typeof event?.unread_count === "number") {
     setUnreadNotificationsCount(event.unread_count);

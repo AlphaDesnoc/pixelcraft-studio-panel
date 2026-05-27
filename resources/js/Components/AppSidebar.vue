@@ -12,6 +12,7 @@ import {
 } from "lucide-vue-next";
 import ApplicationLogo from "@/Components/ApplicationLogo.vue";
 import SidebarItem from "@/Components/SidebarItem.vue";
+import DesktopAppPromo from "@/Components/DesktopAppPromo.vue";
 import { Avatar } from "@/Components/ui/avatar";
 import { unreadMessages } from "@/composables/useSiteRealtime.js";
 
@@ -99,6 +100,7 @@ const userInitials = computed(() => {
           <template #icon><ShieldCheck /></template>
           Administration
         </SidebarItem>
+        <DesktopAppPromo variant="sidebar" />
       </div>
 
       <p

@@ -9,11 +9,14 @@ import {
   initSiteRealtime,
   setUnreadCount,
   setUnreadNotificationsCount,
+  unreadMessages,
+  unreadNotifications,
 } from "@/composables/useSiteRealtime.js";
 import {
   initNotifications,
   teardownNotifications,
 } from "@/composables/useNotifications.js";
+import { setDesktopBadge } from "@/composables/useDesktop.js";
 import { useTheme } from "@/composables/useTheme.js";
 import { useKeyboardShortcuts, onEscape } from "@/composables/useKeyboardShortcuts.js";
 
@@ -97,6 +100,14 @@ watch(
       setUnreadNotificationsCount(count);
     }
   },
+);
+
+watch(
+  [unreadMessages, unreadNotifications],
+  ([messages, notifications]) => {
+    setDesktopBadge((messages ?? 0) + (notifications ?? 0));
+  },
+  { immediate: true },
 );
 </script>
 
