@@ -1,6 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../api/panel_api_extensions.dart';
 import '../models/my_task.dart';
 import '../services/auth_session.dart';
 import 'project_screen.dart';
@@ -173,6 +178,14 @@ class _MyTasksTabState extends State<MyTasksTab> {
     }
   }
 
+  Future<void> _exportTasks() async {
+    final bytes = await context.read<AuthSession>().api.downloadExport('/export/my-tasks');
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/my-tasks.csv');
+    await file.writeAsBytes(bytes);
+    await Share.shareXFiles([XFile(file.path)], text: 'Export mes tâches');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -192,49 +205,56 @@ class _MyTasksTabState extends State<MyTasksTab> {
       );
     }
 
-    if (_tasks.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          children: const [
-            SizedBox(height: 120),
-            Center(child: Text('Aucune tâche assignée')),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        itemCount: _tasks.length,
-        separatorBuilder: (context, index) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          final task = _tasks[index];
-          return ListTile(
-            title: Text(task.title),
-            subtitle: Text(
-              [
-                if (task.project != null) task.project!.name,
-                if (task.listName != null) task.listName,
-                if (task.dueDate != null) 'Échéance ${task.dueDate}',
-              ].join(' · '),
+    return Scaffold(
+      body: _tasks.isEmpty
+          ? RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                children: const [
+                  SizedBox(height: 120),
+                  Center(child: Text('Aucune tâche assignée')),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                itemCount: _tasks.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final task = _tasks[index];
+                  return ListTile(
+                    title: Text(task.title),
+                    subtitle: Text(
+                      [
+                        if (task.project != null) task.project!.name,
+                        if (task.listName != null) task.listName,
+                        if (task.dueDate != null) 'Échéance ${task.dueDate}',
+                      ].join(' · '),
+                    ),
+                    trailing: task.isOverdue
+                        ? const Icon(Icons.warning_amber, color: Colors.orange)
+                        : null,
+                    onTap: task.project != null
+                        ? () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProjectScreen(slug: task.project!.slug),
+                              ),
+                            );
+                          }
+                        : null,
+                  );
+                },
+              ),
             ),
-            trailing: task.isOverdue
-                ? const Icon(Icons.warning_amber, color: Colors.orange)
-                : null,
-            onTap: task.project != null
-                ? () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ProjectScreen(slug: task.project!.slug),
-                      ),
-                    );
-                  }
-                : null,
-          );
-        },
-      ),
+      floatingActionButton: _tasks.isNotEmpty
+          ? FloatingActionButton(
+              onPressed: _exportTasks,
+              tooltip: 'Exporter',
+              child: const Icon(Icons.download_outlined),
+            )
+          : null,
     );
   }
 }

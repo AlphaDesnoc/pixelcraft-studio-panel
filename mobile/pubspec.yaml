@@ -41,6 +41,11 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_local_notifications: ^19.0.0
   uuid: ^4.5.1
+  file_picker: ^8.1.7
+  table_calendar: ^3.2.0
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
+  pusher_reverb_flutter: ^0.0.7
 
 dev_dependencies:
   flutter_test:
@@ -52,6 +57,28 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/logo.png
+  remove_alpha_ios: true
+  background_color_ios: "#000000"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/logo.png
+  web:
+    generate: true
+    image_path: assets/logo.png
+    background_color: "#000000"
+    theme_color: "#000000"
+  windows:
+    generate: true
+    image_path: assets/logo.png
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: assets/logo.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

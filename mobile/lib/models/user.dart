@@ -6,6 +6,7 @@ class PanelUser {
     required this.role,
     required this.twoFactorEnabled,
     required this.isAdmin,
+    this.themePreference = 'dark',
     this.notificationPreferences = const {},
   });
 
@@ -15,7 +16,24 @@ class PanelUser {
   final String role;
   final bool twoFactorEnabled;
   final bool isAdmin;
+  final String themePreference;
   final Map<String, bool> notificationPreferences;
+
+  PanelUser copyWith({
+    String? themePreference,
+    bool? twoFactorEnabled,
+  }) {
+    return PanelUser(
+      id: id,
+      name: name,
+      email: email,
+      role: role,
+      twoFactorEnabled: twoFactorEnabled ?? this.twoFactorEnabled,
+      isAdmin: isAdmin,
+      themePreference: themePreference ?? this.themePreference,
+      notificationPreferences: notificationPreferences,
+    );
+  }
 
   factory PanelUser.fromJson(Map<String, dynamic> json) {
     final prefsRaw = json['notification_preferences'];
@@ -33,6 +51,7 @@ class PanelUser {
       role: json['role'] as String? ?? 'member',
       twoFactorEnabled: json['two_factor_enabled'] == true,
       isAdmin: json['is_admin'] == true,
+      themePreference: json['theme_preference'] as String? ?? 'dark',
       notificationPreferences: prefs,
     );
   }

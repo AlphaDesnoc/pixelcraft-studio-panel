@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+// Extensions loaded app-wide for PanelApi.
+// ignore: unused_import
+import 'api/panel_api_extensions.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_session.dart';
@@ -57,6 +60,7 @@ class _AppRootState extends State<_AppRoot> {
     } else {
       realtime.stop();
     }
+    setState(() {});
   }
 
   @override
@@ -67,10 +71,14 @@ class _AppRootState extends State<_AppRoot> {
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<AuthSession>();
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    final themePreference = session.user?.themePreference ?? 'dark';
+
     return MaterialApp(
       title: 'PixelCraft Panel',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
+      theme: AppTheme.themeFor(themePreference, platformBrightness),
       home: const _RootScreen(),
     );
   }
@@ -84,9 +92,7 @@ class _RootScreen extends StatelessWidget {
     final session = context.watch<AuthSession>();
 
     if (session.bootstrapping) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (session.isAuthenticated) {

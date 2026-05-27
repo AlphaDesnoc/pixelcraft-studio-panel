@@ -16,6 +16,7 @@ class ApiUserPayload
             'role' => $user->role,
             'is_admin' => (bool) $user->is_admin,
             'two_factor_enabled' => (bool) $user->two_factor_confirmed_at,
+            'theme_preference' => $user->theme_preference ?? 'dark',
             'notification_preferences' => NotificationPreferences::forUser($user),
         ];
     }

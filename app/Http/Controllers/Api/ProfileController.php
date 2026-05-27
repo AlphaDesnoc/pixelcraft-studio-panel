@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Support\NotificationPreferences;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
@@ -37,5 +39,19 @@ class ProfileController extends Controller
         return response()->json([
             'preferences' => NotificationPreferences::forUser($user),
         ]);
+    }
+
+    public function updatePassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', Password::defaults(), 'confirmed'],
+        ]);
+
+        $request->user()->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        return response()->json(['ok' => true]);
     }
 }

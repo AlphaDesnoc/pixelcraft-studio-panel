@@ -1,3 +1,5 @@
+import 'attachment.dart';
+
 class MessageAuthor {
   const MessageAuthor({required this.id, required this.name});
 
@@ -20,6 +22,10 @@ class DirectMessage {
     required this.createdAt,
     required this.user,
     required this.isRead,
+    this.replyPreview,
+    this.reactions = const [],
+    this.attachments = const [],
+    this.replyToId,
   });
 
   final int id;
@@ -28,6 +34,10 @@ class DirectMessage {
   final String? createdAt;
   final MessageAuthor? user;
   final bool isRead;
+  final ReplyPreview? replyPreview;
+  final List<MessageReaction> reactions;
+  final List<PanelAttachment> attachments;
+  final int? replyToId;
 
   factory DirectMessage.fromJson(Map<String, dynamic> json) {
     return DirectMessage(
@@ -39,6 +49,16 @@ class DirectMessage {
           ? MessageAuthor.fromJson(json['user'] as Map<String, dynamic>)
           : null,
       isRead: json['is_read'] == true,
+      replyPreview: json['reply_preview'] is Map<String, dynamic>
+          ? ReplyPreview.fromJson(json['reply_preview'] as Map<String, dynamic>)
+          : null,
+      reactions: (json['reactions'] as List<dynamic>? ?? [])
+          .map((e) => MessageReaction.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      attachments: (json['attachments'] as List<dynamic>? ?? [])
+          .map((e) => PanelAttachment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      replyToId: json['reply_to_id'] as int?,
     );
   }
 }

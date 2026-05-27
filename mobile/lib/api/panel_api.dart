@@ -561,4 +561,40 @@ class PanelApi {
       await _client.postJson('/admin/users/$userId/toggle-active');
     });
   }
+
+  Future<RealtimeConfig> fetchRealtimeConfig() {
+    return _client.guard(() async {
+      final data = await _client.getJson('/realtime/config');
+      final reverb = data['reverb'] as Map<String, dynamic>? ?? {};
+      return RealtimeConfig(
+        echoAvailable: data['echo_available'] == true,
+        authEndpoint: data['auth_endpoint'] as String? ??
+            '${AppConfig.panelBaseUrl}/api/v1/broadcasting/auth',
+        key: reverb['key'] as String? ?? '',
+        host: reverb['host'] as String? ?? '',
+        port: reverb['port'] as int? ?? 443,
+        scheme: reverb['scheme'] as String? ?? 'https',
+      );
+    });
+  }
+}
+
+class RealtimeConfig {
+  const RealtimeConfig({
+    required this.echoAvailable,
+    required this.authEndpoint,
+    required this.key,
+    required this.host,
+    required this.port,
+    required this.scheme,
+  });
+
+  final bool echoAvailable;
+  final String authEndpoint;
+  final String key;
+  final String host;
+  final int port;
+  final String scheme;
+
+  bool get useTls => scheme == 'https';
 }
