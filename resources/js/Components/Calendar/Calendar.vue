@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref } from "vue";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight, Plus, Repeat } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
+import { expandRecurringEvents } from "@/lib/calendarRecurrence.js";
 import EventFormDialog from "./EventFormDialog.vue";
 
 const props = defineProps({
@@ -61,9 +62,18 @@ const days = computed(() => {
   return cells;
 });
 
+const visibleRange = computed(() => ({
+  start: days.value[0]?.date ?? new Date(),
+  end: days.value[days.value.length - 1]?.date ?? new Date(),
+}));
+
+const displayEvents = computed(() =>
+  expandRecurringEvents(props.events, visibleRange.value.start, visibleRange.value.end),
+);
+
 const eventsByDay = computed(() => {
   const map = new Map();
-  for (const ev of props.events) {
+  for (const ev of displayEvents.value) {
     const start = new Date(ev.start_at);
     const end = new Date(ev.end_at);
     const cursor = new Date(start);
@@ -107,7 +117,8 @@ function openCreate(date = null) {
 }
 
 function openEdit(ev) {
-  dialogEvent.value = ev;
+  const masterId = ev.series_id ?? ev.id;
+  dialogEvent.value = props.events.find((event) => event.id === masterId) ?? ev;
   dialogDefaultDate.value = null;
   dialogOpen.value = true;
 }
@@ -192,14 +203,20 @@ function formatTime(iso) {
             <li
               v-for="ev in eventsForDay(cell.iso).slice(0, 3)"
               :key="ev.id"
-              class="truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white"
+              class="flex items-center gap-1 truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white"
               :style="{ backgroundColor: ev.color }"
               @click.stop="openEdit(ev)"
             >
-              <span v-if="!ev.all_day" class="opacity-90">
-                {{ formatTime(ev.start_at) }}
+              <Repeat
+                v-if="ev.recurrence || ev.series_id"
+                class="h-3 w-3 shrink-0 opacity-90"
+              />
+              <span class="truncate">
+                <span v-if="!ev.all_day" class="opacity-90">
+                  {{ formatTime(ev.start_at) }}
+                </span>
+                {{ ev.title }}
               </span>
-              {{ ev.title }}
             </li>
             <li
               v-if="eventsForDay(cell.iso).length > 3"

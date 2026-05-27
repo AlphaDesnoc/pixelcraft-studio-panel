@@ -3,6 +3,9 @@ import { computed, nextTick, ref } from "vue";
 const MENTION_PATTERN = /(?:^|\s)@([a-z0-9._-]*)$/i;
 
 export function memberPseudo(member) {
+  if (member?.type === "rank") {
+    return member.slug ?? member.pseudo ?? "";
+  }
   if (member?.pseudo) {
     return member.pseudo;
   }
@@ -51,21 +54,27 @@ export function useMentionAutocomplete({
     }
 
     const q = query.value.toLowerCase();
-    return (candidatesRef.value ?? [])
-      .map((member) => ({
-        ...member,
-        pseudo: memberPseudo(member),
-      }))
-      .filter((member) => member.pseudo)
-      .filter((member) => {
-        if (!q) {
-          return true;
-        }
-        const pseudo = member.pseudo.toLowerCase();
-        const name = (member.name ?? "").toLowerCase();
-        return pseudo.startsWith(q) || name.includes(q);
-      })
-      .slice(0, 8);
+    const items = (candidatesRef.value ?? []).map((member) => ({
+      ...member,
+      pseudo: memberPseudo(member),
+    }));
+
+    const rankItems = items.filter((item) => item.type === "rank" && item.pseudo);
+    const userItems = items.filter((item) => item.type !== "rank" && item.pseudo);
+
+    const filterItem = (item) => {
+      if (!q) {
+        return true;
+      }
+      const pseudo = item.pseudo.toLowerCase();
+      const name = (item.name ?? "").toLowerCase();
+      return pseudo.startsWith(q) || name.includes(q);
+    };
+
+    return [...rankItems.filter(filterItem), ...userItems.filter(filterItem)].slice(
+      0,
+      8,
+    );
   });
 
   function close() {

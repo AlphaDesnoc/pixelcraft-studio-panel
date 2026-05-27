@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
+import '../../utils/calendar_recurrence.dart';
 import '../../api/panel_api_extensions.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
@@ -34,19 +35,26 @@ class _CalendarTabState extends State<CalendarTab> {
   }
 
   List<WorkspaceEvent> _eventsForDay(DateTime day) {
-    return widget.workspace.events.where((event) {
-      final start = _parseEventDate(event.startAt);
-      if (start == null) return false;
-      return start.year == day.year && start.month == day.month && start.day == day.day;
-    }).toList();
+    return expandEventsForDay(widget.workspace.events, day);
+  }
+
+  WorkspaceEvent? _resolveMasterEvent(WorkspaceEvent event) {
+    final masterId = event.seriesId ?? event.id;
+    for (final candidate in widget.workspace.events) {
+      if (candidate.id == masterId) {
+        return candidate;
+      }
+    }
+    return event;
   }
 
   Future<void> _showEventForm({WorkspaceEvent? event}) async {
-    final isEdit = event != null;
-    final titleController = TextEditingController(text: event?.title ?? '');
-    final descriptionController = TextEditingController(text: event?.description ?? '');
-    final start = _parseEventDate(event?.startAt) ?? _selectedDay ?? DateTime.now();
-    final end = _parseEventDate(event?.endAt) ?? start.add(const Duration(hours: 1));
+    final master = event == null ? null : _resolveMasterEvent(event);
+    final isEdit = master != null;
+    final titleController = TextEditingController(text: master?.title ?? '');
+    final descriptionController = TextEditingController(text: master?.description ?? '');
+    final start = _parseEventDate(master?.startAt) ?? _selectedDay ?? DateTime.now();
+    final end = _parseEventDate(master?.endAt) ?? start.add(const Duration(hours: 1));
 
     final saved = await showDialog<bool>(
       context: context,
@@ -78,7 +86,7 @@ class _CalendarTabState extends State<CalendarTab> {
 
     final api = context.read<AuthSession>().api;
     if (isEdit) {
-      final existing = event;
+      final existing = master!;
       await api.updateEvent(
         projectSlug: _slug,
         eventId: existing.id,
@@ -102,6 +110,7 @@ class _CalendarTabState extends State<CalendarTab> {
   }
 
   Future<void> _deleteEvent(WorkspaceEvent event) async {
+    final master = _resolveMasterEvent(event);
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -116,7 +125,7 @@ class _CalendarTabState extends State<CalendarTab> {
 
     await context.read<AuthSession>().api.deleteEvent(
           projectSlug: _slug,
-          eventId: event.id,
+          eventId: master.id,
         );
     await widget.onChanged();
   }
@@ -195,8 +204,17 @@ class _CalendarTabState extends State<CalendarTab> {
                             child: const Icon(Icons.event, size: 18),
                           ),
                           title: Text(event.title),
-                          subtitle: Text(event.description ?? ''),
-                          onTap: _canWrite ? () => _showEventForm(event: event) : null,
+                          subtitle: Text(
+                            [
+                              if (event.recurrence != null || event.seriesId != null)
+                                'Récurrent',
+                              if (event.description?.isNotEmpty == true)
+                                event.description!,
+                            ].join(' · '),
+                          ),
+                          onTap: _canWrite
+                              ? () => _showEventForm(event: event)
+                              : null,
                           trailing: _canWrite
                               ? IconButton(
                                   icon: const Icon(Icons.delete_outline),

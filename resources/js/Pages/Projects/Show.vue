@@ -73,6 +73,7 @@ const props = defineProps({
   bugStatuses: { type: Object, default: () => ({}) },
   chatMessages: { type: Array, default: () => [] },
   chatMembers: { type: Array, default: () => [] },
+  chatRankMentions: { type: Array, default: () => [] },
   activityLogs: { type: Array, default: () => [] },
   taskActivityByRank: { type: Array, default: () => [] },
   tags: { type: Array, default: () => [] },
@@ -523,6 +524,7 @@ const kanbanBugLinkTasks = computed(() =>
           :space-label="spaceLabel"
           :active="activeTab === 'chat'"
           :initial-chat-members="chatMembers"
+          :chat-rank-mentions="chatRankMentions"
         />
       </section>
 

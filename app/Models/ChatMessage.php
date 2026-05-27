@@ -4,7 +4,6 @@ namespace App\Models;
 
 use App\Http\Controllers\ChatReactionController;
 use App\Support\ChatBodyFormatter;
-use App\Support\MentionParser;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -94,7 +93,7 @@ class ChatMessage extends Model
         return [
             'id' => $this->id,
             'body' => $this->body,
-            'body_html' => ChatBodyFormatter::toHtml($this->body ?? ''),
+            'body_html' => ChatBodyFormatter::toHtml($this->body ?? '', $this->mentions ?? []),
             'space_key' => $this->space_key,
             'mentions' => $this->mentions ?? [],
             'reply_to_id' => $this->reply_to_id,

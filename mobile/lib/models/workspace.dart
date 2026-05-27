@@ -521,6 +521,10 @@ class WorkspaceEvent {
     this.endAt,
     required this.allDay,
     required this.color,
+    this.recurrence,
+    this.recurrenceWeekdays = const [],
+    this.recurrenceUntil,
+    this.seriesId,
   });
 
   final int id;
@@ -530,6 +534,20 @@ class WorkspaceEvent {
   final String? endAt;
   final bool allDay;
   final String color;
+  final String? recurrence;
+  final List<int> recurrenceWeekdays;
+  final String? recurrenceUntil;
+  final int? seriesId;
+
+  DateTime? get startAtDate =>
+      startAt == null ? null : DateTime.tryParse(startAt!)?.toLocal();
+
+  DateTime? get recurrenceUntilDate => recurrenceUntil == null
+      ? null
+      : DateTime.tryParse('${recurrenceUntil!}T23:59:59')?.toLocal();
+
+  DateTime? get endAtDate =>
+      endAt == null ? null : DateTime.tryParse(endAt!)?.toLocal();
 
   factory WorkspaceEvent.fromJson(Map<String, dynamic> json) {
     return WorkspaceEvent(
@@ -540,6 +558,11 @@ class WorkspaceEvent {
       endAt: json['end_at'] as String?,
       allDay: json['all_day'] as bool? ?? false,
       color: json['color'] as String? ?? '#7c5cff',
+      recurrence: json['recurrence'] as String?,
+      recurrenceWeekdays: (json['recurrence_weekdays'] as List<dynamic>? ?? [])
+          .map((value) => value as int)
+          .toList(),
+      recurrenceUntil: json['recurrence_until'] as String?,
     );
   }
 }

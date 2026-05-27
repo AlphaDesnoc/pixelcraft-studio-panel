@@ -84,6 +84,9 @@ class ProjectController extends Controller
             'color' => $e->color,
             'creator_id' => $e->creator_id,
             'rank_id' => $e->rank_id,
+            'recurrence' => $e->recurrence,
+            'recurrence_weekdays' => $e->recurrence_weekdays ?? [],
+            'recurrence_until' => optional($e->recurrence_until)?->toDateString(),
         ])->values();
 
         $fileNodes = $project->fileNodes->map(fn ($n) => [
@@ -387,6 +390,17 @@ class ProjectController extends Controller
             'chatMembers' => $space->isFull
                 ? []
                 : SpaceChatAccess::membersWithPresence($project, $space->key, $user),
+            'chatRankMentions' => $space->isGlobal
+                ? $project->ranks
+                    ->sortBy('position')
+                    ->map(fn ($r) => [
+                        'id' => $r->id,
+                        'slug' => $r->slug,
+                        'name' => $r->name,
+                        'color' => $r->color,
+                    ])
+                    ->values()
+                : [],
             'activityLogs' => ActivityLog::query()
                 ->where('project_id', $project->id)
                 ->with('user:id,name')
