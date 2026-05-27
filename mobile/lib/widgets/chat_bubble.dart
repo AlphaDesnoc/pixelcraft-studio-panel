@@ -111,87 +111,75 @@ class ChatMessageRow extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
-      child: Align(
-        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment:
-              isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (groupChat && !isMine)
-              SizedBox(
-                width: 32,
-                child: _showAvatar
-                    ? Padding(
-                        padding: const EdgeInsets.only(bottom: 2, right: 6),
-                        child: _Avatar(name: userName, radius: 14),
-                      )
-                    : null,
-              ),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: GestureDetector(
-                onLongPress: onLongPress ?? onReply,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: isMine
-                      ? CrossAxisAlignment.end
-                      : CrossAxisAlignment.start,
-                  children: [
-                    if (_showSenderName)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 2),
-                        child: Text(
-                          userName,
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12.5,
-                                  ),
-                        ),
-                      ),
-                    Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        _ChatBubble(
-                          isMine: isMine,
-                          pinned: pinned,
-                          body: body,
-                          createdAt: createdAt,
-                          editedAt: editedAt,
-                          replyPreview: replyPreview,
-                          reactions: reactions,
-                          attachments: attachments,
-                          isRead: isRead,
-                          clusterStart: clusterStart,
-                          clusterEnd: clusterEnd,
-                          onToggleReaction: onToggleReaction,
-                          trailing: trailing,
-                          editingChild: editingChild,
-                        ),
-                        if (reactions.isNotEmpty && editingChild == null)
-                          Positioned(
-                            bottom: -10,
-                            left: isMine ? null : 8,
-                            right: isMine ? 8 : null,
-                            child: _ReactionPills(
-                              reactions: reactions,
-                              onToggle: onToggleReaction,
+      child: Row(
+        mainAxisAlignment:
+            isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (groupChat && !isMine)
+            SizedBox(
+              width: 32,
+              child: _showAvatar
+                  ? Padding(
+                      padding: const EdgeInsets.only(bottom: 2, right: 6),
+                      child: _Avatar(name: userName, radius: 14),
+                    )
+                  : null,
+            ),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: GestureDetector(
+              onLongPress: onLongPress ?? onReply,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment:
+                    isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (_showSenderName)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 2),
+                      child: Text(
+                        userName,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12.5,
                             ),
-                          ),
-                      ],
+                      ),
                     ),
-                    if (reactions.isNotEmpty) const SizedBox(height: 12),
-                  ],
-                ),
+                  _ChatBubble(
+                    isMine: isMine,
+                    pinned: pinned,
+                    body: body,
+                    createdAt: createdAt,
+                    editedAt: editedAt,
+                    replyPreview: replyPreview,
+                    reactions: reactions,
+                    attachments: attachments,
+                    isRead: isRead,
+                    clusterStart: clusterStart,
+                    clusterEnd: clusterEnd,
+                    onToggleReaction: onToggleReaction,
+                    trailing: trailing,
+                    editingChild: editingChild,
+                  ),
+                  if (reactions.isNotEmpty && editingChild == null)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: 4,
+                        left: isMine ? 0 : 8,
+                        right: isMine ? 8 : 0,
+                      ),
+                      child: _ReactionPills(
+                        reactions: reactions,
+                        onToggle: onToggleReaction,
+                      ),
+                    ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -476,7 +464,7 @@ class _ReplyPreview extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     return Container(
-      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 280),
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: isMine ? 0.35 : 0.5),
@@ -589,7 +577,8 @@ class _FileLink extends StatelessWidget {
             Icon(Icons.insert_drive_file_outlined,
                 size: 18, color: theme.colorScheme.primary),
             const SizedBox(width: 6),
-            Flexible(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 220),
               child: Text(
                 name,
                 style: theme.textTheme.bodySmall?.copyWith(
