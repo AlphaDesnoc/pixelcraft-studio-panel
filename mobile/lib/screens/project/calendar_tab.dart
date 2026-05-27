@@ -38,7 +38,7 @@ class _CalendarTabState extends State<CalendarTab> {
     return expandEventsForDay(widget.workspace.events, day);
   }
 
-  WorkspaceEvent? _resolveMasterEvent(WorkspaceEvent event) {
+  WorkspaceEvent _resolveMasterEvent(WorkspaceEvent event) {
     final masterId = event.seriesId ?? event.id;
     for (final candidate in widget.workspace.events) {
       if (candidate.id == masterId) {
@@ -85,11 +85,10 @@ class _CalendarTabState extends State<CalendarTab> {
     if (saved != true || titleController.text.trim().isEmpty) return;
 
     final api = context.read<AuthSession>().api;
-    if (isEdit) {
-      final existing = master!;
+    if (master != null) {
       await api.updateEvent(
         projectSlug: _slug,
-        eventId: existing.id,
+        eventId: master.id,
         fields: {
           'title': titleController.text.trim(),
           'description': descriptionController.text.trim(),
