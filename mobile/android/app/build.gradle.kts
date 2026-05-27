@@ -47,11 +47,13 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (!keystorePropertiesFile.exists()) {
+                throw GradleException(
+                    "Release build requires android/key.properties (release keystore). " +
+                        "Debug builds: use `flutter run`. See mobile/README.md.",
+                )
             }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

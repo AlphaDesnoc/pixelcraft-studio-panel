@@ -63,9 +63,17 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
-            echo "No ANDROID_KEYSTORE_BASE64 secret — APK signed with debug key"
-            exit 0
+          missing=()
+          [[ -z "${ANDROID_KEYSTORE_BASE64}" ]] && missing+=("ANDROID_KEYSTORE_BASE64")
+          [[ -z "${ANDROID_KEYSTORE_PASSWORD}" ]] && missing+=("ANDROID_KEYSTORE_PASSWORD")
+          [[ -z "${ANDROID_KEY_ALIAS}" ]] && missing+=("ANDROID_KEY_ALIAS")
+          [[ -z "${ANDROID_KEY_PASSWORD}" ]] && missing+=("ANDROID_KEY_PASSWORD")
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Release APK requires Android signing secrets: ${missing[*]}"
+            echo "Configure them in GitHub → Settings → Secrets and variables → Actions."
+            echo "Without a release keystore, APK signatures change and in-app updates fail."
+            exit 1
           fi
 
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
@@ -75,6 +83,9 @@ jobs:
           keyAlias=${ANDROID_KEY_ALIAS}
           storeFile=app/release.keystore
           EOF
+
+          test -s android/app/release.keystore
+          test -f android/key.properties
 
       - name: Analyze
         run: flutter analyze
@@ -125,7 +136,7 @@ jobs:
 
             L'app Android lit `update-manifest.txt` (ci-joint) au démarrage et propose la mise à jour si le build est plus récent.
 
-            > APK signé debug par défaut. Pour Play Store, ajoutez les secrets `ANDROID_KEYSTORE_*` au dépôt.
+            > APK signé avec le keystore release (`ANDROID_KEYSTORE_*` requis en CI).
           files: |
             pixelcraft-panel-mobile-${{ steps.version.outputs.version_name }}.apk
             update-manifest.txt

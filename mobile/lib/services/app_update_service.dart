@@ -83,6 +83,44 @@ class AppUpdateService {
   /// Exposé pour les tests unitaires.
   static AppUpdateInfo? parseManifest(String raw) => _parseManifest(raw);
 
+  /// Exposé pour les tests unitaires.
+  static bool isSignatureInstallConflict(String? message) {
+    final lower = (message ?? '').toLowerCase();
+    if (lower.isEmpty) return false;
+
+    const markers = [
+      'conflit',
+      'conflict',
+      'signatures do not match',
+      'signature mismatch',
+      'install_failed_update_incompatible',
+      'update incompatible',
+      'package conflicts',
+      'existing package',
+      'package déjà present',
+      'package deja present',
+    ];
+
+    return markers.any(lower.contains);
+  }
+
+  /// Exposé pour les tests unitaires.
+  static String userFacingInstallMessage(String? systemMessage) {
+    if (isSignatureInstallConflict(systemMessage)) {
+      return 'Installation impossible : l’APK n’a pas la même signature que '
+          'l’app installée.\n\n'
+          'Désinstallez PixelCraft Panel (Paramètres → Applications), '
+          'puis réinstallez la mise à jour.';
+    }
+
+    if (systemMessage != null && systemMessage.trim().isNotEmpty) {
+      return systemMessage.trim();
+    }
+
+    return 'Impossible de lancer l’installation. Autorisez les sources '
+        'inconnues si Android le demande.';
+  }
+
   static AppUpdateInfo? _parseManifest(String raw) {
     String? version;
     int? build;
@@ -229,24 +267,8 @@ class AppUpdateService {
 
       Navigator.of(context, rootNavigator: true).pop();
 
-      final result = await OpenFilex.open(
-        filePath,
-        type: 'application/vnd.android.package-archive',
-      );
-
       if (!context.mounted) return;
-
-      if (result.type != ResultType.done) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result.message.isNotEmpty
-                  ? result.message
-                  : 'Impossible de lancer l’installation. Autorisez les sources inconnues si demandé.',
-            ),
-          ),
-        );
-      }
+      await _showInstallReadyDialog(context, filePath, remote);
     } catch (error) {
       if (context.mounted) {
         Navigator.of(context, rootNavigator: true).pop();
@@ -257,5 +279,90 @@ class AppUpdateService {
     } finally {
       progress.dispose();
     }
+  }
+
+  static Future<void> _showInstallReadyDialog(
+    BuildContext context,
+    String filePath,
+    AppUpdateInfo remote,
+  ) {
+    return showDialog<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Installer la mise à jour'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'La version ${remote.version} (build ${remote.build}) est prête '
+                'à être installée.',
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Si Android affiche « conflit avec un package déjà present », '
+                'l’app actuelle a été signée avec une autre clé (debug vs release, '
+                'ou ancienne build).',
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Dans ce cas :\n'
+                '1. Désinstallez PixelCraft Panel\n'
+                '2. Relancez l’installation\n\n'
+                'Votre session locale sera perdue ; reconnectez-vous ensuite.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              if (!context.mounted) return;
+              await _launchApkInstall(context, filePath);
+            },
+            child: const Text('Installer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Future<void> _launchApkInstall(
+    BuildContext context,
+    String filePath,
+  ) async {
+    final result = await OpenFilex.open(
+      filePath,
+      type: 'application/vnd.android.package-archive',
+    );
+
+    if (!context.mounted) return;
+
+    if (result.type != ResultType.done) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(userFacingInstallMessage(result.message)),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Installation lancée. En cas d’échec (conflit de package), '
+          'désinstallez l’app puis réessayez.',
+        ),
+        duration: Duration(seconds: 6),
+      ),
+    );
   }
 }

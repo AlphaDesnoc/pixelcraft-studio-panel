@@ -47,7 +47,9 @@ apk=https://github.com/.../pixelcraft-panel-mobile-1.0.7.apk
 | **Défaut (CI)** | `releases/latest/download/update-manifest.txt` sur GitHub |
 | **Gist / serveur** | `--dart-define=UPDATE_MANIFEST_URL=https://gist.githubusercontent.com/.../raw/update.txt` |
 
-Flux : dialogue « Mise à jour disponible » → téléchargement APK → écran d’installation Android (données conservées si même signature).
+Flux : dialogue « Mise à jour disponible » → téléchargement APK → instructions d’installation (dont conflit de signature) → écran d’installation Android.
+
+Si Android refuse l’install avec *« conflit avec un package déjà present »*, désinstallez l’app puis réinstallez (signatures debug/release différentes).
 
 Voir `update-manifest.example.txt`. La CI `mobile-release.yml` publie `update-manifest.txt` à chaque release.
 
@@ -84,7 +86,7 @@ Pas de WebView dans le flux principal.
 
 Release manuelle : **Actions → Mobile release → Run workflow**.
 
-### Secrets optionnels (signature Play Store)
+### Secrets requis (signature release)
 
 | Secret | Description |
 |--------|-------------|
@@ -93,7 +95,16 @@ Release manuelle : **Actions → Mobile release → Run workflow**.
 | `ANDROID_KEY_ALIAS` | Alias de la clé |
 | `ANDROID_KEY_PASSWORD` | Mot de passe de la clé |
 
-Sans ces secrets, l'APK est signé avec la clé debug (installable en sideload, pas pour le Play Store).
+Sans ces secrets, le workflow **Mobile release** échoue (pas de fallback clé debug). Toutes les APK release doivent partager la **même** signature pour que les mises à jour in-app fonctionnent.
+
+Build release local : créer `mobile/android/key.properties` (voir ci-dessous) ou utiliser `flutter run` (debug).
+
+```properties
+storePassword=...
+keyPassword=...
+keyAlias=...
+storeFile=app/release.keystore
+```
 
 ### Tag des releases
 
