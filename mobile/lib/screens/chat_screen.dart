@@ -248,6 +248,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         controller: _scrollController,
                         padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
                         itemCount: _messages.length,
+                        addAutomaticKeepAlives: false,
+                        addRepaintBoundaries: true,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isMine = message.user?.id == currentUserId;

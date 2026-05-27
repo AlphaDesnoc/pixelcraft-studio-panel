@@ -307,16 +307,19 @@ class _ChatBubble extends StatelessWidget {
                 ),
               Padding(
                 padding: const EdgeInsets.only(top: 2, left: 8),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _MetaRow(
-                    createdAt: createdAt,
-                    editedAt: editedAt,
-                    isRead: isMine ? isRead : null,
-                    pinned: pinned,
-                    metaColor: metaColor,
-                    scheme: scheme,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _MetaRow(
+                      createdAt: createdAt,
+                      editedAt: editedAt,
+                      isRead: isMine ? isRead : null,
+                      pinned: pinned,
+                      metaColor: metaColor,
+                      scheme: scheme,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -474,6 +477,7 @@ class _ReplyPreview extends StatelessWidget {
         ),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (preview.userName != null && preview.userName!.isNotEmpty)
@@ -519,22 +523,23 @@ class _AttachmentList extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               onTap: () => _openUrl(url),
-              child: Image.network(
-                url,
+              child: SizedBox(
                 width: 240,
                 height: 180,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return const SizedBox(
-                    width: 240,
-                    height: 120,
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return _FileLink(name: attachment.originalName, url: url);
-                },
+                child: Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const ColoredBox(
+                      color: Color(0x1A000000),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return _FileLink(name: attachment.originalName, url: url);
+                  },
+                ),
               ),
             ),
           );
