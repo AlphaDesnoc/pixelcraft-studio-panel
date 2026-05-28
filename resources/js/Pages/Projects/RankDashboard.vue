@@ -2,6 +2,7 @@
 import { Head, Link } from "@inertiajs/vue3";
 import {
   ArrowLeft,
+  Download,
   Gauge,
   Shield,
   Timer,
@@ -26,6 +27,10 @@ defineProps({
   ranks: {
     type: Array,
     default: () => [],
+  },
+  capacity_threshold: {
+    type: Number,
+    default: 15,
   },
 });
 
@@ -60,6 +65,13 @@ function formatHours(value) {
           </h1>
           <p class="text-sm text-muted-foreground">{{ project.name }}</p>
         </div>
+        <a
+          :href="route('projects.ranks.dashboard.export', project.slug)"
+          class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium hover:bg-muted/50"
+        >
+          <Download class="h-3.5 w-3.5" />
+          Export CSV
+        </a>
       </header>
 
       <div
@@ -166,6 +178,60 @@ function formatHours(value) {
             <div v-if="rank.manages_bugs" class="col-span-2 rounded-lg bg-muted/30 px-3 py-2">
               <p class="text-[10px] uppercase text-muted-foreground">Bugs ouverts</p>
               <p class="mt-1 text-lg font-semibold">{{ rank.stats.open_bugs }}</p>
+            </div>
+            <div
+              v-if="rank.burndown?.length"
+              class="col-span-2 space-y-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+            >
+              <p class="text-[10px] font-medium uppercase text-muted-foreground">
+                Burndown (4 semaines)
+              </p>
+              <div class="flex items-end gap-1.5" style="height: 4rem">
+                <div
+                  v-for="week in rank.burndown"
+                  :key="week.label"
+                  class="flex flex-1 flex-col items-center gap-1"
+                >
+                  <div
+                    class="w-full rounded-t bg-primary/70"
+                    :style="{ height: `${Math.max(4, week.completed * 8)}px` }"
+                    :title="`${week.completed} terminées`"
+                  />
+                  <span class="text-[9px] text-muted-foreground">{{ week.label }}</span>
+                </div>
+              </div>
+            </div>
+            <div
+              v-if="rank.capacity_alerts?.length"
+              class="col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+            >
+              Charge élevée (&gt;{{ capacity_threshold }} tâches) :
+              {{ rank.capacity_alerts.map((m) => m.name).join(", ") }}
+            </div>
+            <div
+              v-if="rank.member_workload?.length"
+              class="col-span-2 space-y-2 rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+            >
+              <p class="text-[10px] font-medium uppercase text-muted-foreground">
+                Charge par membre
+              </p>
+              <div
+                v-for="member in rank.member_workload"
+                :key="member.id"
+                class="flex items-center justify-between gap-2 text-xs"
+              >
+                <span class="truncate font-medium text-foreground">{{ member.name }}</span>
+                <span class="shrink-0 tabular-nums text-muted-foreground">
+                  {{ member.open_tasks }} ouvertes
+                  <span v-if="member.overdue_tasks > 0" class="text-rose-400">
+                    · {{ member.overdue_tasks }} retard
+                  </span>
+                  <span v-if="member.stale_tasks > 0" class="text-amber-400">
+                    · {{ member.stale_tasks }} inactives
+                  </span>
+                  <span v-if="member.over_capacity" class="text-amber-400"> · surcharge</span>
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>

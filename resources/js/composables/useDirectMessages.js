@@ -115,6 +115,7 @@ export function useDirectMessages({
   let activeConversationId = null;
   let unsubscribeInbox = null;
   let whisperTimer = null;
+  const searchFilters = ref({});
   const highlightTimers = new Map();
   const typingTimeouts = new Map();
 
@@ -346,16 +347,27 @@ export function useDirectMessages({
     }
   }
 
-  async function fetchMessages(conversationId, { scroll = false } = {}) {
+  async function fetchMessages(conversationId, { scroll = false, replace = false } = {}) {
     if (Number(conversationId) !== Number(activeConversationId)) {
       return;
     }
 
+    const params = {};
+    for (const [key, value] of Object.entries(searchFilters.value)) {
+      if (value != null && value !== "") {
+        params[key] = value;
+      }
+    }
+
     const { data } = await axios.get(
       route("messages.conversations.messages", conversationId),
+      { params },
     );
     const incoming = data.messages ?? [];
-    const merged = mergeMessages(messages.value, incoming, conversationId);
+    const searching = Boolean(params.q || params.author_id || params.from || params.to);
+    const merged = searching || replace
+      ? sortMessages(messagesForConversation(incoming, conversationId))
+      : mergeMessages(messages.value, incoming, conversationId);
     if (merged !== messages.value) {
       const previousIds = new Set(messages.value.map((m) => m.id));
       messages.value = merged;
@@ -367,6 +379,18 @@ export function useDirectMessages({
       if (scroll) {
         await nextTick();
         scrollToBottom(false);
+      }
+    }
+  }
+
+  async function applySearchFilters(filters) {
+    searchFilters.value = filters ?? {};
+    if (activeConversationId) {
+      loading.value = true;
+      try {
+        await fetchMessages(activeConversationId, { replace: true });
+      } finally {
+        loading.value = false;
       }
     }
   }
@@ -571,5 +595,7 @@ export function useDirectMessages({
     leaveConversation,
     markRead,
     upsertConversation,
+    searchFilters,
+    applySearchFilters,
   };
 }

@@ -23,6 +23,10 @@ class UserNotification extends Model
 
     public const TYPE_OVERDUE = 'overdue';
 
+    public const TYPE_CALENDAR_REMINDER = 'calendar_reminder';
+
+    public const TYPE_BUG_SLA_BREACH = 'bug_sla_breach';
+
     protected $fillable = [
         'user_id',
         'type',

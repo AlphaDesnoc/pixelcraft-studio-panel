@@ -5,13 +5,18 @@ import { Moon, Search, Sun, Monitor } from "lucide-vue-next";
 import AppSidebar from "@/Components/AppSidebar.vue";
 import NotificationBell from "@/Components/Notifications/NotificationBell.vue";
 import GlobalSearchModal from "@/Components/Search/GlobalSearchModal.vue";
+import FloatingMessenger from "@/Components/Messages/FloatingMessenger.vue";
+import KeyboardShortcutsHelp from "@/Components/KeyboardShortcutsHelp.vue";
 import {
   initSiteRealtime,
   setUnreadCount,
   setUnreadNotificationsCount,
   unreadMessages,
   unreadNotifications,
+  reverbOnline,
+  onDirectMessage,
 } from "@/composables/useSiteRealtime.js";
+import { openFloatingMessenger } from "@/composables/useFloatingMessenger.js";
 import {
   initNotifications,
   teardownNotifications,
@@ -24,6 +29,32 @@ const page = usePage();
 const { preference, cycleTheme } = useTheme();
 
 const searchOpen = ref(false);
+const shortcutsOpen = ref(false);
+
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tag = target.tagName?.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+}
+
+function onGlobalKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+    e.preventDefault();
+    searchOpen.value = true;
+    return;
+  }
+
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "m" || e.key === "M")) {
+    e.preventDefault();
+    openFloatingMessenger();
+    return;
+  }
+
+  if (e.key === "?" && !isTypingTarget(e.target)) {
+    e.preventDefault();
+    shortcutsOpen.value = true;
+  }
+}
 
 const themeIcon = {
   light: Sun,
@@ -37,14 +68,11 @@ const themeLabel = {
   system: "Système",
 };
 
-function onGlobalKeydown(e) {
-  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
-    e.preventDefault();
-    searchOpen.value = true;
-  }
-}
-
 function handleEscape() {
+  if (shortcutsOpen.value) {
+    shortcutsOpen.value = false;
+    return;
+  }
   if (searchOpen.value) {
     searchOpen.value = false;
     return;
@@ -66,17 +94,28 @@ function bootstrapRealtime() {
 }
 
 let removeEscapeListener = null;
+let removeDmListener = null;
 
 onMounted(() => {
   bootstrapRealtime();
   window.addEventListener("keydown", onGlobalKeydown);
   removeEscapeListener = onEscape(handleEscape);
+  removeDmListener = onDirectMessage(() => {
+    try {
+      if (route().current("projects.show")) {
+        openFloatingMessenger();
+      }
+    } catch {
+      // ignore
+    }
+  });
 });
 
 onUnmounted(() => {
   teardownNotifications();
   window.removeEventListener("keydown", onGlobalKeydown);
   removeEscapeListener?.();
+  removeDmListener?.();
 });
 
 watch(
@@ -144,6 +183,15 @@ watch(
         <component :is="themeIcon[preference] ?? Monitor" class="h-4 w-4" />
       </button>
 
+      <span
+        v-if="!reverbOnline"
+        class="hidden items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 sm:inline-flex"
+        title="Reverb indisponible — synchronisation par polling"
+      >
+        <span class="h-1.5 w-1.5 rounded-full bg-amber-400" />
+        Hors ligne (live)
+      </span>
+
       <NotificationBell />
     </div>
 
@@ -160,5 +208,7 @@ watch(
     </div>
 
     <GlobalSearchModal v-model:open="searchOpen" />
+    <KeyboardShortcutsHelp v-model:open="shortcutsOpen" />
+    <FloatingMessenger />
   </div>
 </template>

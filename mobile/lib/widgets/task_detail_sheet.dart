@@ -377,6 +377,57 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     await widget.onChanged();
   }
 
+  Future<void> _reorderChecklistItems(
+    TaskChecklist checklist,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    if (oldIndex == newIndex) return;
+    var targetIndex = newIndex;
+    if (oldIndex < newIndex) targetIndex -= 1;
+
+    final items = List<TaskChecklistItem>.from(checklist.items);
+    final moved = items.removeAt(oldIndex);
+    items.insert(targetIndex, moved);
+
+    final api = context.read<AuthSession>().api;
+    await api.reorderChecklistItems(
+      projectSlug: _slug,
+      taskId: _task.id,
+      checklistId: checklist.id,
+      order: items.map((item) => item.id).toList(),
+    );
+
+    setState(() {
+      final next = _task.checklists.map((cl) {
+        if (cl.id != checklist.id) return cl;
+        return TaskChecklist(id: cl.id, name: cl.name, items: items);
+      }).toList();
+      _task = KanbanTask(
+        id: _task.id,
+        listId: _task.listId,
+        title: _task.title,
+        description: _task.description,
+        priority: _task.priority,
+        status: _task.status,
+        dueDate: _task.dueDate,
+        startDate: _task.startDate,
+        isOverdue: _task.isOverdue,
+        assigneeId: _task.assigneeId,
+        position: _task.position,
+        progress: _task.progress,
+        archivedAt: _task.archivedAt,
+        dependencyIds: _task.dependencyIds,
+        isBlocked: _task.isBlocked,
+        tags: _task.tags,
+        checklists: next,
+        comments: _task.comments,
+        attachments: _task.attachments,
+        checklistProgress: _task.checklistProgress,
+      );
+    });
+  }
+
   void _replaceChecklistItem(int checklistId, TaskChecklistItem updated) {
     setState(() {
       final next = _task.checklists.map((cl) {
@@ -626,22 +677,36 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(checklist.name, style: Theme.of(context).textTheme.labelLarge),
-                              ...checklist.items.map(
-                                (item) => CheckboxListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  value: item.isDone,
-                                  onChanged: !_canWrite
-                                      ? null
-                                      : (_) => _toggleChecklistItem(checklist, item),
-                                  title: Text(item.content),
-                                  secondary: _canWrite
-                                      ? IconButton(
+                              if (_canWrite)
+                                ReorderableListView(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  onReorder: (oldIndex, newIndex) =>
+                                      _reorderChecklistItems(checklist, oldIndex, newIndex),
+                                  children: [
+                                    for (final item in checklist.items)
+                                      CheckboxListTile(
+                                        key: ValueKey(item.id),
+                                        contentPadding: EdgeInsets.zero,
+                                        value: item.isDone,
+                                        onChanged: (_) => _toggleChecklistItem(checklist, item),
+                                        title: Text(item.content),
+                                        secondary: IconButton(
                                           icon: const Icon(Icons.delete_outline, size: 18),
                                           onPressed: () => _deleteChecklistItem(checklist, item),
-                                        )
-                                      : null,
+                                        ),
+                                      ),
+                                  ],
+                                )
+                              else
+                                ...checklist.items.map(
+                                  (item) => CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    value: item.isDone,
+                                    onChanged: null,
+                                    title: Text(item.content),
+                                  ),
                                 ),
-                              ),
                               if (_canWrite)
                                 Row(
                                   children: [

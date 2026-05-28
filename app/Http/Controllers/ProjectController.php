@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\ChatMessage;
 use App\Models\Bug;
 use App\Models\Project;
 use App\Models\Rank;
@@ -59,7 +60,7 @@ class ProjectController extends Controller
             'lists.tasks.tags',
             'lists.tasks.linkedBug',
             'lists.tasks.dependencies:id,status,title',
-            'events' => fn ($q) => $featureScope($q)->orderBy('start_at'),
+            'events' => fn ($q) => $featureScope($q)->with('exceptions')->orderBy('start_at'),
             'notes' => fn ($q) => $featureScope($q)->orderByDesc('pinned')->orderByDesc('pinned_at')->orderByDesc('created_at'),
             'notes.creator:id,name,email',
             'sheets' => fn ($q) => $featureScope($q)->orderBy('position'),
@@ -87,6 +88,17 @@ class ProjectController extends Controller
             'recurrence' => $e->recurrence,
             'recurrence_weekdays' => $e->recurrence_weekdays ?? [],
             'recurrence_until' => optional($e->recurrence_until)?->toDateString(),
+            'reminder_minutes' => $e->reminder_minutes,
+            'exceptions' => $e->exceptions->map(fn ($ex) => [
+                'occurrence_date' => $ex->occurrence_date->toDateString(),
+                'type' => $ex->type,
+                'title' => $ex->title,
+                'description' => $ex->description,
+                'start_at' => optional($ex->start_at)?->toIso8601String(),
+                'end_at' => optional($ex->end_at)?->toIso8601String(),
+                'all_day' => $ex->all_day,
+                'color' => $ex->color,
+            ])->values(),
         ])->values();
 
         $fileNodes = $project->fileNodes->map(fn ($n) => [
@@ -420,6 +432,21 @@ class ProjectController extends Controller
                 ->orderBy('name')
                 ->get()
                 ->map(fn (TaskTemplate $t) => $t->toPayload())
+                ->values(),
+            'pinnedChatMessages' => ChatMessage::query()
+                ->where('project_id', $project->id)
+                ->whereNotNull('pinned_at')
+                ->with('user:id,name')
+                ->orderByDesc('pinned_at')
+                ->limit(15)
+                ->get()
+                ->map(fn (ChatMessage $m) => [
+                    'id' => $m->id,
+                    'space_key' => $m->space_key,
+                    'body' => str($m->body)->limit(120),
+                    'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name] : null,
+                    'pinned_at' => $m->pinned_at?->toIso8601String(),
+                ])
                 ->values(),
             'priorities' => Task::PRIORITIES,
             'statusKinds' => [

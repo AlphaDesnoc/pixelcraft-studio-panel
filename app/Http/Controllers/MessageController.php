@@ -78,14 +78,67 @@ class MessageController extends Controller
         ]);
     }
 
+    public function conversations(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $conversations = DirectConversation::query()
+            ->where(function ($q) use ($user) {
+                $q->where('user_one_id', $user->id)
+                    ->orWhere('user_two_id', $user->id);
+            })
+            ->with([
+                'userOne:id,name,email',
+                'userTwo:id,name,email',
+                'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name'),
+            ])
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('updated_at')
+            ->get()
+            ->map(fn (DirectConversation $conv) => DirectConversationPayload::serialize($conv, $user))
+            ->values();
+
+        $contacts = DirectMessageAccess::sharedContacts($user)
+            ->map(fn (User $u) => [
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+            ])
+            ->values();
+
+        return response()->json([
+            'conversations' => $conversations,
+            'contacts' => $contacts,
+        ]);
+    }
+
     public function messages(Request $request, DirectConversation $conversation): JsonResponse
     {
         $user = $request->user();
         DirectMessageAccess::ensureAccess($user, $conversation);
 
         $messages = $conversation->messages()
-            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
+            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+
+        if ($search = trim((string) $request->query('q', ''))) {
+            $messages->where('body', 'like', '%'.addcslashes($search, '%_\\').'%');
+        }
+
+        if ($authorId = $request->query('author_id')) {
+            $messages->where('user_id', (int) $authorId);
+        }
+
+        if ($from = $request->query('from')) {
+            $messages->whereDate('created_at', '>=', $from);
+        }
+
+        if ($to = $request->query('to')) {
+            $messages->whereDate('created_at', '<=', $to);
+        }
+
+        $messages = $messages
             ->orderBy('created_at')
+            ->limit(min((int) $request->query('limit', 500), 500))
             ->get()
             ->map(fn (DirectMessage $m) => $m->toPayload($user))
             ->values();

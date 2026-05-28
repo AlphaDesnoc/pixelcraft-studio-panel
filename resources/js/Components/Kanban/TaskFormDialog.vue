@@ -1,7 +1,6 @@
 <script setup>
-import { watch } from "vue";
+import { ref, watch } from "vue";
 import { useForm } from "@inertiajs/vue3";
-import InputError from "@/Components/InputError.vue";
 import { Button } from "@/Components/ui/button";
 import {
   Dialog,
@@ -20,9 +19,12 @@ const props = defineProps({
   lists: { type: Array, required: true },
   members: { type: Array, required: true },
   priorities: { type: Object, required: true },
+  taskTemplates: { type: Array, default: () => [] },
 });
 
 const emits = defineEmits(["update:open"]);
+
+const selectedTemplateId = ref("");
 
 const form = useForm({
   list_id: "",
@@ -45,7 +47,16 @@ function reset() {
   inAWeek.setDate(today.getDate() + 7);
   form.start_date = today.toISOString().substring(0, 10);
   form.due_date = inAWeek.toISOString().substring(0, 10);
+  selectedTemplateId.value = "";
   form.clearErrors();
+}
+
+function applyTemplate() {
+  const tpl = props.taskTemplates.find((t) => String(t.id) === selectedTemplateId.value);
+  if (!tpl) return;
+  form.title = tpl.title ?? form.title;
+  form.description = tpl.description ?? form.description;
+  form.priority = tpl.priority ?? form.priority;
 }
 
 watch(
@@ -71,6 +82,21 @@ function submit() {
       </DialogHeader>
 
       <form class="flex flex-col gap-3" @submit.prevent="submit">
+        <div v-if="taskTemplates.length" class="flex flex-col gap-1">
+          <label class="text-xs font-medium text-muted-foreground">Modèle</label>
+          <div class="flex gap-2">
+            <Select v-model="selectedTemplateId" class="flex-1">
+              <option value="">— Aucun —</option>
+              <option v-for="tpl in taskTemplates" :key="tpl.id" :value="String(tpl.id)">
+                {{ tpl.name }}
+              </option>
+            </Select>
+            <Button type="button" variant="outline" size="sm" :disabled="!selectedTemplateId" @click="applyTemplate">
+              Appliquer
+            </Button>
+          </div>
+        </div>
+
         <div class="flex flex-col gap-1">
           <Input
             v-model="form.title"

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, toRef, watch } from "vue";
+import { computed, onMounted, ref, toRef, watch } from "vue";
 import { router } from "@inertiajs/vue3";
 import { Plus } from "lucide-vue-next";
 import { VueDraggable } from "vue-draggable-plus";
@@ -25,6 +25,7 @@ const props = defineProps({
   taskTemplates: { type: Array, default: () => [] },
   swimlaneMode: { type: Boolean, default: false },
   myPermissions: { type: Object, default: () => ({}) },
+  currentUserId: { type: Number, default: null },
 });
 
 const emit = defineEmits(["update:swimlaneMode"]);
@@ -44,6 +45,38 @@ const activeFilters = ref({
   showArchived: false,
   swimlaneByAssignee: false,
 });
+
+const filtersStorageKey = computed(
+  () => `kanban-filters:${props.projectId}:${props.rankId ?? "global"}`,
+);
+
+function loadSavedFilters() {
+  try {
+    const raw = localStorage.getItem(filtersStorageKey.value);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    activeFilters.value = { ...activeFilters.value, ...saved };
+    showArchived.value = Boolean(saved.showArchived);
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(loadSavedFilters);
+
+watch(
+  activeFilters,
+  (value) => {
+    try {
+      localStorage.setItem(filtersStorageKey.value, JSON.stringify(value));
+    } catch {
+      // ignore
+    }
+  },
+  { deep: true },
+);
+
+const kanbanFiltersRef = ref(null);
 
 function taskMatchesFilters(task, filters) {
   if (task.archived_at && !filters.showArchived) {
@@ -262,16 +295,32 @@ function onFiltersUpdate(filters) {
   activeFilters.value = filters;
   showArchived.value = filters.showArchived;
 }
+
+function applyMyTasksPreset() {
+  if (!props.currentUserId) return;
+  activeFilters.value = {
+    ...activeFilters.value,
+    assigneeId: String(props.currentUserId),
+  };
+}
+
+defineExpose({
+  openNewTask: () => openCreateTask(null),
+  focusFilters: () => kanbanFiltersRef.value?.focusSearch?.(),
+  applyMyTasksPreset,
+});
 </script>
 
 <template>
   <div class="flex flex-col gap-3">
     <KanbanFilters
+      ref="kanbanFiltersRef"
       :members="members"
       :priorities="priorities"
       :tags="tags"
       :show-archived="showArchived"
       :swimlane-by-assignee="effectiveSwimlaneMode"
+      :current-user-id="currentUserId"
       @update:filters="onFiltersUpdate"
       @update:show-archived="showArchived = $event"
       @update:swimlane-by-assignee="emit('update:swimlaneMode', $event)"
@@ -373,6 +422,7 @@ function onFiltersUpdate(filters) {
       :lists="lists"
       :members="members"
       :priorities="priorities"
+      :task-templates="taskTemplates"
     />
 
     <TaskDetailDialog

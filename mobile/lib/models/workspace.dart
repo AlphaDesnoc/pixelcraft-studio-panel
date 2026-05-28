@@ -525,6 +525,9 @@ class WorkspaceEvent {
     this.recurrenceWeekdays = const [],
     this.recurrenceUntil,
     this.seriesId,
+    this.occurrenceDate,
+    this.reminderMinutes,
+    this.exceptions = const [],
   });
 
   final int id;
@@ -538,6 +541,9 @@ class WorkspaceEvent {
   final List<int> recurrenceWeekdays;
   final String? recurrenceUntil;
   final int? seriesId;
+  final String? occurrenceDate;
+  final int? reminderMinutes;
+  final List<WorkspaceEventException> exceptions;
 
   DateTime? get startAtDate =>
       startAt == null ? null : DateTime.tryParse(startAt!)?.toLocal();
@@ -563,6 +569,45 @@ class WorkspaceEvent {
           .map((value) => value as int)
           .toList(),
       recurrenceUntil: json['recurrence_until'] as String?,
+      reminderMinutes: json['reminder_minutes'] as int?,
+      exceptions: (json['exceptions'] as List<dynamic>? ?? [])
+          .map((e) => WorkspaceEventException.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class WorkspaceEventException {
+  const WorkspaceEventException({
+    required this.occurrenceDate,
+    required this.type,
+    this.title,
+    this.description,
+    this.startAt,
+    this.endAt,
+    this.allDay,
+    this.color,
+  });
+
+  final String occurrenceDate;
+  final String type;
+  final String? title;
+  final String? description;
+  final String? startAt;
+  final String? endAt;
+  final bool? allDay;
+  final String? color;
+
+  factory WorkspaceEventException.fromJson(Map<String, dynamic> json) {
+    return WorkspaceEventException(
+      occurrenceDate: json['occurrence_date'] as String? ?? '',
+      type: json['type'] as String? ?? '',
+      title: json['title'] as String?,
+      description: json['description'] as String?,
+      startAt: json['start_at'] as String?,
+      endAt: json['end_at'] as String?,
+      allDay: json['all_day'] as bool?,
+      color: json['color'] as String?,
     );
   }
 }
@@ -575,6 +620,7 @@ class WorkspaceBug {
     required this.priority,
     required this.status,
     required this.isSlaBreached,
+    this.taskId,
     this.reporterName,
     this.assigneeName,
     required this.canManage,
@@ -586,6 +632,7 @@ class WorkspaceBug {
   final String priority;
   final String status;
   final bool isSlaBreached;
+  final int? taskId;
   final String? reporterName;
   final String? assigneeName;
   final bool canManage;
@@ -600,6 +647,7 @@ class WorkspaceBug {
       priority: json['priority'] as String? ?? 'medium',
       status: json['status'] as String? ?? 'open',
       isSlaBreached: json['is_sla_breached'] as bool? ?? false,
+      taskId: json['task_id'] as int?,
       reporterName: reporter is Map ? reporter['name'] as String? : null,
       assigneeName: assignee is Map ? assignee['name'] as String? : null,
       canManage: json['can_manage'] as bool? ?? false,

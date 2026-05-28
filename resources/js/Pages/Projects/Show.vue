@@ -1,7 +1,7 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { canWriteFeature } from "@/lib/projectPermissions.js";
-import { Head, Link, router } from "@inertiajs/vue3";
+import { Head, Link, router, usePage } from "@inertiajs/vue3";
 import {
   BarChart3,
   Bell,
@@ -38,6 +38,7 @@ import FilesView from "@/Components/Files/FilesView.vue";
 import BugsView from "@/Components/Bugs/BugsView.vue";
 import ChatView from "@/Components/Chat/ChatView.vue";
 import TeamView from "@/Components/Team/TeamView.vue";
+import ProjectHistoryPanel from "@/Components/Projects/ProjectHistoryPanel.vue";
 import TaskActivityByRank from "@/Components/Projects/TaskActivityByRank.vue";
 import { spaceOnlyProps } from "@/composables/useProjectSpace.js";
 
@@ -79,7 +80,14 @@ const props = defineProps({
   tags: { type: Array, default: () => [] },
   myPermissions: { type: Object, default: () => ({}) },
   taskTemplates: { type: Array, default: () => [] },
+  pinnedChatMessages: { type: Array, default: () => [] },
 });
+
+const page = usePage();
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+const kanbanBoardRef = ref(null);
+const gNavPending = ref(false);
+let gNavTimer = null;
 
 const activeSpace = ref(props.activeSpace);
 const swimlaneMode = ref(false);
@@ -143,6 +151,7 @@ const baseTabs = [
   { key: "files", label: "Fichiers" },
   { key: "chat", label: "Chat" },
   { key: "team", label: "Équipe" },
+  { key: "history", label: "Historique" },
 ];
 
 const tabPermissionKey = {
@@ -155,6 +164,7 @@ const tabPermissionKey = {
   files: "files",
   chat: "chat",
   team: "team",
+  history: null,
   bugs: "bugs",
 };
 
@@ -207,6 +217,111 @@ const canWriteKanban = computed(() => canWriteFeature(props.myPermissions, "kanb
 const canWriteGantt = computed(() => canWriteFeature(props.myPermissions, "gantt"));
 
 const activeTab = ref("overview");
+
+function readInitialTabFromUrl() {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  if (tab && tabs.value.some((t) => t.key === tab)) {
+    activeTab.value = tab;
+  }
+}
+
+provide(
+  "floatingProjectChat",
+  computed(() =>
+    activeSpace.value === "full"
+      ? null
+      : {
+          projectSlug: props.project.slug,
+          projectId: props.project.id,
+          spaceKey: activeSpace.value,
+          spaceLabel: props.spaceLabel,
+          members: props.chatMembers,
+          rankMentions: props.chatRankMentions,
+        },
+  ),
+);
+
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tag = target.tagName?.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+}
+
+function onProjectKeydown(event) {
+  if (isTypingTarget(event.target)) return;
+
+  if (event.key === "n" || event.key === "N") {
+    if (activeTab.value === "kanban" && canWriteKanban.value) {
+      event.preventDefault();
+      kanbanBoardRef.value?.openNewTask?.();
+    }
+    return;
+  }
+
+  if (event.key === "/") {
+    if (activeTab.value === "kanban") {
+      event.preventDefault();
+      kanbanBoardRef.value?.focusFilters?.();
+    }
+    return;
+  }
+
+  if (gNavPending.value) {
+    clearTimeout(gNavTimer);
+    gNavPending.value = false;
+    const key = event.key.toLowerCase();
+    if (key === "k") activeTab.value = "kanban";
+    else if (key === "c") activeTab.value = "calendar";
+    else if (key === "b" && bugsAccess.value.show) activeTab.value = "bugs";
+    event.preventDefault();
+    return;
+  }
+
+  if (event.key === "g" || event.key === "G") {
+    gNavPending.value = true;
+    gNavTimer = setTimeout(() => {
+      gNavPending.value = false;
+    }, 1200);
+  }
+}
+
+onMounted(() => {
+  readInitialTabFromUrl();
+  window.addEventListener("keydown", onProjectKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onProjectKeydown);
+  clearTimeout(gNavTimer);
+});
+
+const chatUnreadSummary = computed(() => {
+  const key = `chat-last-read:${props.project.slug}:${currentUserId.value}`;
+  let lastRead = {};
+  try {
+    lastRead = JSON.parse(localStorage.getItem(key) ?? "{}");
+  } catch {
+    lastRead = {};
+  }
+
+  const counts = {};
+  for (const message of props.chatMessages) {
+    const space = message.space_key ?? props.activeSpace;
+    const ts = new Date(message.created_at).getTime();
+    const readTs = lastRead[space] ? new Date(lastRead[space]).getTime() : 0;
+    if (message.user?.id !== currentUserId.value && ts > readTs) {
+      counts[space] = (counts[space] ?? 0) + 1;
+    }
+  }
+
+  return Object.entries(counts).map(([space, count]) => ({
+    space,
+    label: space === "global" ? "Global" : props.ranks.find((r) => r.key === space)?.label ?? space,
+    count,
+  }));
+});
 
 const initials = computed(() =>
   props.project.name
@@ -331,6 +446,36 @@ const kanbanBugLinkTasks = computed(() =>
       <p class="text-xs text-muted-foreground">
         Espace actif : <span class="font-medium text-foreground">{{ spaceLabel }}</span>
       </p>
+
+      <aside
+        v-if="pinnedChatMessages.length || chatUnreadSummary.length"
+        class="flex flex-wrap gap-2 rounded-lg border border-border/60 bg-card/30 p-3 text-xs"
+      >
+        <div v-if="chatUnreadSummary.length" class="flex flex-wrap items-center gap-2">
+          <span class="font-medium text-muted-foreground">Non lus :</span>
+          <button
+            v-for="row in chatUnreadSummary"
+            :key="row.space"
+            type="button"
+            class="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-foreground hover:bg-primary/15"
+            @click="activeSpace = row.space; activeTab = 'chat'"
+          >
+            {{ row.count }} dans {{ row.label }}
+          </button>
+        </div>
+        <div v-if="pinnedChatMessages.length" class="flex min-w-[200px] flex-1 flex-col gap-1">
+          <span class="font-medium text-muted-foreground">Messages épinglés</span>
+          <button
+            v-for="msg in pinnedChatMessages.slice(0, 3)"
+            :key="msg.id"
+            type="button"
+            class="truncate text-left text-foreground hover:text-primary"
+            @click="activeSpace = msg.space_key; activeTab = 'chat'"
+          >
+            {{ msg.user?.name }} · {{ msg.body }}
+          </button>
+        </div>
+      </aside>
 
       <section v-if="activeTab === 'overview'" class="flex flex-col gap-4">
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
@@ -458,6 +603,7 @@ const kanbanBugLinkTasks = computed(() =>
 
       <section v-else-if="activeTab === 'kanban'">
         <KanbanBoard
+          ref="kanbanBoardRef"
           :project-slug="project.slug"
           :project-id="project.id"
           :lists="lists"
@@ -470,6 +616,7 @@ const kanbanBugLinkTasks = computed(() =>
           :task-templates="taskTemplates"
           :swimlane-mode="swimlaneMode"
           :my-permissions="myPermissions"
+          :current-user-id="currentUserId"
           @update:swimlane-mode="swimlaneMode = $event"
         />
       </section>
@@ -550,6 +697,14 @@ const kanbanBugLinkTasks = computed(() =>
           :can-manage-team="canManageTeam"
           :can-manage-ranks="canManageRanks"
           :member-roles="memberRoles"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'history'">
+        <ProjectHistoryPanel
+          :project-slug="project.slug"
+          :members="members"
+          :initial-logs="activityLogs"
         />
       </section>
 

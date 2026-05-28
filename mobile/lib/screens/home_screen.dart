@@ -33,6 +33,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadBadges();
     context.read<RealtimeService>().addListener(_onRealtime);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RealtimeService>().ensureNotificationPermission();
+    });
   }
 
   @override

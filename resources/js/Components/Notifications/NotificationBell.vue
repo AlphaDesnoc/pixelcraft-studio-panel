@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { router } from "@inertiajs/vue3";
+import { Link, router } from "@inertiajs/vue3";
 import { Bell, CheckCheck } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
 import { unreadNotifications } from "@/composables/useSiteRealtime.js";
@@ -99,19 +99,28 @@ onUnmounted(() => {
       class="absolute right-0 top-full z-50 mt-2 w-[min(100vw-2rem,360px)] overflow-hidden rounded-xl border border-border bg-card shadow-lg"
       @click.stop
     >
-      <div class="flex items-center justify-between border-b border-border px-4 py-3">
+      <div class="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
         <p class="text-sm font-semibold text-foreground">Notifications</p>
-        <Button
-          v-if="unreadNotifications > 0"
-          type="button"
-          variant="ghost"
-          size="sm"
-          class="h-7 gap-1 px-2 text-xs"
-          @click="handleMarkAllRead"
-        >
-          <CheckCheck class="h-3.5 w-3.5" />
-          Tout lire
-        </Button>
+        <div class="flex items-center gap-2">
+          <Link
+            :href="route('notifications.index')"
+            class="text-xs font-medium text-primary hover:underline"
+            @click="open = false"
+          >
+            Voir tout
+          </Link>
+          <Button
+            v-if="unreadNotifications > 0"
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="h-7 gap-1 px-2 text-xs"
+            @click="handleMarkAllRead"
+          >
+            <CheckCheck class="h-3.5 w-3.5" />
+            Tout lire
+          </Button>
+        </div>
       </div>
 
       <div class="max-h-[min(60vh,420px)] overflow-y-auto">

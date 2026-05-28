@@ -1,12 +1,12 @@
 <script setup>
-import { ref } from "vue";
-import { Bug, Download, Plus } from "lucide-vue-next";
+import { computed, ref } from "vue";
+import { Bug, Download, Filter, Plus } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
 import BugCard from "./BugCard.vue";
 import BugFormDialog from "./BugFormDialog.vue";
 import BugDetailDialog from "./BugDetailDialog.vue";
 
-defineProps({
+const props = defineProps({
   projectSlug: { type: String, required: true },
   bugs: { type: Array, default: () => [] },
   canReport: { type: Boolean, default: false },
@@ -22,6 +22,11 @@ const dialogOpen = ref(false);
 const detailOpen = ref(false);
 const editingBug = ref(null);
 const viewingBug = ref(null);
+const onlyWithoutTask = ref(false);
+
+const visibleBugs = computed(() =>
+  onlyWithoutTask.value ? props.bugs.filter((b) => !b.task_id) : props.bugs,
+);
 
 function openCreate() {
   editingBug.value = null;
@@ -57,6 +62,19 @@ function openDetail(bug) {
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium transition-colors"
+          :class="
+            onlyWithoutTask
+              ? 'border-primary bg-primary/10 text-foreground'
+              : 'border-border bg-card text-muted-foreground hover:bg-muted/50'
+          "
+          @click="onlyWithoutTask = !onlyWithoutTask"
+        >
+          <Filter class="h-3.5 w-3.5" />
+          Sans tâche liée
+        </button>
         <a
           v-if="bugs.length"
           :href="route('projects.export.bugs', projectSlug)"
@@ -78,7 +96,7 @@ function openDetail(bug) {
     </header>
 
     <div
-      v-if="bugs.length === 0"
+      v-if="visibleBugs.length === 0"
       class="flex min-h-[160px] items-center justify-center rounded-xl border border-dashed border-border bg-card/30 px-6 py-10 text-center text-sm text-muted-foreground"
     >
       <template v-if="canManage">Aucun bug assigné à ce rank.</template>
@@ -87,7 +105,7 @@ function openDetail(bug) {
 
     <div v-else class="flex flex-col gap-3">
       <BugCard
-        v-for="bug in bugs"
+        v-for="bug in visibleBugs"
         :key="bug.id"
         :project-slug="projectSlug"
         :bug="bug"

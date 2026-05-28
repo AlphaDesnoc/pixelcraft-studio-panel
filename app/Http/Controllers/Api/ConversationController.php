@@ -56,9 +56,28 @@ class ConversationController extends Controller
         $user = $request->user();
         DirectMessageAccess::ensureAccess($user, $conversation);
 
-        $messages = $conversation->messages()
-            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
+        $query = $conversation->messages()
+            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+
+        if ($search = trim((string) $request->query('q', ''))) {
+            $query->where('body', 'like', '%'.addcslashes($search, '%_\\').'%');
+        }
+
+        if ($authorId = $request->query('author_id')) {
+            $query->where('user_id', (int) $authorId);
+        }
+
+        if ($from = $request->query('from')) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+
+        if ($to = $request->query('to')) {
+            $query->whereDate('created_at', '<=', $to);
+        }
+
+        $messages = $query
             ->orderBy('created_at')
+            ->limit(min((int) $request->query('limit', 500), 500))
             ->get()
             ->map(fn (DirectMessage $m) => $m->toPayload($user))
             ->values();

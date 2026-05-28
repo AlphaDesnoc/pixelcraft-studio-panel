@@ -453,6 +453,20 @@ extension PanelApiWorkspace on PanelApi {
     });
   }
 
+  Future<void> reorderChecklistItems({
+    required String projectSlug,
+    required int taskId,
+    required int checklistId,
+    required List<int> order,
+  }) {
+    return client.guard(() async {
+      await client.postJson(
+        '/projects/${_slug(projectSlug)}/tasks/$taskId/checklists/$checklistId/items/reorder',
+        data: {'order': order},
+      );
+    });
+  }
+
   Future<WorkspaceChatMessage> updateChatMessage({
     required String projectSlug,
     required int messageId,

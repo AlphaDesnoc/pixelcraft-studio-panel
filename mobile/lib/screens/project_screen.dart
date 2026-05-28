@@ -20,10 +20,16 @@ class ProjectScreen extends StatefulWidget {
     super.key,
     required this.slug,
     this.initialSpace,
+    this.initialTab,
+    this.taskId,
+    this.bugId,
   });
 
   final String slug;
   final String? initialSpace;
+  final String? initialTab;
+  final int? taskId;
+  final int? bugId;
 
   @override
   State<ProjectScreen> createState() => _ProjectScreenState();
@@ -72,6 +78,7 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
         _space = data.activeSpace;
         _tabs = tabs;
       });
+      _applyInitialNavigation(data);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -130,7 +137,11 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       tabs.add(_ProjectTab(
         label: 'Bugs',
         icon: Icons.bug_report_outlined,
-        builder: () => BugsTab(workspace: ws, onChanged: _load),
+        builder: () => BugsTab(
+          workspace: ws,
+          onChanged: _load,
+          initialBugId: widget.bugId,
+        ),
       ));
     }
 
@@ -172,6 +183,31 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
     }
 
     return tabs;
+  }
+
+  void _applyInitialNavigation(ProjectWorkspace ws) {
+    if (_tabController == null || _tabs.isEmpty) return;
+
+    const tabLabels = {
+      'overview': 'Aperçu',
+      'kanban': 'Kanban',
+      'calendar': 'Calendrier',
+      'bugs': 'Bugs',
+      'chat': 'Chat',
+      'notes': 'Notes',
+      'spreadsheet': 'Tableur',
+      'files': 'Fichiers',
+      'team': 'Équipe',
+      'gantt': 'Gantt',
+    };
+
+    final label = tabLabels[widget.initialTab];
+    if (label != null) {
+      final idx = _tabs.indexWhere((t) => t.label == label);
+      if (idx >= 0) {
+        _tabController!.index = idx;
+      }
+    }
   }
 
   Future<void> _changeSpace(String? spaceKey) async {

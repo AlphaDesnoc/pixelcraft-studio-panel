@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ProjectTeamController;
 use App\Http\Controllers\Api\ProjectWorkspaceController;
 use App\Http\Controllers\Api\PushTokenController;
 use App\Http\Controllers\Api\RealtimeConfigController;
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\BugController;
 use App\Http\Controllers\BugMessageController;
@@ -145,6 +146,9 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/chat/messages/{message}/pin', [ChatMessageController::class, 'pin']);
             Route::post('/chat/messages/{message}/reactions', [ChatReactionController::class, 'toggle']);
             Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])->middleware('throttle:panel-uploads');
+
+            Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+
             Route::get('/attachments/{attachment}', [AttachmentController::class, 'show']);
             Route::delete('/attachments/{attachment}', [AttachmentController::class, 'destroy']);
 

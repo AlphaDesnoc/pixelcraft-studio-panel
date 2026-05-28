@@ -85,6 +85,7 @@ export function useSpaceChat(
   let activeSpace = null;
   let echoOnlineUsers = [];
   let whisperTimer = null;
+  const searchFilters = ref({});
   const typingTimeouts = new Map();
 
   function scrollToBottom() {
@@ -247,17 +248,39 @@ export function useSpaceChat(
     }
   }
 
-  async function fetchMessages(spaceKey, { scroll = false } = {}) {
+  async function fetchMessages(spaceKey, { scroll = false, replace = false } = {}) {
+    const params = { space: spaceKey };
+    for (const [key, value] of Object.entries(searchFilters.value)) {
+      if (value != null && value !== "") {
+        params[key] = value;
+      }
+    }
+
     const { data } = await axios.get(route("projects.chat.messages.index", projectSlug), {
-      params: { space: spaceKey },
+      params,
     });
     const incoming = data.messages ?? [];
-    const merged = mergeMessages(messages.value, incoming);
+    const searching = Boolean(params.q || params.author_id || params.from || params.to);
+    const merged = searching || replace
+      ? sortMessages(incoming)
+      : mergeMessages(messages.value, incoming);
     if (merged !== messages.value) {
       messages.value = merged;
       if (scroll) {
         await nextTick();
         scrollToBottom();
+      }
+    }
+  }
+
+  async function applySearchFilters(filters) {
+    searchFilters.value = filters ?? {};
+    if (activeSpace) {
+      loading.value = true;
+      try {
+        await fetchMessages(activeSpace, { replace: true });
+      } finally {
+        loading.value = false;
       }
     }
   }
@@ -536,6 +559,7 @@ export function useSpaceChat(
     sending,
     uploading,
     typingUsers,
+    searchFilters,
     send,
     toggleReaction,
     pinMessage,
@@ -543,6 +567,7 @@ export function useSpaceChat(
     deleteMessage,
     uploadAttachment,
     notifyTyping,
+    applySearchFilters,
     listRef,
   };
 }

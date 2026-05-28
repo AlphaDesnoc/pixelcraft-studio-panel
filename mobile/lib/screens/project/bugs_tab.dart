@@ -15,10 +15,12 @@ class BugsTab extends StatelessWidget {
     super.key,
     required this.workspace,
     required this.onChanged,
+    this.initialBugId,
   });
 
   final ProjectWorkspace workspace;
   final Future<void> Function() onChanged;
+  final int? initialBugId;
 
   bool get _canReport => workspace.canReportBugs;
   String get _slug => workspace.project.slug;
@@ -82,6 +84,21 @@ class BugsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (initialBugId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WorkspaceBug? bug;
+        for (final candidate in workspace.bugs) {
+          if (candidate.id == initialBugId) {
+            bug = candidate;
+            break;
+          }
+        }
+        if (bug != null) {
+          _openBugDetail(context, bug!);
+        }
+      });
+    }
+
     return Scaffold(
       body: Column(
         children: [
@@ -215,7 +232,48 @@ class _BugDetailSheetState extends State<_BugDetailSheet> {
     await widget.onChanged();
   }
 
-  Future<void> _deleteBug() async {
+  Future<void> _createTaskFromBug() async {
+    await context.read<AuthSession>().api.createTaskFromBug(
+          projectSlug: widget.workspace.project.slug,
+          bugId: _bug.id,
+        );
+    await widget.onChanged();
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _linkExistingTask() async {
+    final tasks = <KanbanTask>[];
+    for (final list in widget.workspace.lists) {
+      tasks.addAll(list.tasks);
+    }
+    if (tasks.isEmpty) return;
+
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Lier une tâche'),
+        children: tasks
+            .take(20)
+            .map(
+              (task) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, task.id),
+                child: Text(task.title),
+              ),
+            )
+            .toList(),
+      ),
+    );
+
+    if (selected == null) return;
+
+    final updated = await context.read<AuthSession>().api.linkBugTask(
+          projectSlug: widget.workspace.project.slug,
+          bugId: _bug.id,
+          taskId: selected,
+        );
+    setState(() => _bug = updated);
+    await widget.onChanged();
+  }
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -272,6 +330,31 @@ class _BugDetailSheetState extends State<_BugDetailSheet> {
                   ),
                 ),
               if (canManage) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      if (_bug.taskId == null) ...[
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _createTaskFromBug,
+                            child: const Text('Créer tâche'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _linkExistingTask,
+                            child: const Text('Lier tâche'),
+                          ),
+                        ),
+                      ] else
+                        Expanded(
+                          child: Text('Tâche liée #${_bug.taskId}'),
+                        ),
+                    ],
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(

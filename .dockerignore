@@ -13,7 +13,6 @@ storage/app/public/*
 bootstrap/cache/*
 .phpunit.cache
 tests
-.cursor
 .idea
 .vscode
 *.md

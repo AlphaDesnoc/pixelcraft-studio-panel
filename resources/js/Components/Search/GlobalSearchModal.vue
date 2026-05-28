@@ -9,6 +9,10 @@ import {
   Layers,
   ClipboardList,
   Bug,
+  StickyNote,
+  File,
+  Table2,
+  Mail,
 } from "lucide-vue-next";
 
 const props = defineProps({
@@ -79,6 +83,10 @@ const typeIcons = {
   bug: Bug,
   chat: MessageSquare,
   member: User,
+  note: StickyNote,
+  file: File,
+  sheet: Table2,
+  dm: Mail,
 };
 
 const typeLabel = (t) =>
@@ -88,6 +96,10 @@ const typeLabel = (t) =>
     bug: "Bug",
     chat: "Chat",
     member: "Membre",
+    note: "Note",
+    file: "Fichier",
+    sheet: "Tableur",
+    dm: "Message privé",
   })[t] ?? t;
 
 onUnmounted(() => {
@@ -142,7 +154,7 @@ function navigate(url) {
               v-model="q"
               type="search"
               class="flex-1 border-0 bg-transparent py-2 text-sm outline-none focus:ring-0"
-              placeholder="Rechercher projets, tâches, bugs, membres…"
+              placeholder="Rechercher projets, tâches, notes, fichiers…"
               autofocus
             />
             <button

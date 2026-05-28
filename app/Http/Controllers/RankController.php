@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Project;
+use App\Support\ActivityLogger;
 use App\Models\Rank;
 use App\Models\Task;
 use App\Models\User;
@@ -123,6 +124,14 @@ class RankController extends Controller
 
         if (! empty($update)) {
             $rank->update($update);
+            ActivityLogger::log(
+                $project,
+                $request->user(),
+                'rank_updated',
+                sprintf('%s a modifié le rank « %s »', $request->user()->name, $rank->name),
+                $rank,
+                $update,
+            );
         }
 
         return $this->apiOrBack($request, [

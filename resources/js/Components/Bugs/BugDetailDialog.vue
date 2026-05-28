@@ -12,6 +12,8 @@ import {
 } from "@/Components/ui/dialog";
 import { Textarea } from "@/Components/ui/textarea";
 import OnlineUsersBar from "@/Components/Chat/OnlineUsersBar.vue";
+import ImageLightbox from "@/Components/ImageLightbox.vue";
+import { useImageLightbox } from "@/composables/useImageLightbox.js";
 import { useBugChat } from "@/composables/useBugChat.js";
 
 const props = defineProps({
@@ -48,6 +50,17 @@ const { messages, onlineUsers, loading, sending, send, listRef } = useBugChat(
   openRef,
   bugRef,
 );
+
+const {
+  open: lightboxOpen,
+  index: lightboxIndex,
+  images: lightboxImages,
+  openFromUrls: openScreenshotPreview,
+} = useImageLightbox();
+
+function previewScreenshot(src) {
+  openScreenshotPreview(props.bug?.screenshots ?? [], src);
+}
 
 const priorityVariant = computed(() => ({
   low: "secondary",
@@ -149,15 +162,15 @@ function createTaskFromBug() {
           v-if="bug?.screenshots?.length"
           class="mt-3 flex flex-wrap gap-2"
         >
-          <a
+          <button
             v-for="(src, idx) in bug.screenshots"
             :key="idx"
-            :href="src"
-            target="_blank"
-            class="block overflow-hidden rounded-md border border-border"
+            type="button"
+            class="block overflow-hidden rounded-md border border-border transition-opacity hover:opacity-90"
+            @click="previewScreenshot(src)"
           >
             <img :src="src" alt="" class="h-14 w-14 object-cover" />
-          </a>
+          </button>
         </div>
 
         <p v-if="bug?.reporter" class="mt-2 text-xs text-muted-foreground">
@@ -337,4 +350,9 @@ function createTaskFromBug() {
       </section>
     </DialogContent>
   </Dialog>
+  <ImageLightbox
+    v-model:open="lightboxOpen"
+    v-model:index="lightboxIndex"
+    :images="lightboxImages"
+  />
 </template>

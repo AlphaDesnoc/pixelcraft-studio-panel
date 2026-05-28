@@ -1,6 +1,7 @@
 <script setup>
-import { reactive, watch } from "vue";
-import { Search } from "lucide-vue-next";
+import { reactive, ref, watch } from "vue";
+import { Search, UserRound } from "lucide-vue-next";
+import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Select } from "@/Components/ui/select";
 import { Switch } from "@/Components/ui/switch";
@@ -11,6 +12,7 @@ const props = defineProps({
   tags: { type: Array, default: () => [] },
   showArchived: { type: Boolean, default: false },
   swimlaneByAssignee: { type: Boolean, default: false },
+  currentUserId: { type: Number, default: null },
 });
 
 const emit = defineEmits(["update:filters", "update:showArchived", "update:swimlaneByAssignee"]);
@@ -62,10 +64,35 @@ watch(
   },
   { deep: true, immediate: true },
 );
+
+const searchInputRef = ref(null);
+
+function focusSearch() {
+  searchInputRef.value?.focus?.();
+}
+
+function applyMyTasksOnly() {
+  if (!props.currentUserId) return;
+  filters.assigneeId = String(props.currentUserId);
+}
+
+defineExpose({ focusSearch, applyMyTasksOnly });
 </script>
 
 <template>
   <div class="flex flex-wrap items-end gap-2 rounded-lg border border-border/60 bg-card/40 p-3">
+    <Button
+      v-if="currentUserId"
+      type="button"
+      size="sm"
+      variant="outline"
+      class="h-8 gap-1 px-2 text-xs"
+      @click="applyMyTasksOnly"
+    >
+      <UserRound class="h-3.5 w-3.5" />
+      Mes tâches
+    </Button>
+
     <div class="min-w-[160px] flex-1">
       <label class="mb-1 block text-[11px] font-medium text-muted-foreground">
         Recherche
@@ -75,6 +102,7 @@ watch(
           class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
         />
         <Input
+          ref="searchInputRef"
           v-model="filters.search"
           type="search"
           placeholder="Titre ou description…"

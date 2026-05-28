@@ -139,7 +139,7 @@ class ProjectMemberController extends Controller
     public function permissions(Request $request, Project $project, User $user): JsonResponse|RedirectResponse
     {
         $this->ensureFeature($request, $project, 'team');
-        abort_unless($request->user()->is_admin, 403);
+        ProjectAccess::ensureCanManageTeam($request->user(), $project);
         abort_unless($project->members()->whereKey($user->id)->exists(), 404);
 
         $validated = $request->validate([

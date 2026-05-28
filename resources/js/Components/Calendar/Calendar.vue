@@ -108,10 +108,12 @@ function goToday() {
 
 const dialogOpen = ref(false);
 const dialogEvent = ref(null);
+const dialogOccurrence = ref(null);
 const dialogDefaultDate = ref(null);
 
 function openCreate(date = null) {
   dialogEvent.value = null;
+  dialogOccurrence.value = null;
   dialogDefaultDate.value = date;
   dialogOpen.value = true;
 }
@@ -119,6 +121,12 @@ function openCreate(date = null) {
 function openEdit(ev) {
   const masterId = ev.series_id ?? ev.id;
   dialogEvent.value = props.events.find((event) => event.id === masterId) ?? ev;
+  dialogOccurrence.value = ev.series_id || ev.occurrence_date
+    ? {
+        occurrence_date: ev.occurrence_date ?? ev.start_at?.slice(0, 10),
+        ...ev,
+      }
+    : null;
   dialogDefaultDate.value = null;
   dialogOpen.value = true;
 }
@@ -159,6 +167,12 @@ function formatTime(iso) {
           <Plus class="h-3.5 w-3.5" />
           Événement
         </Button>
+        <a
+          :href="route('projects.calendar.ical', projectSlug)"
+          class="ml-1 inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted/50"
+        >
+          Export iCal
+        </a>
       </div>
     </header>
 
@@ -233,6 +247,7 @@ function formatTime(iso) {
       v-model:open="dialogOpen"
       :project-slug="projectSlug"
       :event="dialogEvent"
+      :occurrence="dialogOccurrence"
       :default-date="dialogDefaultDate"
       :rank-id="rankId"
     />

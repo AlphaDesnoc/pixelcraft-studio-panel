@@ -7,6 +7,7 @@ export const onlineUsers = ref([]);
 export const unreadMessages = ref(0);
 export const unreadNotifications = ref(0);
 export const siteLive = ref(false);
+export const reverbOnline = ref(false);
 
 const POLL_MS = 3000;
 const HEARTBEAT_MS = 25000;
@@ -111,10 +112,12 @@ async function pollSync() {
       handleInboxEvent(event, { skipUnreadIncrement: true });
     }
 
-    siteLive.value = echoConnected || true;
+    siteLive.value = echoConnected;
+    reverbOnline.value = echoConnected;
   } catch {
     if (!echoConnected) {
       siteLive.value = false;
+      reverbOnline.value = false;
     }
   }
 }
@@ -172,12 +175,15 @@ function subscribeEcho(userId) {
     connection.bind("connected", () => {
       echoConnected = true;
       siteLive.value = true;
+      reverbOnline.value = true;
     });
     connection.bind("disconnected", () => {
       echoConnected = false;
+      reverbOnline.value = false;
     });
     connection.bind("unavailable", () => {
       echoConnected = false;
+      reverbOnline.value = false;
     });
     if (connection.state === "connected") {
       echoConnected = true;

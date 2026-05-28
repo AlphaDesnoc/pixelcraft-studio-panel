@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExportController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\ProjectMemberController;
 use App\Http\Controllers\BugController;
 use App\Http\Controllers\BugMessageController;
 use App\Http\Controllers\CalendarEventController;
+use App\Http\Controllers\CalendarIcalController;
 use App\Http\Controllers\ChatMessageController;
 use App\Http\Controllers\ChatReactionController;
 use App\Http\Controllers\FileNodeController;
@@ -64,6 +66,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('/realtime/sync', [RealtimeController::class, 'sync'])->name('realtime.sync');
 
     Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
+    Route::get('/messages/conversations', [MessageController::class, 'conversations'])->name('messages.conversations.index');
     Route::get('/messages/conversations/{conversation}/messages', [MessageController::class, 'messages'])->name('messages.conversations.messages');
     Route::post('/messages/conversations/{conversation}/read', [MessageController::class, 'markRead'])->name('messages.conversations.read');
     Route::post('/messages/conversations/{conversation}/attachments', [MessageController::class, 'storeAttachment'])
@@ -160,10 +163,14 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/bugs/{bug}/link-task', [BugController::class, 'linkTask'])->name('bugs.link-task');
         Route::post('/bugs/{bug}/create-task', [BugController::class, 'createTaskFromBug'])->name('bugs.create-task');
 
+        Route::get('/calendar/export.ics', CalendarIcalController::class)->name('calendar.ical');
+
         Route::get('/export/bugs', [ExportController::class, 'bugs'])->name('export.bugs');
         Route::get('/export/activity', [ExportController::class, 'projectActivity'])->name('export.activity');
+        Route::get('/activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
 
         Route::get('/ranks/dashboard', [RankDashboardController::class, 'index'])->name('ranks.dashboard');
+        Route::get('/ranks/dashboard/export', [RankDashboardController::class, 'export'])->name('ranks.dashboard.export');
         Route::get('/ranks', [RankController::class, 'index'])->name('ranks.index');
         Route::post('/ranks', [RankController::class, 'store'])->name('ranks.store');
         Route::put('/ranks/{rank}', [RankController::class, 'update'])->name('ranks.update');

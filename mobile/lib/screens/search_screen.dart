@@ -53,28 +53,41 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _openResult(SearchResult result) {
-    if (result.type == 'project') {
-      final slug = _extractSlug(result.url);
-      if (slug != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProjectScreen(slug: slug),
-          ),
-        );
-      }
-      return;
+    final uri = Uri.tryParse(result.url ?? '');
+    final slug = _extractSlug(result.url);
+    if (slug == null) return;
+
+    String? tab;
+    int? taskId;
+    int? bugId;
+    String? space;
+    if (uri != null) {
+      tab = uri.queryParameters['tab'];
+      space = uri.queryParameters['space'];
+      final taskRaw = uri.queryParameters['task'];
+      final bugRaw = uri.queryParameters['bug'];
+      if (taskRaw != null) taskId = int.tryParse(taskRaw);
+      if (bugRaw != null) bugId = int.tryParse(bugRaw);
     }
 
-    if (result.type == 'task' || result.type == 'bug' || result.type == 'chat') {
-      final slug = _extractProjectSlug(result.url);
-      if (slug != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ProjectScreen(slug: slug),
-          ),
-        );
-      }
-    }
+    if (result.type == 'task') tab ??= 'kanban';
+    if (result.type == 'bug') tab ??= 'bugs';
+    if (result.type == 'chat') tab ??= 'chat';
+    if (result.type == 'note') tab ??= 'notes';
+    if (result.type == 'file') tab ??= 'files';
+    if (result.type == 'sheet') tab ??= 'spreadsheet';
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProjectScreen(
+          slug: slug,
+          initialSpace: space,
+          initialTab: tab,
+          taskId: taskId,
+          bugId: bugId,
+        ),
+      ),
+    );
   }
 
   String? _extractSlug(String? url) {

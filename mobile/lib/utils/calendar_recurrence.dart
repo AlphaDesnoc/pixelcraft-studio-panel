@@ -3,6 +3,25 @@ import '../models/workspace.dart';
 DateTime _startOfDay(DateTime date) =>
     DateTime(date.year, date.month, date.day);
 
+String _dateKey(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}
+
+WorkspaceEventException? _exceptionForDay(
+  List<WorkspaceEventException> exceptions,
+  DateTime day,
+) {
+  final key = _dateKey(day);
+  for (final exception in exceptions) {
+    if (exception.occurrenceDate == key) {
+      return exception;
+    }
+  }
+  return null;
+}
+
 bool _shouldOccurOnDay(
   DateTime day,
   WorkspaceEvent event,
@@ -72,21 +91,47 @@ List<WorkspaceEvent> expandEventsForDay(
 
     if (!_shouldOccurOnDay(day, event, seriesStart)) continue;
 
-    final occurrenceStart = _occurrenceDateTime(seriesStart, day);
-    final duration = seriesEnd.difference(seriesStart);
+    final dateKey = _dateKey(day);
+    final exception = _exceptionForDay(event.exceptions, day);
+    if (exception?.type == 'cancelled') continue;
+
+    var occurrenceStart = _occurrenceDateTime(seriesStart, day);
+    var duration = seriesEnd.difference(seriesStart);
+    var occurrenceEnd = occurrenceStart.add(duration);
+    var title = event.title;
+    var description = event.description;
+    var color = event.color;
+    var allDay = event.allDay;
+
+    if (exception?.type == 'modified') {
+      if (exception!.startAt != null) {
+        occurrenceStart = DateTime.parse(exception.startAt!).toLocal();
+      }
+      if (exception.endAt != null) {
+        occurrenceEnd = DateTime.parse(exception.endAt!).toLocal();
+      }
+      if (exception.title != null) title = exception.title!;
+      if (exception.description != null) description = exception.description;
+      if (exception.color != null) color = exception.color!;
+      if (exception.allDay != null) allDay = exception.allDay!;
+    }
+
     results.add(
       WorkspaceEvent(
         id: event.id,
-        title: event.title,
-        description: event.description,
+        title: title,
+        description: description,
         startAt: occurrenceStart.toIso8601String(),
-        endAt: occurrenceStart.add(duration).toIso8601String(),
-        allDay: event.allDay,
-        color: event.color,
+        endAt: occurrenceEnd.toIso8601String(),
+        allDay: allDay,
+        color: color,
         recurrence: event.recurrence,
         recurrenceWeekdays: event.recurrenceWeekdays,
         recurrenceUntil: event.recurrenceUntil,
         seriesId: event.id,
+        occurrenceDate: dateKey,
+        reminderMinutes: event.reminderMinutes,
+        exceptions: event.exceptions,
       ),
     );
   }
