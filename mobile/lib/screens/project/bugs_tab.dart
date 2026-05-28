@@ -94,7 +94,7 @@ class BugsTab extends StatelessWidget {
           }
         }
         if (bug != null) {
-          _openBugDetail(context, bug!);
+          _openBugDetail(context, bug);
         }
       });
     }
@@ -274,6 +274,8 @@ class _BugDetailSheetState extends State<_BugDetailSheet> {
     setState(() => _bug = updated);
     await widget.onChanged();
   }
+
+  Future<void> _deleteBug() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

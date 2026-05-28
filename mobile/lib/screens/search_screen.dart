@@ -102,8 +102,6 @@ class _SearchScreenState extends State<SearchScreen> {
     return null;
   }
 
-  String? _extractProjectSlug(String? url) => _extractSlug(url);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
