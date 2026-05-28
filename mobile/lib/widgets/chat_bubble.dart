@@ -618,11 +618,6 @@ class _AttachmentList extends StatelessWidget {
       token: token,
     );
   }
-
-  Future<void> _openUrl(String url) async {
-    final uri = Uri.parse(url);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
 }
 
 class _FileLink extends StatelessWidget {
