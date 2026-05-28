@@ -17,7 +17,6 @@ import {
   onDirectMessage,
 } from "@/composables/useSiteRealtime.js";
 import { openFloatingMessenger } from "@/composables/useFloatingMessenger.js";
-import { useFocusMode } from "@/composables/useFocusMode.js";
 import {
   initNotifications,
   teardownNotifications,
@@ -28,7 +27,6 @@ import { useKeyboardShortcuts, onEscape } from "@/composables/useKeyboardShortcu
 
 const page = usePage();
 const { preference, cycleTheme } = useTheme();
-const { isFocusMode } = useFocusMode();
 
 const searchOpen = ref(false);
 const shortcutsOpen = ref(false);
@@ -154,11 +152,10 @@ watch(
 
 <template>
   <div class="min-h-screen bg-background text-foreground">
-    <AppSidebar v-if="!isFocusMode" />
+    <AppSidebar />
 
     <div
-      class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-end gap-2 border-b border-border/60 bg-background/95 px-4 backdrop-blur sm:gap-3 sm:px-6"
-      :class="isFocusMode ? '' : 'md:left-64'"
+      class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-end gap-2 border-b border-border/60 bg-background/95 px-4 backdrop-blur sm:gap-3 sm:px-6 md:left-64"
     >
       <button
         type="button"
@@ -198,7 +195,7 @@ watch(
       <NotificationBell />
     </div>
 
-    <div :class="isFocusMode ? '' : 'md:pl-64'">
+    <div class="md:pl-64">
       <div class="h-14" aria-hidden="true" />
 
       <header v-if="$slots.header" class="px-4 pt-6 sm:px-6 sm:pt-8 md:px-8">
@@ -212,6 +209,6 @@ watch(
 
     <GlobalSearchModal v-model:open="searchOpen" />
     <KeyboardShortcutsHelp v-model:open="shortcutsOpen" />
-    <FloatingMessenger v-if="!isFocusMode" />
+    <FloatingMessenger />
   </div>
 </template>

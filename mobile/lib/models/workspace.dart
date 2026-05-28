@@ -286,9 +286,6 @@ class KanbanTask {
     this.archivedAt,
     this.dependencyIds = const [],
     this.isBlocked = false,
-    this.recurrenceRule,
-    this.estimatedMinutes,
-    this.loggedMinutes,
     this.tags = const [],
     this.checklists = const [],
     this.comments = const [],
@@ -311,9 +308,6 @@ class KanbanTask {
   final String? archivedAt;
   final List<int> dependencyIds;
   final bool isBlocked;
-  final String? recurrenceRule;
-  final int? estimatedMinutes;
-  final int? loggedMinutes;
   final List<TaskTag> tags;
   final List<TaskChecklist> checklists;
   final List<TaskComment> comments;
@@ -340,9 +334,6 @@ class KanbanTask {
           .map((e) => e as int)
           .toList(),
       isBlocked: json['is_blocked'] as bool? ?? false,
-      recurrenceRule: json['recurrence_rule'] as String?,
-      estimatedMinutes: json['estimated_minutes'] as int?,
-      loggedMinutes: json['logged_minutes'] as int?,
       tags: (json['tags'] as List<dynamic>? ?? [])
           .map((e) => TaskTag.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -361,58 +352,6 @@ class KanbanTask {
               'total': cp['total'] as int? ?? 0,
             }
           : const {'done': 0, 'total': 0},
-    );
-  }
-
-  KanbanTask copyWith({
-    int? id,
-    int? listId,
-    String? title,
-    String? description,
-    String? priority,
-    String? status,
-    String? dueDate,
-    String? startDate,
-    bool? isOverdue,
-    int? assigneeId,
-    int? position,
-    int? progress,
-    String? archivedAt,
-    List<int>? dependencyIds,
-    bool? isBlocked,
-    String? recurrenceRule,
-    int? estimatedMinutes,
-    int? loggedMinutes,
-    List<TaskTag>? tags,
-    List<TaskChecklist>? checklists,
-    List<TaskComment>? comments,
-    List<PanelAttachment>? attachments,
-    Map<String, int>? checklistProgress,
-  }) {
-    return KanbanTask(
-      id: id ?? this.id,
-      listId: listId ?? this.listId,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      priority: priority ?? this.priority,
-      status: status ?? this.status,
-      dueDate: dueDate ?? this.dueDate,
-      startDate: startDate ?? this.startDate,
-      isOverdue: isOverdue ?? this.isOverdue,
-      assigneeId: assigneeId ?? this.assigneeId,
-      position: position ?? this.position,
-      progress: progress ?? this.progress,
-      archivedAt: archivedAt ?? this.archivedAt,
-      dependencyIds: dependencyIds ?? this.dependencyIds,
-      isBlocked: isBlocked ?? this.isBlocked,
-      recurrenceRule: recurrenceRule ?? this.recurrenceRule,
-      estimatedMinutes: estimatedMinutes ?? this.estimatedMinutes,
-      loggedMinutes: loggedMinutes ?? this.loggedMinutes,
-      tags: tags ?? this.tags,
-      checklists: checklists ?? this.checklists,
-      comments: comments ?? this.comments,
-      attachments: attachments ?? this.attachments,
-      checklistProgress: checklistProgress ?? this.checklistProgress,
     );
   }
 }

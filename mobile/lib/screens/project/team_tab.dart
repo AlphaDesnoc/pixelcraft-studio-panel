@@ -5,27 +5,6 @@ import '../../api/panel_api_extensions.dart';
 import '../../models/extras.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
-import '../../utils/project_permissions.dart';
-
-const _roleLabels = {
-  'owner': 'Propriétaire',
-  'manager': 'Gestionnaire',
-  'member': 'Membre',
-};
-
-const _assignableRoles = ['member', 'manager'];
-
-const _featureKeys = [
-  ('kanban', 'Kanban'),
-  ('calendar', 'Calendrier'),
-  ('gantt', 'Gantt'),
-  ('notes', 'Notes'),
-  ('spreadsheet', 'Tableur'),
-  ('files', 'Fichiers'),
-  ('chat', 'Chat'),
-  ('bugs', 'Bugs'),
-  ('team', 'Équipe'),
-];
 
 class TeamTab extends StatefulWidget {
   const TeamTab({
@@ -66,20 +45,6 @@ class _TeamTabState extends State<TeamTab> {
     }
   }
 
-  String _roleLabel(String role) => _roleLabels[role] ?? role;
-
-  Map<String, bool> _effectivePermissions(TeamMember member) {
-    final base = <String, bool>{};
-    for (final (key, _) in _featureKeys) {
-      base[key] = true;
-      base['${key}_write'] = true;
-    }
-    if (member.permissions.isNotEmpty) {
-      base.addAll(member.permissions);
-    }
-    return base;
-  }
-
   Future<void> _addMember() async {
     if (widget.workspace.teamCandidates.isEmpty) return;
 
@@ -111,15 +76,16 @@ class _TeamTabState extends State<TeamTab> {
   }
 
   Future<void> _changeRole(TeamMember member) async {
+    const roles = ['member', 'admin', 'viewer'];
     final role = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: _assignableRoles
+          children: roles
               .map(
                 (r) => ListTile(
-                  title: Text(_roleLabel(r)),
+                  title: Text(r),
                   onTap: () => Navigator.pop(context, r),
                 ),
               )
@@ -136,112 +102,6 @@ class _TeamTabState extends State<TeamTab> {
         );
     await _refresh();
     await widget.onChanged();
-  }
-
-  Future<void> _editPermissions(TeamMember member) async {
-    final perms = Map<String, bool>.from(_effectivePermissions(member));
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 16,
-                  bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Accès — ${member.name}',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text('Préréglages', style: Theme.of(context).textTheme.labelLarge),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: permissionPresets.map((preset) {
-                        return ActionChip(
-                          label: Text(preset.label),
-                          onPressed: () {
-                            final next = permissionsForPreset(preset.id);
-                            if (next != null) {
-                              setModalState(() => perms
-                                ..clear()
-                                ..addAll(next));
-                            }
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    ..._featureKeys.map((entry) {
-                      final key = entry.$1;
-                      final label = entry.$2;
-                      final writeKey = '${key}_write';
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(label)),
-                              FilterChip(
-                                label: const Text('Lecture'),
-                                selected: perms[key] ?? true,
-                                onSelected: (value) {
-                                  setModalState(() {
-                                    perms[key] = value;
-                                    if (!value) perms[writeKey] = false;
-                                  });
-                                },
-                              ),
-                              const SizedBox(width: 6),
-                              FilterChip(
-                                label: const Text('Écriture'),
-                                selected: perms[writeKey] ?? true,
-                                onSelected: (value) {
-                                  setModalState(() {
-                                    perms[writeKey] = value;
-                                    if (value) perms[key] = true;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                    FilledButton(
-                      onPressed: () async {
-                        await context.read<AuthSession>().api.updateTeamPermissions(
-                              projectSlug: _slug,
-                              userId: member.id,
-                              permissions: perms,
-                            );
-                        if (context.mounted) Navigator.pop(context);
-                        await _refresh();
-                        await widget.onChanged();
-                      },
-                      child: const Text('Enregistrer'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   Future<void> _removeMember(TeamMember member) async {
@@ -278,37 +138,30 @@ class _TeamTabState extends State<TeamTab> {
         child: ListView.separated(
           padding: const EdgeInsets.all(12),
           itemCount: _members.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          separatorBuilder: (context, index) => const Divider(height: 1),
           itemBuilder: (context, index) {
             final member = _members[index];
-            return Card(
-              child: ListTile(
-                leading: CircleAvatar(child: Text(member.name.isNotEmpty ? member.name[0] : '?')),
-                title: Text(member.name),
-                subtitle: Text('${member.email}\n${_roleLabel(member.role)}'),
-                isThreeLine: true,
-                trailing: _canManage && !member.isOwner
-                    ? PopupMenuButton<String>(
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: 'role', child: Text('Changer le rôle')),
-                          PopupMenuItem(value: 'permissions', child: Text('Permissions')),
-                          PopupMenuItem(value: 'remove', child: Text('Retirer')),
-                        ],
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'role':
-                              _changeRole(member);
-                            case 'permissions':
-                              _editPermissions(member);
-                            case 'remove':
-                              _removeMember(member);
-                          }
-                        },
-                      )
-                    : member.isOwner
-                        ? const Chip(label: Text('Owner'))
-                        : null,
-              ),
+            return ListTile(
+              leading: CircleAvatar(child: Text(member.name.isNotEmpty ? member.name[0] : '?')),
+              title: Text(member.name),
+              subtitle: Text('${member.email} · ${member.role}'),
+              trailing: _canManage && !member.isOwner
+                  ? PopupMenuButton<String>(
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(value: 'role', child: Text('Changer le rôle')),
+                        PopupMenuItem(value: 'remove', child: Text('Retirer')),
+                      ],
+                      onSelected: (value) {
+                        if (value == 'role') {
+                          _changeRole(member);
+                        } else {
+                          _removeMember(member);
+                        }
+                      },
+                    )
+                  : member.isOwner
+                      ? const Chip(label: Text('Owner'))
+                      : null,
             );
           },
         ),

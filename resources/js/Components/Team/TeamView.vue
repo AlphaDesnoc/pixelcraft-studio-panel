@@ -15,7 +15,7 @@ import { Button } from "@/Components/ui/button";
 import { Select } from "@/Components/ui/select";
 import MemberPermissionsMatrix from "@/Components/Team/MemberPermissionsMatrix.vue";
 import ProjectMemberPickerDialog from "@/Components/Team/ProjectMemberPickerDialog.vue";
-import { writeKeyFor, PERMISSION_PRESETS, permissionsForPreset } from "@/lib/projectPermissions.js";
+import { writeKeyFor } from "@/lib/projectPermissions.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -87,12 +87,6 @@ function savePermissions(member, permissions) {
       only: ["teamMembers", "members"],
     },
   );
-}
-
-function applyPreset(member, presetId) {
-  const permissions = permissionsForPreset(presetId);
-  if (!permissions) return;
-  savePermissions(member, permissions);
 }
 
 const pickerOpen = ref(false);
@@ -296,18 +290,6 @@ function removeMember(member) {
             v-show="isPermissionsExpanded(member.id)"
             class="border-t border-border/40 px-4 pb-4 pt-3"
           >
-            <div class="mb-3 flex flex-wrap gap-2">
-              <button
-                v-for="preset in PERMISSION_PRESETS"
-                :key="preset.id"
-                type="button"
-                class="rounded-full border border-border/60 bg-background px-3 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
-                :title="preset.description"
-                @click="applyPreset(member, preset.id)"
-              >
-                {{ preset.label }}
-              </button>
-            </div>
             <MemberPermissionsMatrix
               :modules="MEMBER_PERM_KEYS"
               :permissions="memberPermState(member)"

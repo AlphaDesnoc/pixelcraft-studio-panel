@@ -36,7 +36,4 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('panel:auto-archive-tasks')->dailyAt('03:00');
         $schedule->command('calendar:send-reminders')->everyMinute();
         $schedule->command('bugs:notify-sla')->everyFifteenMinutes();
-        $schedule->command('panel:weekly-digest')->weeklyOn(1, '08:30');
-        $schedule->command('panel:daily-digest')->dailyAt('08:00');
-        $schedule->command('panel:task-reminders')->everyMinute();
     })->create();

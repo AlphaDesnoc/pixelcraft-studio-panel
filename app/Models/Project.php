@@ -19,7 +19,6 @@ use Illuminate\Support\Facades\Storage;
     'status',
     'start_date',
     'owner_id',
-    'capacity_threshold',
 ])]
 class Project extends Model
 {

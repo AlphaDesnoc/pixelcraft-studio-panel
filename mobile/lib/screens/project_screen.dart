@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../models/workspace.dart';
 import '../services/auth_session.dart';
-import '../services/focus_mode_service.dart';
 import 'project/kanban_tab.dart';
 import 'project/chat_tab.dart';
 import 'project/notes_tab.dart';
@@ -15,7 +14,6 @@ import 'project/ranks_tab.dart';
 import 'project/files_tab.dart';
 import 'project/overview_tab.dart';
 import 'project/gantt_tab.dart';
-import 'project/history_tab.dart';
 
 class ProjectScreen extends StatefulWidget {
   const ProjectScreen({
@@ -102,12 +100,7 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       tabs.add(_ProjectTab(
         label: 'Kanban',
         icon: Icons.view_kanban_outlined,
-        builder: () => KanbanTab(
-          workspace: ws,
-          onChanged: _load,
-          focusMode: context.read<FocusModeService>().isFocusMode,
-          initialTaskId: widget.taskId,
-        ),
+        builder: () => KanbanTab(workspace: ws, onChanged: _load),
       ));
       tabs.add(_ProjectTab(
         label: 'Gantt',
@@ -120,11 +113,7 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       tabs.add(_ProjectTab(
         label: 'Chat',
         icon: Icons.forum_outlined,
-        builder: () => ChatTab(
-          workspace: ws,
-          onChanged: _load,
-          onSpaceChanged: _changeSpace,
-        ),
+        builder: () => ChatTab(workspace: ws, onChanged: _load),
       ));
     }
 
@@ -193,12 +182,6 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       ));
     }
 
-    tabs.add(_ProjectTab(
-      label: 'Historique',
-      icon: Icons.history,
-      builder: () => HistoryTab(workspace: ws),
-    ));
-
     return tabs;
   }
 
@@ -216,7 +199,6 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       'files': 'Fichiers',
       'team': 'Équipe',
       'gantt': 'Gantt',
-      'history': 'Historique',
     };
 
     final label = tabLabels[widget.initialTab];
@@ -231,13 +213,6 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
   Future<void> _changeSpace(String? spaceKey) async {
     _space = spaceKey;
     await _load();
-  }
-
-  bool get _isFocusMode => context.watch<FocusModeService>().isFocusMode;
-
-  int? get _kanbanTabIndex {
-    final idx = _tabs.indexWhere((t) => t.label == 'Kanban');
-    return idx >= 0 ? idx : null;
   }
 
   @override
@@ -267,54 +242,6 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
 
     final ws = _workspace!;
     final controller = _tabController!;
-    final focus = _isFocusMode;
-    final kanbanIdx = _kanbanTabIndex;
-    final onKanban = kanbanIdx != null && controller.index == kanbanIdx;
-    final fullScreenKanban = focus && onKanban && ws.canRead('kanban');
-
-    if (fullScreenKanban) {
-      return Scaffold(
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back),
-                    ),
-                    Expanded(
-                      child: Text(
-                        ws.project.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Quitter le mode focus',
-                      onPressed: () => context.read<FocusModeService>().toggle(),
-                      icon: const Icon(Icons.fullscreen_exit),
-                    ),
-                    IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: KanbanTab(
-                  workspace: ws,
-                  onChanged: _load,
-                  focusMode: true,
-                  initialTaskId: widget.taskId,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -322,23 +249,11 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(ws.project.name),
-            if (!focus)
-              Text(ws.spaceLabel, style: Theme.of(context).textTheme.labelSmall),
+            Text(ws.spaceLabel, style: Theme.of(context).textTheme.labelSmall),
           ],
         ),
         actions: [
-          if (ws.canRead('kanban'))
-            IconButton(
-              tooltip: focus ? 'Quitter focus' : 'Mode focus',
-              onPressed: () async {
-                await context.read<FocusModeService>().toggle();
-                if (context.mounted && focus == false && kanbanIdx != null) {
-                  controller.index = kanbanIdx;
-                }
-              },
-              icon: Icon(focus ? Icons.fullscreen_exit : Icons.center_focus_strong_outlined),
-            ),
-          if (!focus && ws.spaces.length > 1)
+          if (ws.spaces.length > 1)
             PopupMenuButton<String?>(
               tooltip: 'Espace',
               onSelected: _changeSpace,
@@ -352,35 +267,20 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
               ],
               icon: const Icon(Icons.layers_outlined),
             ),
-          if (!focus)
-            IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
-        bottom: focus
-            ? null
-            : TabBar(
-                controller: controller,
-                isScrollable: true,
-                tabs: _tabs
-                    .map((tab) => Tab(icon: Icon(tab.icon, size: 20), text: tab.label))
-                    .toList(),
-              ),
+        bottom: TabBar(
+          controller: controller,
+          isScrollable: true,
+          tabs: _tabs
+              .map((tab) => Tab(icon: Icon(tab.icon, size: 20), text: tab.label))
+              .toList(),
+        ),
       ),
-      body: focus
-          ? (onKanban
-              ? KanbanTab(
-                  workspace: ws,
-                  onChanged: _load,
-                  focusMode: true,
-                  initialTaskId: widget.taskId,
-                )
-              : TabBarView(
-                  controller: controller,
-                  children: _tabs.map((tab) => tab.builder()).toList(),
-                ))
-          : TabBarView(
-              controller: controller,
-              children: _tabs.map((tab) => tab.builder()).toList(),
-            ),
+      body: TabBarView(
+        controller: controller,
+        children: _tabs.map((tab) => tab.builder()).toList(),
+      ),
     );
   }
 }

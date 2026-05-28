@@ -1,9 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditLogController;
-use App\Http\Controllers\Admin\PortfolioController;
 use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
-use App\Http\Controllers\Admin\ProjectTemplateController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AttachmentController;
@@ -39,14 +37,6 @@ use App\Http\Controllers\DirectMessageReactionController;
 use App\Http\Controllers\ProfileThemeController;
 use App\Http\Controllers\ProfileDashboardWidgetsController;
 use App\Http\Controllers\TaskTemplateController;
-use App\Http\Controllers\TaskBulkController;
-use App\Http\Controllers\TaskTimerController;
-use App\Http\Controllers\TaskReminderController;
-use App\Http\Controllers\TaskSnoozeController;
-use App\Http\Controllers\KanbanSavedViewController;
-use App\Http\Controllers\MilestoneController;
-use App\Http\Controllers\ProjectAutomationController;
-use App\Http\Controllers\TaskPresenceController;
 use App\Http\Controllers\Api\PanelSessionController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -110,32 +100,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/tasks/{task}/archive', [TaskController::class, 'archive'])->name('tasks.archive');
         Route::post('/tasks/{task}/unarchive', [TaskController::class, 'unarchive'])->name('tasks.unarchive');
         Route::post('/tasks/templates', [TaskTemplateController::class, 'store'])->name('tasks.templates.store');
-        Route::put('/tasks/templates/{template}', [TaskTemplateController::class, 'update'])->name('tasks.templates.update');
-        Route::delete('/tasks/templates/{template}', [TaskTemplateController::class, 'destroy'])->name('tasks.templates.destroy');
         Route::post('/tasks/{task}/templates/apply', [TaskTemplateController::class, 'apply'])->name('tasks.templates.apply');
-        Route::post('/tasks/bulk', [TaskBulkController::class, 'store'])->name('tasks.bulk');
-        Route::get('/tasks/{task}/timer', [TaskTimerController::class, 'status'])->name('tasks.timer.status');
-        Route::post('/tasks/{task}/timer/start', [TaskTimerController::class, 'start'])->name('tasks.timer.start');
-        Route::post('/tasks/{task}/timer/stop', [TaskTimerController::class, 'stop'])->name('tasks.timer.stop');
-        Route::post('/tasks/{task}/reminders', [TaskReminderController::class, 'store'])->name('tasks.reminders.store');
-        Route::delete('/tasks/{task}/reminders/{reminder}', [TaskReminderController::class, 'destroy'])->name('tasks.reminders.destroy');
-        Route::post('/tasks/{task}/snooze', [TaskSnoozeController::class, 'store'])->name('tasks.snooze.store');
-        Route::delete('/tasks/{task}/snooze', [TaskSnoozeController::class, 'destroy'])->name('tasks.snooze.destroy');
-        Route::get('/kanban/views', [KanbanSavedViewController::class, 'index'])->name('kanban.views.index');
-        Route::post('/kanban/views', [KanbanSavedViewController::class, 'store'])->name('kanban.views.store');
-        Route::put('/kanban/views/{view}', [KanbanSavedViewController::class, 'update'])->name('kanban.views.update');
-        Route::delete('/kanban/views/{view}', [KanbanSavedViewController::class, 'destroy'])->name('kanban.views.destroy');
-        Route::get('/milestones', [MilestoneController::class, 'index'])->name('milestones.index');
-        Route::post('/milestones', [MilestoneController::class, 'store'])->name('milestones.store');
-        Route::put('/milestones/{milestone}', [MilestoneController::class, 'update'])->name('milestones.update');
-        Route::delete('/milestones/{milestone}', [MilestoneController::class, 'destroy'])->name('milestones.destroy');
-        Route::get('/automations', [ProjectAutomationController::class, 'index'])->name('automations.index');
-        Route::post('/automations', [ProjectAutomationController::class, 'store'])->name('automations.store');
-        Route::put('/automations/{rule}', [ProjectAutomationController::class, 'update'])->name('automations.update');
-        Route::delete('/automations/{rule}', [ProjectAutomationController::class, 'destroy'])->name('automations.destroy');
-        Route::get('/presence', [TaskPresenceController::class, 'index'])->name('presence.index');
-        Route::post('/presence', [TaskPresenceController::class, 'store'])->name('presence.store');
-        Route::put('/settings/capacity', [ProjectController::class, 'updateCapacityThreshold'])->name('settings.capacity');
         Route::put('/tasks/{task}/tags', [TaskTagController::class, 'sync'])->name('tasks.tags.sync');
 
         Route::post('/tags', [TaskTagController::class, 'store'])->name('tags.store');
@@ -245,13 +210,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/projects/{project}', [AdminProjectController::class, 'destroy'])->name('projects.destroy');
 
         Route::get('/audit', [AuditLogController::class, 'index'])->name('audit.index');
-        Route::get('/portfolio', [PortfolioController::class, 'index'])->name('portfolio.index');
-        Route::get('/portfolio/export', [PortfolioController::class, 'export'])->name('portfolio.export');
-
-        Route::get('/project-templates', [ProjectTemplateController::class, 'index'])->name('project-templates.index');
-        Route::post('/project-templates', [ProjectTemplateController::class, 'store'])->name('project-templates.store');
-        Route::put('/project-templates/{template}', [ProjectTemplateController::class, 'update'])->name('project-templates.update');
-        Route::delete('/project-templates/{template}', [ProjectTemplateController::class, 'destroy'])->name('project-templates.destroy');
     });
 });
 

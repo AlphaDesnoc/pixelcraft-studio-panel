@@ -6,10 +6,8 @@ import 'package:provider/provider.dart';
 import '../api/panel_api.dart';
 import '../models/conversation.dart';
 import '../models/panel_notification.dart';
-import '../models/my_task.dart';
 import '../models/project.dart';
 import '../services/auth_session.dart';
-import '../services/notification_router.dart';
 import '../services/realtime_service.dart';
 import '../utils/format.dart';
 import 'admin_screen.dart';
@@ -19,9 +17,7 @@ import 'project_screen.dart';
 import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.initialTabIndex = 0});
-
-  final int initialTabIndex;
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -35,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _index = widget.initialTabIndex;
     _loadBadges();
     context.read<RealtimeService>().addListener(_onRealtime);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -207,7 +202,6 @@ class _DashboardTab extends StatefulWidget {
 
 class _DashboardTabState extends State<_DashboardTab> {
   ProjectsResponse? _data;
-  List<MyTask> _myTasks = [];
   bool _loading = true;
   String? _error;
 
@@ -224,16 +218,9 @@ class _DashboardTabState extends State<_DashboardTab> {
     });
 
     try {
-      final api = context.read<AuthSession>().api;
-      final results = await Future.wait([
-        api.fetchProjects(),
-        api.fetchMyTasks(),
-      ]);
+      final data = await context.read<AuthSession>().api.fetchProjects();
       if (!mounted) return;
-      setState(() {
-        _data = results[0] as ProjectsResponse;
-        _myTasks = results[1] as List<MyTask>;
-      });
+      setState(() => _data = data);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
@@ -241,21 +228,6 @@ class _DashboardTabState extends State<_DashboardTab> {
       if (mounted) setState(() => _loading = false);
     }
   }
-
-  List<MyTask> get _weekTasks {
-    final now = DateTime.now();
-    final weekEnd = now.add(const Duration(days: 7));
-    return _myTasks.where((task) {
-      if (task.dueDate == null) return false;
-      final due = DateTime.tryParse(task.dueDate!);
-      if (due == null) return false;
-      return !due.isBefore(now) && !due.isAfter(weekEnd);
-    }).toList();
-  }
-
-  List<MyTask> get _urgentTasks => _myTasks.where((t) => t.isOverdue).toList();
-
-  int get _slaCount => _data?.stats.overdue ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -268,33 +240,6 @@ class _DashboardTabState extends State<_DashboardTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Ma semaine', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          _DashboardWidgetCard(
-            icon: Icons.date_range_outlined,
-            title: '${_weekTasks.length} tâches cette semaine',
-            subtitle: _weekTasks.isEmpty
-                ? 'Rien de planifié'
-                : _weekTasks.take(3).map((t) => t.title).join(' · '),
-            color: Theme.of(context).colorScheme.primaryContainer,
-          ),
-          const SizedBox(height: 12),
-          _DashboardWidgetCard(
-            icon: Icons.priority_high,
-            title: '${_urgentTasks.length} tâches urgentes',
-            subtitle: _urgentTasks.isEmpty
-                ? 'Aucune en retard'
-                : '${_urgentTasks.length} en retard sur vos assignations',
-            color: Colors.orange.shade100,
-          ),
-          const SizedBox(height: 12),
-          _DashboardWidgetCard(
-            icon: Icons.bug_report_outlined,
-            title: '$_slaCount tâches en retard (global)',
-            subtitle: 'Indicateur SLA / échéances dépassées',
-            color: Theme.of(context).colorScheme.errorContainer,
-          ),
-          const SizedBox(height: 24),
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -534,40 +479,12 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                             await context.read<AuthSession>().api.markNotificationRead(notification.id);
                             await _load();
                           }
-                          if (!context.mounted) return;
-                          await NotificationRouter.openNotification(context, notification);
                         },
                       );
                     },
                   ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _DashboardWidgetCard extends StatelessWidget {
-  const _DashboardWidgetCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: color,
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
       ),
     );
   }

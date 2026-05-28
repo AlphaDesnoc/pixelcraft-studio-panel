@@ -6,7 +6,6 @@ use App\Models\Bug;
 use App\Models\UserNotification;
 use App\Support\BugSla;
 use App\Support\PanelNotifier;
-use App\Support\ProjectAutomationRunner;
 use Illuminate\Console\Command;
 
 class SendBugSlaAlerts extends Command
@@ -53,8 +52,6 @@ class SendBugSlaAlerts extends Command
                         if ($alreadyNotified) {
                             continue;
                         }
-
-                        ProjectAutomationRunner::onBugSlaBreach($bug);
 
                         PanelNotifier::send(
                             $user,

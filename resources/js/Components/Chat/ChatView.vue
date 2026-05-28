@@ -16,7 +16,6 @@ import {
 } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
-import ChatChannelsSidebar from "@/Components/Chat/ChatChannelsSidebar.vue";
 import ChatMembersPanel from "@/Components/Chat/ChatMembersPanel.vue";
 import ChatAttachmentImage from "@/Components/Chat/ChatAttachmentImage.vue";
 import ChatMediaAttachment from "@/Components/Chat/ChatMediaAttachment.vue";
@@ -43,10 +42,7 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   initialChatMembers: { type: Array, default: () => [] },
   chatRankMentions: { type: Array, default: () => [] },
-  channels: { type: Array, default: () => [] },
 });
-
-const emit = defineEmits(["select-channel"]);
 
 const page = usePage();
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
@@ -393,12 +389,6 @@ async function onFileSelected(event) {
     </header>
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
-      <ChatChannelsSidebar
-        v-if="channels.length > 1"
-        :channels="channels"
-        :active-key="spaceKey"
-        @select="emit('select-channel', $event)"
-      />
       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <ChatSearchBar
           v-model="chatSearch"
