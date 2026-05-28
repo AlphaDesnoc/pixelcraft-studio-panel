@@ -1,10 +1,19 @@
 <script setup>
 import { computed, ref } from "vue";
 import { Link, router, usePage } from "@inertiajs/vue3";
-import { Crown, Shield, ShieldAlert, Trash2, UserPlus, Users } from "lucide-vue-next";
+import {
+  ChevronDown,
+  Crown,
+  Shield,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-vue-next";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
+import { Select } from "@/Components/ui/select";
+import MemberPermissionsMatrix from "@/Components/Team/MemberPermissionsMatrix.vue";
 import ProjectMemberPickerDialog from "@/Components/Team/ProjectMemberPickerDialog.vue";
 import { writeKeyFor } from "@/lib/projectPermissions.js";
 
@@ -20,7 +29,6 @@ const props = defineProps({
 const page = usePage();
 const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
 
-/** Granular overrides; empty object → all caps allowed (backward compatible). */
 const MEMBER_PERM_KEYS = Object.freeze([
   { key: "kanban", label: "Kanban" },
   { key: "calendar", label: "Calendrier" },
@@ -52,19 +60,27 @@ function memberPermState(member) {
   return base;
 }
 
-function updatePermission(member, key, checked) {
-  if (!props.canManageTeam || member.is_owner) return;
+function permissionsSummary(member) {
   const state = memberPermState(member);
-  state[key] = checked;
-  if (key.endsWith("_write") && checked) {
-    state[key.replace(/_write$/, "")] = true;
+  const readCount = MEMBER_PERM_KEYS.filter(({ key }) => state[key]).length;
+  const writeCount = MEMBER_PERM_KEYS.filter(
+    ({ key }) => state[writeKeyFor(key)],
+  ).length;
+  const total = MEMBER_PERM_KEYS.length;
+  if (readCount === total && writeCount === total) {
+    return "Accès complet";
   }
-  if (!key.endsWith("_write") && !checked) {
-    state[writeKeyFor(key)] = false;
+  if (readCount === 0) {
+    return "Aucun module";
   }
+  return `${readCount}/${total} modules · ${writeCount} en écriture`;
+}
+
+function savePermissions(member, permissions) {
+  if (!props.canManageTeam || member.is_owner) return;
   router.put(
     route("projects.members.permissions", [props.projectSlug, member.id]),
-    { permissions: state },
+    { permissions },
     {
       preserveScroll: true,
       preserveState: true,
@@ -73,11 +89,22 @@ function updatePermission(member, key, checked) {
   );
 }
 
-function updateWritePermission(member, feature, checked) {
-  updatePermission(member, writeKeyFor(feature), checked);
+const pickerOpen = ref(false);
+const expandedPermissions = ref(new Set());
+
+function togglePermissions(memberId) {
+  const next = new Set(expandedPermissions.value);
+  if (next.has(memberId)) {
+    next.delete(memberId);
+  } else {
+    next.add(memberId);
+  }
+  expandedPermissions.value = next;
 }
 
-const pickerOpen = ref(false);
+function isPermissionsExpanded(memberId) {
+  return expandedPermissions.value.has(memberId);
+}
 
 const roleVariant = {
   owner: "default",
@@ -172,98 +199,103 @@ function removeMember(member) {
       </p>
     </div>
 
-    <ul v-else class="flex flex-col gap-2">
+    <ul v-else class="flex flex-col gap-3">
       <li
         v-for="member in teamMembers"
         :key="member.id"
-        class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+        class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
       >
-        <Avatar class="h-9 w-9 shrink-0 text-xs">
-          {{ initials(member.name) }}
-        </Avatar>
+        <div class="flex flex-wrap items-center gap-4 px-4 py-4 sm:flex-nowrap">
+          <Avatar
+            class="shrink-0"
+            size="md"
+            :fallback="initials(member.name)"
+          />
 
-        <div class="min-w-0 flex-1 space-y-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="truncate text-sm font-medium text-foreground">
-              {{ member.name }}
-            </span>
-            <ShieldAlert
-              v-if="canManageTeam && !member.is_owner"
-              class="h-3.5 w-3.5 text-amber-500"
-              aria-hidden="true"
-            />
-            <Badge :variant="roleVariant[member.role] ?? 'outline'" class="gap-1">
-              <Crown v-if="member.is_owner" class="h-3 w-3" />
-              {{ roleLabel(member.role) }}
-            </Badge>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="truncate text-sm font-semibold text-foreground">
+                {{ member.name }}
+              </span>
+              <Badge :variant="roleVariant[member.role] ?? 'outline'" class="gap-1">
+                <Crown v-if="member.is_owner" class="h-3 w-3" />
+                {{ roleLabel(member.role) }}
+              </Badge>
+            </div>
+            <p class="mt-0.5 truncate text-xs text-muted-foreground">
+              {{ member.email }}
+            </p>
           </div>
-          <p class="truncate text-xs text-muted-foreground">{{ member.email }}</p>
+
+          <div class="flex shrink-0 flex-col items-end gap-0.5 text-right">
+            <span class="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Membre depuis
+            </span>
+            <span class="text-xs tabular-nums text-foreground">
+              {{ formatDate(member.joined_at) }}
+            </span>
+          </div>
+
           <div
             v-if="canManageTeam && !member.is_owner"
-            class="w-full rounded-md border border-border/60 bg-muted/10 px-3 py-2"
+            class="flex shrink-0 items-center gap-2 border-l border-border/50 pl-4"
           >
-            <p class="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              <ShieldAlert class="h-3 w-3" />
-              Permissions granulaires
-            </p>
-            <div class="flex flex-wrap gap-x-4 gap-y-2">
-              <div
-                v-for="row in MEMBER_PERM_KEYS"
-                :key="row.key"
-                class="inline-flex items-center gap-3 text-[11px] text-foreground"
+            <Select
+              :model-value="member.role"
+              class="h-9 w-[8.5rem] text-xs"
+              @update:model-value="updateRole(member, $event)"
+            >
+              <option
+                v-for="(label, key) in memberRoles"
+                :key="key"
+                :value="key"
+                :disabled="key === 'owner' && !isAdmin"
               >
-                <span class="min-w-[72px] font-medium">{{ row.label }}</span>
-                <label class="inline-flex cursor-pointer items-center gap-1">
-                  <input
-                    type="checkbox"
-                    class="h-3.5 w-3.5 rounded border-input text-primary"
-                    :checked="memberPermState(member)[row.key]"
-                    @change="updatePermission(member, row.key, $event.target.checked)"
-                  />
-                  Voir
-                </label>
-                <label class="inline-flex cursor-pointer items-center gap-1">
-                  <input
-                    type="checkbox"
-                    class="h-3.5 w-3.5 rounded border-input text-primary"
-                    :checked="memberPermState(member)[writeKeyFor(row.key)]"
-                    :disabled="!memberPermState(member)[row.key]"
-                    @change="updateWritePermission(member, row.key, $event.target.checked)"
-                  />
-                  Modifier
-                </label>
-              </div>
-            </div>
+                {{ label }}
+              </option>
+            </Select>
+            <button
+              type="button"
+              class="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              title="Retirer du projet"
+              @click="removeMember(member)"
+            >
+              <Trash2 class="h-4 w-4" />
+            </button>
           </div>
         </div>
 
-        <div class="text-xs text-muted-foreground">
-          Depuis {{ formatDate(member.joined_at) }}
-        </div>
-
-        <div v-if="canManageTeam && !member.is_owner" class="flex items-center gap-2">
-          <select
-            :value="member.role"
-            class="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"
-            @change="updateRole(member, $event.target.value)"
-          >
-            <option
-              v-for="(label, key) in memberRoles"
-              :key="key"
-              :value="key"
-              :disabled="key === 'owner' && !isAdmin"
-            >
-              {{ label }}
-            </option>
-          </select>
+        <div
+          v-if="canManageTeam && !member.is_owner"
+          class="border-t border-border/50 bg-muted/5"
+        >
           <button
             type="button"
-            class="inline-flex h-8 w-8 items-center justify-center rounded-md text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-            title="Retirer du projet"
-            @click="removeMember(member)"
+            class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/20"
+            @click="togglePermissions(member.id)"
           >
-            <Trash2 class="h-3.5 w-3.5" />
+            <div>
+              <p class="text-xs font-medium text-foreground">Accès aux modules</p>
+              <p class="mt-0.5 text-[11px] text-muted-foreground">
+                {{ permissionsSummary(member) }}
+              </p>
+            </div>
+            <ChevronDown
+              class="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200"
+              :class="isPermissionsExpanded(member.id) ? 'rotate-180' : ''"
+            />
           </button>
+
+          <div
+            v-show="isPermissionsExpanded(member.id)"
+            class="border-t border-border/40 px-4 pb-4 pt-3"
+          >
+            <MemberPermissionsMatrix
+              :modules="MEMBER_PERM_KEYS"
+              :permissions="memberPermState(member)"
+              @update:permissions="savePermissions(member, $event)"
+            />
+          </div>
         </div>
       </li>
     </ul>
