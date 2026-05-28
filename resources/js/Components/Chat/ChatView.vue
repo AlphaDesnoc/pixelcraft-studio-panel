@@ -23,6 +23,7 @@ import ChatSearchBar from "@/Components/Chat/ChatSearchBar.vue";
 import EmojiPickerPopover from "@/Components/Chat/EmojiPickerPopover.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
 import TwemojiIcon from "@/Components/Chat/TwemojiIcon.vue";
+import WaChatBubbleShell from "@/Components/Chat/WaChatBubbleShell.vue";
 import ImageLightbox from "@/Components/ImageLightbox.vue";
 import { useImageLightbox } from "@/composables/useImageLightbox.js";
 import { useMessageDraft } from "@/composables/useMessageDraft.js";
@@ -30,6 +31,7 @@ import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js"
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
 import { isImageAttachment, isPdfAttachment, isVideoAttachment } from "@/lib/attachments.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
+import { buildMessageClusters, getMessageCluster } from "@/lib/messageClusters.js";
 import { escapeHtml, parseEmojis, renderMessageBody } from "@/lib/twemojiRender.js";
 
 const props = defineProps({
@@ -166,6 +168,19 @@ const pinnedMessages = computed(() =>
 const regularMessages = computed(() =>
   messages.value.filter((message) => !message.pinned_at),
 );
+
+const regularMessageClusters = computed(() =>
+  buildMessageClusters(regularMessages.value, currentUserId.value),
+);
+
+const pinnedMessageClusters = computed(() =>
+  buildMessageClusters(pinnedMessages.value, currentUserId.value),
+);
+
+function messageCluster(message, pinned = false) {
+  const clusters = pinned ? pinnedMessageClusters.value : regularMessageClusters.value;
+  return getMessageCluster(clusters, message.id);
+}
 
 const draftPreviewHtml = computed(() => {
   const text = draft.value.trim();
@@ -383,7 +398,7 @@ async function onFileSelected(event) {
 
         <div
           ref="listRef"
-          class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4"
+          class="wa-chat-messages min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-3"
         >
           <div
             v-if="loading"
@@ -400,258 +415,215 @@ async function onFileSelected(event) {
 
           <section
             v-if="pinnedMessages.length"
-            class="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"
+            class="mx-2 mb-2 space-y-0.5 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2"
           >
-            <p class="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+            <p class="flex items-center gap-1 px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-400">
               <Pin class="h-3 w-3" />
               Messages épinglés
             </p>
-            <div
+            <WaChatBubbleShell
               v-for="message in pinnedMessages"
               :key="`pinned-${message.id}`"
-              class="group flex gap-2.5"
-              :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+              :is-mine="messageCluster(message, true).isMine"
+              :cluster-start="messageCluster(message, true).clusterStart"
+              :cluster-end="messageCluster(message, true).clusterEnd"
+              :sender-name="message.user?.name ?? ''"
+              :show-sender-name="!messageCluster(message, true).isMine && messageCluster(message, true).clusterStart"
+              :show-avatar="!messageCluster(message, true).isMine && messageCluster(message, true).clusterEnd"
+              :avatar-initials="initials(message.user?.name)"
+              pinned
             >
               <div
-                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
-              >
-                {{ initials(message.user?.name) }}
-              </div>
-              <div
-                class="relative max-w-[75%] rounded-xl px-3 py-2"
-                :class="
-                  message.user?.id === currentUserId
-                    ? 'bg-primary/15 text-foreground'
-                    : 'bg-muted/60 text-foreground'
-                "
-              >
-                <p class="text-[11px] font-medium text-muted-foreground">
-                  {{ message.user?.name }} · {{ formatTime(message.created_at) }}
-                </p>
-                <div
-                  v-if="shouldShowMessageBody(message)"
-                  class="chat-message-body mt-0.5 text-left text-sm"
-                  v-html="renderMessageBody(message)"
-                />
+                v-if="shouldShowMessageBody(message)"
+                class="chat-message-body"
+                v-html="renderMessageBody(message)"
+              />
+              <template #meta>
+                <span class="wa-chat-time">{{ formatTime(message.created_at) }}</span>
                 <button
                   type="button"
-                  class="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                  class="rounded p-0.5 text-muted-foreground hover:text-foreground"
                   title="Désépingler"
                   @click="onPinMessage(message)"
                 >
                   <PinOff class="h-3 w-3" />
-                  Désépingler
                 </button>
-              </div>
-            </div>
+              </template>
+            </WaChatBubbleShell>
           </section>
 
-          <div
+          <WaChatBubbleShell
             v-for="message in regularMessages"
             :key="message.id"
-            class="group flex gap-2.5"
-            :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+            :is-mine="messageCluster(message).isMine"
+            :cluster-start="messageCluster(message).clusterStart"
+            :cluster-end="messageCluster(message).clusterEnd"
+            :sender-name="message.user?.name ?? ''"
+            :show-sender-name="!messageCluster(message).isMine && messageCluster(message).clusterStart"
+            :show-avatar="!messageCluster(message).isMine && messageCluster(message).clusterEnd"
+            :avatar-initials="initials(message.user?.name)"
           >
-            <div
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
-            >
-              {{ initials(message.user?.name) }}
-            </div>
-            <div
-              class="relative max-w-[75%] rounded-xl px-3 py-2"
-              :class="
-                message.user?.id === currentUserId
-                  ? 'bg-primary/15 text-foreground'
-                  : 'bg-muted/60 text-foreground'
-              "
-            >
-              <div
-                class="flex items-start gap-2"
-                :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+            <template #toolbar>
+              <button
+                type="button"
+                class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Ajouter une réaction"
+                title="Ajouter une réaction"
+                @click="openReactionPicker(message, $event)"
               >
-                <div class="min-w-0 flex-1 space-y-1">
-                  <p class="text-[11px] font-medium text-muted-foreground">
-                    {{ message.user?.name }}
-                    · {{ formatTime(message.created_at) }}
-                    <span v-if="message.edited_at" class="italic">(modifié)</span>
-                  </p>
-                  <div
-                    v-if="message.reply_preview && editingMessageId !== message.id"
-                    class="rounded-md border border-border/60 bg-background/35 px-2 py-1.5"
-                  >
-                    <p class="text-[10px] font-medium text-muted-foreground">
-                      {{ replyPreviewAuthor(message.reply_preview) }}
-                    </p>
-                    <p class="line-clamp-2 text-xs text-muted-foreground">
-                      {{ replyPreviewText(message.reply_preview) }}
-                    </p>
-                  </div>
-                </div>
-                <div
-                  class="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  <button
-                    type="button"
-                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Ajouter une réaction"
-                    title="Ajouter une réaction"
-                    @click="openReactionPicker(message, $event)"
-                  >
-                    <SmilePlus class="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Répondre"
-                    title="Répondre"
-                    @click="startReply(message)"
-                  >
-                    <Reply class="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    :aria-label="message.pinned_at ? 'Désépingler' : 'Épingler'"
-                    :title="message.pinned_at ? 'Désépingler' : 'Épingler'"
-                    @click="onPinMessage(message)"
-                  >
-                    <PinOff v-if="message.pinned_at" class="h-3 w-3" />
-                    <Pin v-else class="h-3 w-3" />
-                  </button>
-                  <template v-if="message.can_edit && editingMessageId !== message.id">
-                    <button
-                      type="button"
-                      class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      aria-label="Modifier"
-                      @click="startEdit(message)"
-                    >
-                      <Pencil class="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-rose-400"
-                      aria-label="Supprimer"
-                      @click="confirmDelete(message)"
-                    >
-                      <Trash2 class="h-3 w-3" />
-                    </button>
-                  </template>
-                </div>
-              </div>
-
-              <div v-if="editingMessageId === message.id" class="mt-1 space-y-2">
-                <div class="relative">
-                  <Textarea
-                    :ref="
-                      editingMessageId === message.id
-                        ? (el) => (editTextareaRef = el)
-                        : undefined
-                    "
-                    v-model="editDraft"
-                    rows="2"
-                    class="min-h-[44px] resize-none text-sm"
-                    @input="handleEditMentionInput"
-                    @keydown="onEditKeydown"
-                  />
-                  <MentionSuggestions
-                    v-if="editMentionOpen && editMentionSuggestions.length"
-                    :suggestions="editMentionSuggestions"
-                    :active-index="editMentionIndex"
-                    @select="insertEditMention"
-                  />
-                </div>
-                <div class="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    class="h-7"
-                    :disabled="sending || !editDraft.trim()"
-                    @click="saveEdit(message)"
-                  >
-                    Enregistrer
-                  </Button>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                    @click="cancelEdit"
-                  >
-                    <X class="h-3 w-3" />
-                    Annuler
-                  </button>
-                </div>
-              </div>
-              <div
-                v-else-if="shouldShowMessageBody(message)"
-                class="chat-message-body mt-0.5 text-left"
-                :class="isEmojiOnly(message.body) ? 'chat-message-body--emoji-only' : 'text-sm'"
-                v-html="renderMessageBody(message)"
-              />
-
-              <div
-                v-if="message.attachments?.length"
-                class="mt-2 flex flex-col gap-2"
+                <SmilePlus class="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Répondre"
+                title="Répondre"
+                @click="startReply(message)"
               >
-                <template v-for="attachment in message.attachments" :key="attachment.id">
-                  <ChatMediaAttachment
-                    v-if="!isImageAttachment(attachment) && (isVideoAttachment(attachment) || isPdfAttachment(attachment))"
-                    :attachment="attachment"
-                  />
-                  <a
-                    v-else-if="!isImageAttachment(attachment)"
-                    :href="attachment.url"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                    class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <Paperclip class="h-3 w-3" />
-                    {{ attachment.original_name }}
-                  </a>
-                  <ChatAttachmentImage
-                    v-else
-                    :attachment="attachment"
-                    @preview="previewAttachment(message, $event)"
-                  />
-                </template>
-              </div>
-
-              <div
-                v-if="editingMessageId !== message.id"
-                class="mt-1.5 flex flex-wrap items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100"
+                <Reply class="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                :aria-label="message.pinned_at ? 'Désépingler' : 'Épingler'"
+                :title="message.pinned_at ? 'Désépingler' : 'Épingler'"
+                @click="onPinMessage(message)"
               >
+                <PinOff v-if="message.pinned_at" class="h-3 w-3" />
+                <Pin v-else class="h-3 w-3" />
+              </button>
+              <template v-if="message.can_edit && editingMessageId !== message.id">
                 <button
-                  v-for="reaction in message.reactions ?? []"
-                  :key="`${message.id}-${reaction.emoji}`"
                   type="button"
-                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm leading-none transition-colors hover:bg-muted/80"
-                  :class="
-                    reactionActive(reaction)
-                      ? 'border-primary/40 bg-primary/15'
-                      : 'border-border/60 bg-background/40'
+                  class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Modifier"
+                  @click="startEdit(message)"
+                >
+                  <Pencil class="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-rose-400"
+                  aria-label="Supprimer"
+                  @click="confirmDelete(message)"
+                >
+                  <Trash2 class="h-3 w-3" />
+                </button>
+              </template>
+            </template>
+
+            <template
+              v-if="message.reply_preview && editingMessageId !== message.id"
+              #reply
+            >
+              <div class="wa-chat-reply">
+                <p class="wa-chat-reply-author">
+                  {{ replyPreviewAuthor(message.reply_preview) }}
+                </p>
+                <p class="wa-chat-reply-body">
+                  {{ replyPreviewText(message.reply_preview) }}
+                </p>
+              </div>
+            </template>
+
+            <div v-if="editingMessageId === message.id" class="space-y-2">
+              <div class="relative">
+                <Textarea
+                  :ref="
+                    editingMessageId === message.id
+                      ? (el) => (editTextareaRef = el)
+                      : undefined
                   "
-                  :title="reactionTitle(reaction)"
-                  @click="onToggleReaction(message, reaction.emoji)"
+                  v-model="editDraft"
+                  rows="2"
+                  class="min-h-[44px] resize-none text-sm"
+                  @input="handleEditMentionInput"
+                  @keydown="onEditKeydown"
+                />
+                <MentionSuggestions
+                  v-if="editMentionOpen && editMentionSuggestions.length"
+                  :suggestions="editMentionSuggestions"
+                  :active-index="editMentionIndex"
+                  @select="insertEditMention"
+                />
+              </div>
+              <div class="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  class="h-7"
+                  :disabled="sending || !editDraft.trim()"
+                  @click="saveEdit(message)"
                 >
-                  <TwemojiIcon :emoji="reaction.emoji" size="reaction" />
-                  <span
-                    v-if="(reaction.count ?? reaction.users?.length ?? 0) > 1"
-                    class="text-[10px] font-semibold tabular-nums text-muted-foreground"
-                  >
-                    {{ reaction.count ?? reaction.users?.length }}
-                  </span>
-                </button>
+                  Enregistrer
+                </Button>
                 <button
                   type="button"
-                  class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border/70 text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"
-                  aria-label="Ajouter une réaction"
-                  title="Ajouter une réaction"
-                  @click="openReactionPicker(message, $event)"
+                  class="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  @click="cancelEdit"
                 >
-                  <SmilePlus class="h-3.5 w-3.5" />
+                  <X class="h-3 w-3" />
+                  Annuler
                 </button>
               </div>
             </div>
-          </div>
+            <div
+              v-else-if="shouldShowMessageBody(message)"
+              class="chat-message-body"
+              :class="isEmojiOnly(message.body) ? 'chat-message-body--emoji-only' : ''"
+              v-html="renderMessageBody(message)"
+            />
+
+            <div v-if="message.attachments?.length" class="mt-1.5 flex flex-col gap-2">
+              <template v-for="attachment in message.attachments" :key="attachment.id">
+                <ChatMediaAttachment
+                  v-if="!isImageAttachment(attachment) && (isVideoAttachment(attachment) || isPdfAttachment(attachment))"
+                  :attachment="attachment"
+                />
+                <a
+                  v-else-if="!isImageAttachment(attachment)"
+                  :href="attachment.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Paperclip class="h-3 w-3" />
+                  {{ attachment.original_name }}
+                </a>
+                <ChatAttachmentImage
+                  v-else
+                  :attachment="attachment"
+                  @preview="previewAttachment(message, $event)"
+                />
+              </template>
+            </div>
+
+            <template v-if="editingMessageId !== message.id" #meta>
+              <span v-if="message.edited_at" class="wa-chat-edited">modifié</span>
+              <span class="wa-chat-time">{{ formatTime(message.created_at) }}</span>
+            </template>
+
+            <template v-if="editingMessageId !== message.id" #after>
+              <button
+                v-for="reaction in message.reactions ?? []"
+                :key="`${message.id}-${reaction.emoji}`"
+                type="button"
+                class="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card/90 px-2 py-0.5 text-sm leading-none shadow-sm transition-colors hover:bg-muted/80"
+                :class="reactionActive(reaction) ? 'border-primary/40 bg-primary/10' : ''"
+                :title="reactionTitle(reaction)"
+                @click="onToggleReaction(message, reaction.emoji)"
+              >
+                <TwemojiIcon :emoji="reaction.emoji" size="reaction" />
+                <span
+                  v-if="(reaction.count ?? reaction.users?.length ?? 0) > 1"
+                  class="text-[10px] font-semibold tabular-nums text-muted-foreground"
+                >
+                  {{ reaction.count ?? reaction.users?.length }}
+                </span>
+              </button>
+            </template>
+          </WaChatBubbleShell>
         </div>
 
         <p

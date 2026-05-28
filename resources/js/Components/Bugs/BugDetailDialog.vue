@@ -12,9 +12,11 @@ import {
 } from "@/Components/ui/dialog";
 import { Textarea } from "@/Components/ui/textarea";
 import OnlineUsersBar from "@/Components/Chat/OnlineUsersBar.vue";
+import WaChatBubbleShell from "@/Components/Chat/WaChatBubbleShell.vue";
 import ImageLightbox from "@/Components/ImageLightbox.vue";
 import { useImageLightbox } from "@/composables/useImageLightbox.js";
 import { useBugChat } from "@/composables/useBugChat.js";
+import { buildMessageClusters, getMessageCluster } from "@/lib/messageClusters.js";
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -92,6 +94,14 @@ function initials(name) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+const bugMessageClusters = computed(() =>
+  buildMessageClusters(messages.value, currentUserId.value),
+);
+
+function messageCluster(message) {
+  return getMessageCluster(bugMessageClusters.value, message.id);
 }
 
 async function submitMessage() {
@@ -285,7 +295,7 @@ function createTaskFromBug() {
 
         <div
           ref="listRef"
-          class="min-h-[220px] flex-1 space-y-3 overflow-y-auto px-5 py-4"
+          class="wa-chat-messages min-h-[220px] flex-1 overflow-y-auto py-3"
         >
           <div
             v-if="loading"
@@ -299,32 +309,22 @@ function createTaskFromBug() {
           >
             Aucun message. Démarrez la conversation avec l'équipe.
           </div>
-          <div
+          <WaChatBubbleShell
             v-for="message in messages"
             :key="message.id"
-            class="flex gap-2.5"
-            :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+            :is-mine="messageCluster(message).isMine"
+            :cluster-start="messageCluster(message).clusterStart"
+            :cluster-end="messageCluster(message).clusterEnd"
+            :sender-name="message.user?.name ?? ''"
+            :show-sender-name="!messageCluster(message).isMine && messageCluster(message).clusterStart"
+            :show-avatar="!messageCluster(message).isMine && messageCluster(message).clusterEnd"
+            :avatar-initials="initials(message.user?.name)"
           >
-            <div
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
-            >
-              {{ initials(message.user?.name) }}
-            </div>
-            <div
-              class="max-w-[75%] rounded-xl px-3 py-2"
-              :class="
-                message.user?.id === currentUserId
-                  ? 'bg-primary/15 text-foreground'
-                  : 'bg-muted/60 text-foreground'
-              "
-            >
-              <p class="text-[11px] font-medium text-muted-foreground">
-                {{ message.user?.name }}
-                · {{ formatTime(message.created_at) }}
-              </p>
-              <p class="mt-0.5 whitespace-pre-wrap text-sm">{{ message.body }}</p>
-            </div>
-          </div>
+            <p class="whitespace-pre-wrap">{{ message.body }}</p>
+            <template #meta>
+              <span class="wa-chat-time">{{ formatTime(message.created_at) }}</span>
+            </template>
+          </WaChatBubbleShell>
         </div>
 
         <form

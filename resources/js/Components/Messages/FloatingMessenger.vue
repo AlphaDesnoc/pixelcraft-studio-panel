@@ -19,6 +19,7 @@ import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
 import ChatAttachmentImage from "@/Components/Chat/ChatAttachmentImage.vue";
+import WaChatBubbleShell from "@/Components/Chat/WaChatBubbleShell.vue";
 import NewMessageDialog from "@/Components/Messages/NewMessageDialog.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
@@ -39,6 +40,7 @@ import {
 } from "@/composables/useSiteRealtime.js";
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
 import { isImageAttachment } from "@/lib/attachments.js";
+import { buildMessageClusters, getMessageCluster } from "@/lib/messageClusters.js";
 import { renderMessageBody } from "@/lib/twemojiRender.js";
 
 const page = usePage();
@@ -95,6 +97,14 @@ const {
 );
 
 const projectChatDraft = ref("");
+
+const projectChatClusters = computed(() =>
+  buildMessageClusters(projectChatMessages.value, currentUserId.value),
+);
+
+function projectMessageCluster(message) {
+  return getMessageCluster(projectChatClusters.value, message.id);
+}
 
 async function submitProjectChat() {
   if (!projectChatDraft.value.trim()) return;
@@ -172,6 +182,14 @@ const typingLabel = computed(() => {
   if (names.length === 1) return `${names[0]} écrit…`;
   return `${names.join(", ")} écrivent…`;
 });
+
+const threadMessageClusters = computed(() =>
+  buildMessageClusters(threadMessages.value, currentUserId.value),
+);
+
+function messageCluster(message) {
+  return getMessageCluster(threadMessageClusters.value, message.id);
+}
 
 const canSend = computed(
   () => Boolean(selectedId.value || pendingRecipientId.value) && draft.value.trim(),
@@ -406,18 +424,26 @@ async function onFileSelected(event) {
 
         <!-- Liste -->
         <div v-if="view === 'list' && messengerMode === 'project'" class="flex min-h-0 flex-1 flex-col">
-          <div ref="projectChatListRef" class="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+          <div ref="projectChatListRef" class="wa-chat-messages min-h-0 flex-1 overflow-y-auto py-2">
             <div v-if="projectChatLoading" class="py-8 text-center text-sm text-muted-foreground">
               Chargement…
             </div>
-            <div
+            <WaChatBubbleShell
               v-for="message in projectChatMessages"
               :key="message.id"
-              class="rounded-lg bg-muted/50 px-2.5 py-1.5 text-sm"
+              :is-mine="projectMessageCluster(message).isMine"
+              :cluster-start="projectMessageCluster(message).clusterStart"
+              :cluster-end="projectMessageCluster(message).clusterEnd"
+              :sender-name="message.user?.name ?? ''"
+              :show-sender-name="!projectMessageCluster(message).isMine && projectMessageCluster(message).clusterStart"
+              :show-avatar="!projectMessageCluster(message).isMine && projectMessageCluster(message).clusterEnd"
+              :avatar-initials="initials(message.user?.name)"
             >
-              <p class="text-[10px] text-muted-foreground">{{ message.user?.name }}</p>
-              <div class="chat-message-body" v-html="renderMessageBody(message)" />
-            </div>
+              <div class="chat-message-body text-sm" v-html="renderMessageBody(message)" />
+              <template #meta>
+                <span class="wa-chat-time">{{ formatMessageTime(message.created_at) }}</span>
+              </template>
+            </WaChatBubbleShell>
           </div>
           <form class="flex shrink-0 gap-1.5 border-t border-border px-2 py-2" @submit.prevent="submitProjectChat">
             <Textarea
@@ -495,7 +521,7 @@ async function onFileSelected(event) {
         <template v-else>
           <div
             ref="listRef"
-            class="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-y-contain px-3 py-3"
+            class="wa-chat-messages min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-2"
           >
             <div
               v-if="loading"
@@ -509,69 +535,69 @@ async function onFileSelected(event) {
             >
               Écrivez le premier message.
             </div>
-            <div
+            <WaChatBubbleShell
               v-for="message in threadMessages"
               :key="message.id"
-              class="group flex gap-2"
-              :class="message.user?.id === currentUserId ? 'flex-row-reverse' : ''"
+              :is-mine="messageCluster(message).isMine"
+              :cluster-start="messageCluster(message).clusterStart"
+              :cluster-end="messageCluster(message).clusterEnd"
             >
+              <template v-if="message.reply_preview" #reply>
+                <div class="wa-chat-reply">
+                  <p class="wa-chat-reply-body">
+                    {{ message.reply_preview.body?.slice(0, 80) }}
+                  </p>
+                </div>
+              </template>
+
               <div
-                class="max-w-[85%] rounded-xl px-2.5 py-1.5"
-                :class="
-                  message.user?.id === currentUserId
-                    ? 'bg-primary/15'
-                    : 'bg-muted/60'
-                "
-              >
-                <p class="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <span>{{ formatMessageTime(message.created_at) }}</span>
-                  <CheckCheck
-                    v-if="message.user?.id === currentUserId && message.is_read"
-                    class="h-3 w-3 text-primary"
+                v-if="message.body?.trim()"
+                class="chat-message-body text-sm"
+                v-html="renderMessageBody(message)"
+              />
+
+              <div v-if="message.attachments?.length" class="mt-1 space-y-1">
+                <template v-for="attachment in message.attachments" :key="attachment.id">
+                  <ChatAttachmentImage
+                    v-if="isImageAttachment(attachment)"
+                    :attachment="attachment"
                   />
-                  <Check
-                    v-else-if="message.user?.id === currentUserId"
-                    class="h-3 w-3 text-muted-foreground/70"
-                  />
-                </p>
-                <div
-                  v-if="message.reply_preview"
-                  class="mb-1 rounded border border-border/50 bg-background/40 px-2 py-1 text-[10px] text-muted-foreground"
-                >
-                  {{ message.reply_preview.body?.slice(0, 80) }}
-                </div>
-                <div
-                  v-if="message.body?.trim()"
-                  class="chat-message-body text-sm"
-                  v-html="renderMessageBody(message)"
+                  <a
+                    v-else
+                    :href="attachment.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-xs text-primary hover:underline"
+                  >
+                    {{ attachment.original_name }}
+                  </a>
+                </template>
+              </div>
+
+              <template #meta>
+                <span class="wa-chat-time">{{ formatMessageTime(message.created_at) }}</span>
+                <CheckCheck
+                  v-if="messageCluster(message).isMine && message.is_read"
+                  class="h-3 w-3 text-emerald-500"
                 />
-                <div v-if="message.attachments?.length" class="mt-1 space-y-1">
-                  <template v-for="attachment in message.attachments" :key="attachment.id">
-                    <ChatAttachmentImage
-                      v-if="isImageAttachment(attachment)"
-                      :attachment="attachment"
-                    />
-                    <a
-                      v-else
-                      :href="attachment.url"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-xs text-primary hover:underline"
-                    >
-                      {{ attachment.original_name }}
-                    </a>
-                  </template>
-                </div>
+                <Check
+                  v-else-if="messageCluster(message).isMine"
+                  class="h-3 w-3"
+                  style="color: hsl(var(--wa-bubble-meta))"
+                />
+              </template>
+
+              <template #footer>
                 <button
                   type="button"
-                  class="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+                  class="rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+                  style="color: hsl(var(--wa-bubble-meta))"
                   @click="startReply(message)"
                 >
                   <Reply class="h-3 w-3" />
-                  Répondre
                 </button>
-              </div>
-            </div>
+              </template>
+            </WaChatBubbleShell>
           </div>
 
           <p v-if="typingLabel" class="shrink-0 px-3 pb-1 text-[11px] italic text-muted-foreground">

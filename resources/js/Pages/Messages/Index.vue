@@ -13,6 +13,7 @@ import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
 import ChatAttachmentImage from "@/Components/Chat/ChatAttachmentImage.vue";
 import ChatMediaAttachment from "@/Components/Chat/ChatMediaAttachment.vue";
 import ChatSearchBar from "@/Components/Chat/ChatSearchBar.vue";
+import WaChatBubbleShell from "@/Components/Chat/WaChatBubbleShell.vue";
 import ImageLightbox from "@/Components/ImageLightbox.vue";
 import { useImageLightbox } from "@/composables/useImageLightbox.js";
 import { useMessageDraft } from "@/composables/useMessageDraft.js";
@@ -20,6 +21,7 @@ import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js"
 import { isImageAttachment, isPdfAttachment, isVideoAttachment } from "@/lib/attachments.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
 import { renderMessageBody } from "@/lib/twemojiRender.js";
+import { buildMessageClusters, getMessageCluster } from "@/lib/messageClusters.js";
 import {
   extractMentionUserIds,
   useDirectMessages,
@@ -105,6 +107,14 @@ const {
   currentUserNameRef,
   conversationsRef: localConversations,
 });
+
+const threadMessageClusters = computed(() =>
+  buildMessageClusters(threadMessages.value, currentUserId.value),
+);
+
+function messageCluster(message) {
+  return getMessageCluster(threadMessageClusters.value, message.id);
+}
 
 const mentionCandidatesRef = computed(() => props.contacts ?? []);
 
@@ -692,7 +702,7 @@ const composeTargetName = computed(() => {
 
             <div
               ref="listRef"
-              class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4"
+              class="wa-chat-messages min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-3"
             >
               <div
                 v-if="loading"
@@ -706,159 +716,119 @@ const composeTargetName = computed(() => {
               >
                 Aucun message. Envoyez le premier !
               </div>
-              <div
+              <WaChatBubbleShell
                 v-for="message in threadMessages"
                 :key="message.id"
-                class="message-row group flex gap-2.5"
-                :class="[
-                  message.user?.id === currentUserId ? 'flex-row-reverse' : '',
-                  isHighlighted(message.id) ? 'message-row--new' : '',
-                ]"
+                :is-mine="messageCluster(message).isMine"
+                :cluster-start="messageCluster(message).clusterStart"
+                :cluster-end="messageCluster(message).clusterEnd"
+                :highlight="isHighlighted(message.id)"
               >
-                <div
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground"
-                >
-                  {{ initials(message.user?.name) }}
-                </div>
-                <div
-                  class="message-bubble relative max-w-[75%] rounded-xl px-3 py-2"
-                  :class="[
-                    message.user?.id === currentUserId
-                      ? 'bg-primary/15 text-foreground'
-                      : 'bg-muted/60 text-foreground',
-                    isHighlighted(message.id) ? 'message-bubble--new' : '',
-                  ]"
-                >
-                  <div
-                    class="flex items-start gap-2"
-                    :class="message.user?.id === currentUserId ? 'flex-row-reverse text-right' : ''"
-                  >
-                    <div class="min-w-0 flex-1 space-y-0.5">
-                      <p
-                        class="flex items-center gap-1 text-[11px] font-medium text-muted-foreground"
-                        :class="message.user?.id === currentUserId ? 'justify-end' : ''"
-                      >
-                        <span>{{ message.user?.name }} · {{ formatMessageTime(message.created_at) }}</span>
-                        <span
-                          v-if="message.user?.id === currentUserId"
-                          class="inline-flex items-center"
-                          :title="readReceiptTitle(message)"
-                          :aria-label="readReceiptTitle(message)"
-                        >
-                          <CheckCheck
-                            v-if="message.is_read"
-                            class="h-3.5 w-3.5 text-primary"
-                          />
-                          <Check
-                            v-else
-                            class="h-3.5 w-3.5 text-muted-foreground/70"
-                          />
-                        </span>
-                      </p>
-                      <div
-                        v-if="message.reply_preview"
-                        class="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-left"
-                      >
-                        <p class="text-[10px] font-medium text-muted-foreground">
-                          {{ replyPreviewAuthor(message.reply_preview) }}
-                        </p>
-                        <p class="truncate text-xs text-muted-foreground">
-                          {{ replyPreviewText(message.reply_preview) }}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      v-if="selectedId"
-                      type="button"
-                      class="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover:opacity-100"
-                      title="Ajouter une réaction"
-                      aria-label="Ajouter une réaction"
-                      @click.stop="openReactionPicker(message, $event)"
-                    >
-                      <SmilePlus class="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      v-if="selectedId"
-                      type="button"
-                      class="shrink-0 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted/80 hover:text-foreground group-hover:opacity-100"
-                      title="Répondre"
-                      @click.stop="startReply(message)"
-                    >
-                      <Reply class="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div
-                    v-if="shouldShowMessageBody(message)"
-                    class="dm-message-body mt-0.5 text-left"
-                    :class="isEmojiOnly(message.body) ? 'dm-message-body--emoji-only' : 'text-sm'"
-                    v-html="renderMessageBody(message)"
-                  />
-
-                  <div
-                    v-if="message.attachments?.length"
-                    class="mt-2 flex flex-col gap-2"
-                  >
-                    <template v-for="attachment in message.attachments" :key="attachment.id">
-                      <ChatMediaAttachment
-                        v-if="!isImageAttachment(attachment) && (isVideoAttachment(attachment) || isPdfAttachment(attachment))"
-                        :attachment="attachment"
-                      />
-                      <a
-                        v-else-if="!isImageAttachment(attachment)"
-                        :href="attachment.url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        download
-                        class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <Paperclip class="h-3 w-3" />
-                        {{ attachment.original_name }}
-                      </a>
-                      <ChatAttachmentImage
-                        v-else
-                        :attachment="attachment"
-                        @preview="previewAttachment(message, $event)"
-                      />
-                    </template>
-                  </div>
-
-                  <div
+                <template #toolbar>
+                  <button
                     v-if="selectedId"
-                    class="mt-1.5 flex flex-wrap items-center gap-1 opacity-80 transition-opacity group-hover:opacity-100"
+                    type="button"
+                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Ajouter une réaction"
+                    aria-label="Ajouter une réaction"
+                    @click.stop="openReactionPicker(message, $event)"
                   >
-                    <button
-                      v-for="reaction in message.reactions ?? []"
-                      :key="`${message.id}-${reaction.emoji}`"
-                      type="button"
-                      class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm leading-none transition-colors hover:bg-muted/80"
-                      :class="
-                        reactionActive(reaction)
-                          ? 'border-primary/40 bg-primary/15'
-                          : 'border-border/60 bg-background/40'
-                      "
-                      :title="reactionTitle(reaction)"
-                      @click="onToggleReaction(message, reaction.emoji)"
-                    >
-                      <TwemojiIcon :emoji="reaction.emoji" size="reaction" />
-                      <span
-                        v-if="(reaction.count ?? reaction.users?.length ?? 0) > 1"
-                        class="text-[10px] font-semibold tabular-nums text-muted-foreground"
-                      >
-                        {{ reaction.count ?? reaction.users?.length }}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-border/70 text-muted-foreground hover:border-border hover:bg-muted/60 hover:text-foreground"
-                      aria-label="Ajouter une réaction"
-                      title="Ajouter une réaction"
-                      @click="openReactionPicker(message, $event)"
-                    >
-                      <SmilePlus class="h-3.5 w-3.5" />
-                    </button>
+                    <SmilePlus class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    v-if="selectedId"
+                    type="button"
+                    class="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="Répondre"
+                    @click.stop="startReply(message)"
+                  >
+                    <Reply class="h-3.5 w-3.5" />
+                  </button>
+                </template>
+
+                <template v-if="message.reply_preview" #reply>
+                  <div class="wa-chat-reply">
+                    <p class="wa-chat-reply-author">
+                      {{ replyPreviewAuthor(message.reply_preview) }}
+                    </p>
+                    <p class="wa-chat-reply-body">
+                      {{ replyPreviewText(message.reply_preview) }}
+                    </p>
                   </div>
+                </template>
+
+                <div
+                  v-if="shouldShowMessageBody(message)"
+                  class="dm-message-body"
+                  :class="isEmojiOnly(message.body) ? 'dm-message-body--emoji-only' : ''"
+                  v-html="renderMessageBody(message)"
+                />
+
+                <div v-if="message.attachments?.length" class="mt-1.5 flex flex-col gap-2">
+                  <template v-for="attachment in message.attachments" :key="attachment.id">
+                    <ChatMediaAttachment
+                      v-if="!isImageAttachment(attachment) && (isVideoAttachment(attachment) || isPdfAttachment(attachment))"
+                      :attachment="attachment"
+                    />
+                    <a
+                      v-else-if="!isImageAttachment(attachment)"
+                      :href="attachment.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <Paperclip class="h-3 w-3" />
+                      {{ attachment.original_name }}
+                    </a>
+                    <ChatAttachmentImage
+                      v-else
+                      :attachment="attachment"
+                      @preview="previewAttachment(message, $event)"
+                    />
+                  </template>
                 </div>
-              </div>
+
+                <template #meta>
+                  <span class="wa-chat-time">{{ formatMessageTime(message.created_at) }}</span>
+                  <span
+                    v-if="messageCluster(message).isMine"
+                    class="inline-flex items-center"
+                    :title="readReceiptTitle(message)"
+                    :aria-label="readReceiptTitle(message)"
+                  >
+                    <CheckCheck
+                      v-if="message.is_read"
+                      class="h-3.5 w-3.5 text-emerald-500"
+                    />
+                    <Check
+                      v-else
+                      class="h-3.5 w-3.5"
+                      style="color: hsl(var(--wa-bubble-meta))"
+                    />
+                  </span>
+                </template>
+
+                <template v-if="selectedId" #after>
+                  <button
+                    v-for="reaction in message.reactions ?? []"
+                    :key="`${message.id}-${reaction.emoji}`"
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-border/60 bg-card/90 px-2 py-0.5 text-sm leading-none shadow-sm transition-colors hover:bg-muted/80"
+                    :class="reactionActive(reaction) ? 'border-primary/40 bg-primary/10' : ''"
+                    :title="reactionTitle(reaction)"
+                    @click="onToggleReaction(message, reaction.emoji)"
+                  >
+                    <TwemojiIcon :emoji="reaction.emoji" size="reaction" />
+                    <span
+                      v-if="(reaction.count ?? reaction.users?.length ?? 0) > 1"
+                      class="text-[10px] font-semibold tabular-nums text-muted-foreground"
+                    >
+                      {{ reaction.count ?? reaction.users?.length }}
+                    </span>
+                  </button>
+                </template>
+              </WaChatBubbleShell>
             </div>
 
             <p
@@ -1004,12 +974,8 @@ const composeTargetName = computed(() => {
 </template>
 
 <style scoped>
-.message-row--new {
+.wa-chat-row--highlight {
   animation: message-slide-in 0.32s ease-out;
-}
-
-.message-bubble--new {
-  animation: message-glow 2.6s ease-out;
 }
 
 @keyframes message-slide-in {
@@ -1021,31 +987,6 @@ const composeTargetName = computed(() => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-@keyframes message-glow {
-  0% {
-    box-shadow: 0 0 0 0 rgb(124 92 255 / 0.45);
-  }
-  15% {
-    box-shadow: 0 0 0 4px rgb(124 92 255 / 0.25);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgb(124 92 255 / 0);
-  }
-}
-
-.dm-message-body :deep(span.rounded) {
-  display: inline;
-}
-
-.dm-message-body :deep(.twemoji) {
-  margin: 0 0.05em;
-}
-
-.dm-message-body--emoji-only :deep(.twemoji) {
-  height: 2rem;
-  width: 2rem;
 }
 
 .conv-item {
