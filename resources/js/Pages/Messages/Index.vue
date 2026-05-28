@@ -10,7 +10,14 @@ import EmojiPickerPopover from "@/Components/Chat/EmojiPickerPopover.vue";
 import TwemojiIcon from "@/Components/Chat/TwemojiIcon.vue";
 import NewMessageDialog from "@/Components/Messages/NewMessageDialog.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
+import ChatAttachmentImage from "@/Components/Chat/ChatAttachmentImage.vue";
+import ChatMediaAttachment from "@/Components/Chat/ChatMediaAttachment.vue";
+import ChatSearchBar from "@/Components/Chat/ChatSearchBar.vue";
+import ImageLightbox from "@/Components/ImageLightbox.vue";
+import { useImageLightbox } from "@/composables/useImageLightbox.js";
+import { useMessageDraft } from "@/composables/useMessageDraft.js";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
+import { isImageAttachment, isPdfAttachment, isVideoAttachment } from "@/lib/attachments.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
 import { renderMessageBody } from "@/lib/twemojiRender.js";
 import {
@@ -40,7 +47,11 @@ const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 const currentUserName = computed(() => page.props.auth?.user?.name ?? "Utilisateur");
 
 const search = ref("");
-const draft = ref("");
+const threadSearch = ref({});
+const draftStorageKey = computed(() =>
+  selectedId.value ? `draft:dm:${selectedId.value}` : null,
+);
+const { draft, clear: clearDraft } = useMessageDraft(draftStorageKey);
 const draftTextareaRef = ref(null);
 const fileInputRef = ref(null);
 const draftEmojiOpen = ref(false);
@@ -87,6 +98,7 @@ const {
   start,
   leaveConversation,
   toggleReaction,
+  applySearchFilters,
 } = useDirectMessages({
   conversationIdRef,
   currentUserIdRef,
@@ -109,6 +121,13 @@ const {
   candidatesRef: mentionCandidatesRef,
   onInput: notifyTyping,
 });
+
+const {
+  open: lightboxOpen,
+  index: lightboxIndex,
+  images: lightboxImages,
+  openFromMessages: openImagePreview,
+} = useImageLightbox();
 
 watch(
   () => [props.selectedConversationId, props.messages],
@@ -142,6 +161,17 @@ watch(
     setActiveConversationId(id);
   },
   { immediate: true },
+);
+
+function onThreadSearch(filters) {
+  applySearchFilters(filters);
+}
+
+const threadSearchMembers = computed(() =>
+  (props.contacts ?? []).map((contact) => ({
+    id: contact.id,
+    name: contact.name,
+  })),
 );
 
 const filteredConversations = computed(() => {
@@ -282,11 +312,8 @@ function replyPreviewAuthor(preview) {
   );
 }
 
-function isImageAttachment(attachment) {
-  if (attachment.mime_type?.startsWith("image/")) {
-    return true;
-  }
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.original_name ?? "");
+function previewAttachment(message, attachment) {
+  openImagePreview(threadMessages.value, attachment);
 }
 
 function shouldShowMessageBody(message) {
@@ -420,7 +447,7 @@ async function submitMessage() {
   const body = draft.value;
   const mentions = extractMentionUserIds(body, props.contacts);
   const replyToId = replyingTo.value?.id ?? null;
-  draft.value = "";
+  clearDraft();
   clearReply();
 
   const conversationId = selectedId.value;
@@ -656,6 +683,13 @@ const composeTargetName = computed(() => {
               </div>
             </header>
 
+            <ChatSearchBar
+              v-if="selectedId"
+              v-model="threadSearch"
+              :members="threadSearchMembers"
+              @search="onThreadSearch"
+            />
+
             <div
               ref="listRef"
               class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4"
@@ -765,8 +799,12 @@ const composeTargetName = computed(() => {
                     class="mt-2 flex flex-col gap-2"
                   >
                     <template v-for="attachment in message.attachments" :key="attachment.id">
+                      <ChatMediaAttachment
+                        v-if="!isImageAttachment(attachment) && (isVideoAttachment(attachment) || isPdfAttachment(attachment))"
+                        :attachment="attachment"
+                      />
                       <a
-                        v-if="!isImageAttachment(attachment)"
+                        v-else-if="!isImageAttachment(attachment)"
                         :href="attachment.url"
                         target="_blank"
                         rel="noopener noreferrer"
@@ -776,19 +814,11 @@ const composeTargetName = computed(() => {
                         <Paperclip class="h-3 w-3" />
                         {{ attachment.original_name }}
                       </a>
-                      <a
+                      <ChatAttachmentImage
                         v-else
-                        :href="attachment.url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="block overflow-hidden rounded-md border border-border/60"
-                      >
-                        <img
-                          :src="attachment.url"
-                          :alt="attachment.original_name"
-                          class="max-h-48 max-w-full object-cover"
-                        />
-                      </a>
+                        :attachment="attachment"
+                        @preview="previewAttachment(message, $event)"
+                      />
                     </template>
                   </div>
 
@@ -964,6 +994,11 @@ const composeTargetName = computed(() => {
       :trigger-ref="reactionTriggerRef"
       placement="top"
       @select="onReactionEmojiSelected"
+    />
+    <ImageLightbox
+      v-model:open="lightboxOpen"
+      v-model:index="lightboxIndex"
+      :images="lightboxImages"
     />
   </AuthenticatedLayout>
 </template>

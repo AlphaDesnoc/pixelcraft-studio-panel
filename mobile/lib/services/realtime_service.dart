@@ -1,12 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:uuid/uuid.dart';
 
 import '../api/panel_api.dart';
 import '../models/direct_message.dart';
 import '../models/panel_notification.dart';
+import 'local_notification_service.dart';
 import 'reverb_service.dart';
 
 class RealtimeService extends ChangeNotifier {
@@ -14,7 +13,6 @@ class RealtimeService extends ChangeNotifier {
 
   final PanelApi _api;
   final ReverbService _reverb = ReverbService();
-  final _notifications = FlutterLocalNotificationsPlugin();
 
   Timer? _timer;
   String? _since;
@@ -44,27 +42,13 @@ class RealtimeService extends ChangeNotifier {
 
   Future<void> init() async {
     if (_initialized) return;
-
-    try {
-      const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const ios = DarwinInitializationSettings();
-      await _notifications.initialize(
-        const InitializationSettings(android: android, iOS: ios),
-      );
-      await _registerPushToken();
-    } catch (_) {}
-
+    await LocalNotificationService.initialize();
     _initialized = true;
   }
 
-  Future<void> _registerPushToken() async {
-    final token = const Uuid().v4();
-    try {
-      await _api.registerPushToken(
-        platform: defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
-        token: token,
-      );
-    } catch (_) {}
+  /// Demande la permission Android/iOS — à appeler après connexion (UI visible).
+  Future<bool> ensureNotificationPermission() {
+    return LocalNotificationService.requestPermission();
   }
 
   void setActiveConversationId(int? conversationId) {
@@ -195,7 +179,13 @@ class RealtimeService extends ChangeNotifier {
       final body = messageRaw['body'] as String? ?? 'Nouveau message';
       final senderName =
           (messageRaw['user'] as Map?)?['name'] as String? ?? 'Quelqu\'un';
-      unawaited(_showNotification('Message de $senderName', body));
+      unawaited(
+        LocalNotificationService.showMessage(
+          title: 'Message de $senderName',
+          body: body,
+          payload: 'dm:$conversationId',
+        ),
+      );
     }
   }
 
@@ -204,7 +194,13 @@ class RealtimeService extends ChangeNotifier {
     if (raw is Map<String, dynamic>) {
       final notification = PanelNotification.fromJson(raw);
       _notificationEvents.add(notification);
-      unawaited(_showNotification(notification.title, notification.body));
+      unawaited(
+        LocalNotificationService.showAlert(
+          title: notification.title,
+          body: notification.body,
+          payload: notification.url,
+        ),
+      );
     }
 
     final unread = payload['unread_count'] as int?;
@@ -224,16 +220,16 @@ class RealtimeService extends ChangeNotifier {
 
       if (!_live) {
         if (sync.unreadNotifications > _lastUnreadNotifications) {
-          await _showNotification(
-            'Nouvelle notification',
-            'Vous avez ${sync.unreadNotifications} notification(s)',
+          await LocalNotificationService.showAlert(
+            title: 'Nouvelle notification',
+            body: 'Vous avez ${sync.unreadNotifications} notification(s)',
           );
         }
 
         if (sync.unreadCount > _lastUnreadMessages) {
-          await _showNotification(
-            'Nouveau message',
-            'Vous avez ${sync.unreadCount} message(s) non lu(s)',
+          await LocalNotificationService.showMessage(
+            title: 'Nouveau message',
+            body: 'Vous avez ${sync.unreadCount} message(s) non lu(s)',
           );
         }
 
@@ -247,24 +243,6 @@ class RealtimeService extends ChangeNotifier {
 
       notifyListeners();
     } catch (_) {}
-  }
-
-  Future<void> _showNotification(String title, String body) async {
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'pixelcraft_panel',
-        'PixelCraft Panel',
-        importance: Importance.defaultImportance,
-        priority: Priority.defaultPriority,
-      ),
-      iOS: DarwinNotificationDetails(),
-    );
-    await _notifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      title,
-      body,
-      details,
-    );
   }
 
   void setUnreadMessages(int count) {

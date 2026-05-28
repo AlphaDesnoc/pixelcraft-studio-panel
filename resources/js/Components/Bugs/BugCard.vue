@@ -3,6 +3,8 @@ import { computed } from "vue";
 import { router } from "@inertiajs/vue3";
 import { MessageSquare, Pencil, Trash2 } from "lucide-vue-next";
 import { Badge } from "@/Components/ui/badge";
+import ImageLightbox from "@/Components/ImageLightbox.vue";
+import { useImageLightbox } from "@/composables/useImageLightbox.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -18,6 +20,17 @@ const canEdit = computed(
   () => Boolean(props.bug.can_manage || props.bug.can_edit),
 );
 const canDelete = computed(() => Boolean(props.bug.can_manage));
+
+const {
+  open: lightboxOpen,
+  index: lightboxIndex,
+  images: lightboxImages,
+  openFromUrls: openScreenshotPreview,
+} = useImageLightbox();
+
+function previewScreenshot(src) {
+  openScreenshotPreview(props.bug.screenshots ?? [], src);
+}
 
 const priorityVariant = computed(() => ({
   low: "secondary",
@@ -95,15 +108,15 @@ function destroy() {
       v-if="bug.screenshots && bug.screenshots.length > 0"
       class="mt-3 flex flex-wrap gap-2"
     >
-      <a
+      <button
         v-for="(src, idx) in bug.screenshots"
         :key="idx"
-        :href="src"
-        target="_blank"
-        class="block overflow-hidden rounded-md border border-border"
+        type="button"
+        class="block overflow-hidden rounded-md border border-border transition-opacity hover:opacity-90"
+        @click.stop="previewScreenshot(src)"
       >
         <img :src="src" alt="" class="h-16 w-16 object-cover" />
-      </a>
+      </button>
     </div>
 
     <footer class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -160,4 +173,9 @@ function destroy() {
       </div>
     </footer>
   </article>
+  <ImageLightbox
+    v-model:open="lightboxOpen"
+    v-model:index="lightboxIndex"
+    :images="lightboxImages"
+  />
 </template>

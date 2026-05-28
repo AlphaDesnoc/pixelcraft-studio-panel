@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'recurrence',
     'recurrence_weekdays',
     'recurrence_until',
+    'reminder_minutes',
 ])]
 class CalendarEvent extends Model
 {
@@ -30,7 +31,13 @@ class CalendarEvent extends Model
             'all_day' => 'boolean',
             'recurrence_weekdays' => 'array',
             'recurrence_until' => 'date',
+            'reminder_minutes' => 'integer',
         ];
+    }
+
+    public function exceptions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CalendarEventException::class);
     }
 
     public function project(): BelongsTo

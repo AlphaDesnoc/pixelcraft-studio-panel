@@ -15,8 +15,8 @@ Application mobile **iOS / Android** avec **UI 100 % native**.
 | Ranks + dashboard stats | Natif |
 | Admin (users, projects) | Natif (si `is_admin`) |
 | Préférences notifications | Natif |
-| Temps réel | Polling `/realtime/sync` (3 s) + notifications locales |
-| Push FCM | Backend prêt (`PIXELCRAFT_FCM_SERVER_KEY`) + enregistrement token |
+| Temps réel | WebSocket Reverb + polling `/realtime/sync` (3 s) |
+| Notifications | **Android/iOS natif** (`flutter_local_notifications`) — pas de Firebase requis |
 
 ## Lancer
 
@@ -61,11 +61,21 @@ Après déploiement, exécuter les migrations :
 php artisan migrate --force
 ```
 
-Variables optionnelles :
+Variables optionnelles (web uniquement, push serveur → navigateur) :
 
 ```env
-PIXELCRAFT_FCM_SERVER_KEY=...   # push Firebase (legacy API)
+PIXELCRAFT_FCM_SERVER_KEY=...   # push Firebase côté backend (non utilisé par l'app mobile)
 ```
+
+### Notifications Android
+
+L'app affiche les alertes **directement dans la barre système Android** via `flutter_local_notifications` :
+
+- permission `POST_NOTIFICATIONS` demandée à la connexion (Android 13+)
+- canaux **Messages** et **Alertes** (importance haute, vibration)
+- déclenchées par le WebSocket Reverb ou le polling toutes les 3 s
+
+> **Limite** : si l'app est **complètement fermée** (tuée par le système), les notifs s'arrêtent tant que l'app n'est pas relancée. Pour du push avec app tuée, il faudrait FCM ou un service au premier plan Android.
 
 ## Architecture
 

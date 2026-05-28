@@ -7,6 +7,8 @@ import '../models/attachment.dart';
 import '../services/auth_session.dart';
 import '../utils/format.dart';
 import 'chat_attachment_image.dart';
+import 'image_lightbox.dart';
+import 'media_preview_dialog.dart';
 import 'reaction_bar.dart';
 
 bool chatShouldShowBody(String body, List<PanelAttachment> attachments) {
@@ -543,7 +545,41 @@ class _AttachmentList extends StatelessWidget {
                   url: url,
                   name: attachment.originalName,
                   token: token,
-                  onOpen: () => _openUrl(url),
+                  onOpen: () => _openImageGallery(context, attachment, token),
+                ),
+              );
+            }
+
+            if (MediaPreviewDialog.isPreviewable(attachment.mimeType, attachment.originalName)) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: InkWell(
+                  onTap: () => MediaPreviewDialog.show(
+                    context,
+                    url: url,
+                    name: attachment.originalName,
+                    mimeType: attachment.mimeType,
+                    token: token,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        attachment.mimeType.startsWith('video/')
+                            ? Icons.videocam_outlined
+                            : Icons.picture_as_pdf_outlined,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          attachment.originalName,
+                          style: Theme.of(context).textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }
@@ -555,6 +591,31 @@ class _AttachmentList extends StatelessWidget {
           }).toList(),
         );
       },
+    );
+  }
+
+  void _openImageGallery(
+    BuildContext context,
+    PanelAttachment selected,
+    String? token,
+  ) {
+    final images = attachments
+        .where(chatIsImageAttachment)
+        .map(
+          (attachment) => LightboxImage(
+            url: chatAttachmentUrl(attachment.url),
+            name: attachment.originalName,
+          ),
+        )
+        .toList();
+    final startIndex = images.indexWhere(
+      (image) => image.url == chatAttachmentUrl(selected.url),
+    );
+    ImageLightbox.show(
+      context,
+      images: images,
+      initialIndex: startIndex >= 0 ? startIndex : 0,
+      token: token,
     );
   }
 

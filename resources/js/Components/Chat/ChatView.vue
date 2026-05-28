@@ -17,11 +17,18 @@ import {
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
 import ChatMembersPanel from "@/Components/Chat/ChatMembersPanel.vue";
+import ChatAttachmentImage from "@/Components/Chat/ChatAttachmentImage.vue";
+import ChatMediaAttachment from "@/Components/Chat/ChatMediaAttachment.vue";
+import ChatSearchBar from "@/Components/Chat/ChatSearchBar.vue";
 import EmojiPickerPopover from "@/Components/Chat/EmojiPickerPopover.vue";
 import MentionSuggestions from "@/Components/Chat/MentionSuggestions.vue";
 import TwemojiIcon from "@/Components/Chat/TwemojiIcon.vue";
+import ImageLightbox from "@/Components/ImageLightbox.vue";
+import { useImageLightbox } from "@/composables/useImageLightbox.js";
+import { useMessageDraft } from "@/composables/useMessageDraft.js";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
+import { isImageAttachment, isPdfAttachment, isVideoAttachment } from "@/lib/attachments.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
 import { escapeHtml, parseEmojis, renderMessageBody } from "@/lib/twemojiRender.js";
 
@@ -42,7 +49,12 @@ const activeRef = toRef(props, "active");
 const spaceKeyRef = toRef(props, "spaceKey");
 const initialMembersRef = toRef(props, "initialChatMembers");
 
-const draft = ref("");
+const draftStorageKey = computed(
+  () => `draft:chat:${props.projectSlug}:${props.spaceKey}`,
+);
+const { draft, clear: clearDraft } = useMessageDraft(draftStorageKey);
+
+const chatSearch = ref({});
 const editingMessageId = ref(null);
 const editDraft = ref("");
 const fileInputRef = ref(null);
@@ -67,6 +79,7 @@ const {
   deleteMessage,
   uploadAttachment,
   notifyTyping,
+  applySearchFilters,
   listRef,
   toggleReaction,
   pinMessage,
@@ -78,6 +91,13 @@ const {
   initialMembersRef,
   currentUserId,
 );
+
+const {
+  open: lightboxOpen,
+  index: lightboxIndex,
+  images: lightboxImages,
+  openFromMessages: openImagePreview,
+} = useImageLightbox();
 
 const chatMembersRef = computed(() => chatMembers.value);
 
@@ -172,11 +192,8 @@ function initials(name) {
     .toUpperCase();
 }
 
-function isImageAttachment(attachment) {
-  if (attachment.mime_type?.startsWith("image/")) {
-    return true;
-  }
-  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.original_name ?? "");
+function previewAttachment(message, attachment) {
+  openImagePreview(messages.value, attachment);
 }
 
 function shouldShowMessageBody(message) {
@@ -274,9 +291,13 @@ async function submitMessage() {
   if (!draft.value.trim()) return;
   const body = draft.value;
   const replyId = replyingTo.value?.id ?? null;
-  draft.value = "";
+  clearDraft();
   clearReply();
   await send(body, replyId);
+}
+
+function onSearch(filters) {
+  applySearchFilters(filters);
 }
 
 function onDraftInput() {
@@ -354,6 +375,12 @@ async function onFileSelected(event) {
 
     <div class="flex min-h-0 flex-1 overflow-hidden">
       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <ChatSearchBar
+          v-model="chatSearch"
+          :members="chatMembers"
+          @search="onSearch"
+        />
+
         <div
           ref="listRef"
           class="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-y-contain px-4 py-4"
@@ -565,8 +592,12 @@ async function onFileSelected(event) {
                 class="mt-2 flex flex-col gap-2"
               >
                 <template v-for="attachment in message.attachments" :key="attachment.id">
+                  <ChatMediaAttachment
+                    v-if="!isImageAttachment(attachment) && (isVideoAttachment(attachment) || isPdfAttachment(attachment))"
+                    :attachment="attachment"
+                  />
                   <a
-                    v-if="!isImageAttachment(attachment)"
+                    v-else-if="!isImageAttachment(attachment)"
                     :href="attachment.url"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -576,19 +607,11 @@ async function onFileSelected(event) {
                     <Paperclip class="h-3 w-3" />
                     {{ attachment.original_name }}
                   </a>
-                  <a
+                  <ChatAttachmentImage
                     v-else
-                    :href="attachment.url"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="block overflow-hidden rounded-md border border-border/60"
-                  >
-                    <img
-                      :src="attachment.url"
-                      :alt="attachment.original_name"
-                      class="max-h-48 max-w-full object-cover"
-                    />
-                  </a>
+                    :attachment="attachment"
+                    @preview="previewAttachment(message, $event)"
+                  />
                 </template>
               </div>
 
@@ -745,6 +768,11 @@ async function onFileSelected(event) {
       :trigger-ref="reactionTriggerRef"
       placement="top"
       @select="onReactionEmojiSelected"
+    />
+    <ImageLightbox
+      v-model:open="lightboxOpen"
+      v-model:index="lightboxIndex"
+      :images="lightboxImages"
     />
   </div>
 </template>

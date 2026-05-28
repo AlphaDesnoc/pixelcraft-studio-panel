@@ -29,11 +29,30 @@ class ChatMessageController extends Controller
         $space = ProjectSpace::resolve($request, $project, $user);
         $this->authorizeSpace($user, $project, $space);
 
-        $messages = $project->chatMessages()
+        $query = $project->chatMessages()
             ->where('space_key', $space->key)
-            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name'])
+            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+
+        if ($search = trim((string) $request->query('q', ''))) {
+            $query->where('body', 'like', '%'.addcslashes($search, '%_\\').'%');
+        }
+
+        if ($authorId = $request->query('author_id')) {
+            $query->where('user_id', (int) $authorId);
+        }
+
+        if ($from = $request->query('from')) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+
+        if ($to = $request->query('to')) {
+            $query->whereDate('created_at', '<=', $to);
+        }
+
+        $messages = $query
             ->orderByDesc('pinned_at')
             ->orderBy('created_at')
+            ->limit(min((int) $request->query('limit', 500), 500))
             ->get()
             ->map(fn ($m) => $m->toPayload())
             ->values();

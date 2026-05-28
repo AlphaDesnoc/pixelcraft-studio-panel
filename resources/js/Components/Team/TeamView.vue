@@ -53,7 +53,7 @@ function memberPermState(member) {
 }
 
 function updatePermission(member, key, checked) {
-  if (!isAdmin.value || member.is_owner) return;
+  if (!props.canManageTeam || member.is_owner) return;
   const state = memberPermState(member);
   state[key] = checked;
   if (key.endsWith("_write") && checked) {
@@ -188,7 +188,7 @@ function removeMember(member) {
               {{ member.name }}
             </span>
             <ShieldAlert
-              v-if="isAdmin && !member.is_owner"
+              v-if="canManageTeam && !member.is_owner"
               class="h-3.5 w-3.5 text-amber-500"
               aria-hidden="true"
             />
@@ -199,12 +199,12 @@ function removeMember(member) {
           </div>
           <p class="truncate text-xs text-muted-foreground">{{ member.email }}</p>
           <div
-            v-if="isAdmin && !member.is_owner"
+            v-if="canManageTeam && !member.is_owner"
             class="w-full rounded-md border border-border/60 bg-muted/10 px-3 py-2"
           >
             <p class="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               <ShieldAlert class="h-3 w-3" />
-              Overrides (admins système uniquement)
+              Permissions granulaires
             </p>
             <div class="flex flex-wrap gap-x-4 gap-y-2">
               <div

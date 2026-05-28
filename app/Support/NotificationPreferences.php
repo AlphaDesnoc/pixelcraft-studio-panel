@@ -19,6 +19,8 @@ class NotificationPreferences
             UserNotification::TYPE_DUE_TOMORROW => 'Échéance demain (J-1)',
             UserNotification::TYPE_DUE_TODAY => 'Échéance aujourd\'hui (jour J)',
             UserNotification::TYPE_OVERDUE => 'Tâche en retard',
+            UserNotification::TYPE_CALENDAR_REMINDER => 'Rappels calendrier',
+            UserNotification::TYPE_BUG_SLA_BREACH => 'Alertes SLA bugs',
         ];
     }
 

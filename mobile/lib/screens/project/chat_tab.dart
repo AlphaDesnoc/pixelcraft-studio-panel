@@ -8,12 +8,14 @@ import '../../api/panel_api_extensions.dart';
 import '../../models/attachment.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
+import '../../services/message_draft_service.dart';
 import '../../services/realtime_service.dart';
 import '../../services/reverb_service.dart';
 import '../../utils/typing_users.dart';
 import '../../widgets/chat_actions.dart';
 import '../../widgets/chat_bubble.dart';
 import '../../widgets/chat_composer.dart';
+import '../../widgets/chat_mention_overlay.dart';
 
 class ChatTab extends StatefulWidget {
   const ChatTab({
@@ -45,8 +47,11 @@ class _ChatTabState extends State<ChatTab> {
   RealtimeService? _realtime;
   final _typingUsers = TypingUsersController();
   Timer? _whisperTimer;
+  Timer? _draftTimer;
+  List<ChatMentionCandidate> _mentionCandidates = const [];
 
   bool get _canWrite => widget.workspace.canWrite('chat');
+  bool get _isGlobal => widget.workspace.activeSpace == 'global';
   String get _slug => widget.workspace.project.slug;
   int? get _currentUserId => context.watch<AuthSession>().user?.id;
 
@@ -57,8 +62,55 @@ class _ChatTabState extends State<ChatTab> {
     _typingUsers.onChanged = () {
       if (mounted) setState(() {});
     };
+    _loadDraft();
+    _controller.addListener(_onDraftChanged);
     _refresh();
     WidgetsBinding.instance.addPostFrameCallback((_) => _subscribeLive());
+  }
+
+  Future<void> _loadDraft() async {
+    final draft = await MessageDraftService.load(
+      MessageDraftService.projectChatKey(_slug, widget.workspace.activeSpace),
+    );
+    if (draft != null && mounted) {
+      _controller.text = draft;
+    }
+  }
+
+  void _onDraftChanged() {
+    _draftTimer?.cancel();
+    _draftTimer = Timer(const Duration(milliseconds: 300), () {
+      MessageDraftService.save(
+        MessageDraftService.projectChatKey(_slug, widget.workspace.activeSpace),
+        _controller.text,
+      );
+    });
+
+    final selection = _controller.selection;
+    _mentionCandidates = buildChatMentionCandidates(
+      text: _controller.text,
+      cursor: selection.baseOffset,
+      members: widget.workspace.members,
+      ranks: widget.workspace.ranks,
+      includeRanks: _isGlobal,
+    );
+    if (mounted) setState(() {});
+  }
+
+  void _insertMention(ChatMentionCandidate candidate) {
+    final selection = _controller.selection;
+    final next = applyMentionInsert(
+      text: _controller.text,
+      cursor: selection.baseOffset,
+      insertText: candidate.insertText,
+    );
+    _controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(
+        offset: next.length,
+      ),
+    );
+    setState(() => _mentionCandidates = const []);
   }
 
   void _subscribeLive() {
@@ -139,6 +191,7 @@ class _ChatTabState extends State<ChatTab> {
   @override
   void dispose() {
     _whisperTimer?.cancel();
+    _draftTimer?.cancel();
     _typingUsers.dispose();
     _liveSubscription?.dispose();
     _controller.dispose();
@@ -177,6 +230,9 @@ class _ChatTabState extends State<ChatTab> {
 
     setState(() => _sending = true);
     _controller.clear();
+    await MessageDraftService.clear(
+      MessageDraftService.projectChatKey(_slug, widget.workspace.activeSpace),
+    );
     final replyId = _replyTo?.id;
     setState(() => _replyTo = null);
 
@@ -393,6 +449,14 @@ class _ChatTabState extends State<ChatTab> {
           ),
         if (_typingUsers.label != null)
           ChatTypingIndicator(label: _typingUsers.label!),
+        if (_canWrite && _mentionCandidates.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: ChatMentionOverlay(
+              candidates: _mentionCandidates,
+              onSelect: _insertMention,
+            ),
+          ),
         if (_canWrite)
           ChatComposer(
             controller: _controller,
@@ -400,8 +464,10 @@ class _ChatTabState extends State<ChatTab> {
             onSend: _send,
             onAttach: _uploadAttachment,
             onChanged: (_) => _notifyTyping(),
-            hintText: 'Message',
-          ),          
+            hintText: _isGlobal
+                ? 'Message · @rank ou @pseudo'
+                : 'Message · @pseudo',
+          ),
       ],
     );
   }

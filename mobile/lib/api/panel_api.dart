@@ -357,6 +357,10 @@ class PanelApi {
     required String startAt,
     required String endAt,
     String? description,
+    String? recurrence,
+    List<int> recurrenceWeekdays = const [],
+    String? recurrenceUntil,
+    int? reminderMinutes,
   }) {
     return _client.guard(() async {
       final data = await _client.postJson('/projects/$projectSlug/events', data: {
@@ -364,6 +368,10 @@ class PanelApi {
         'start_at': startAt,
         'end_at': endAt,
         'description': ?description,
+        'recurrence': ?recurrence,
+        'recurrence_weekdays': recurrence == 'weekly' ? recurrenceWeekdays : null,
+        'recurrence_until': ?recurrenceUntil,
+        'reminder_minutes': ?reminderMinutes,
       });
       return WorkspaceEvent.fromJson(data['event'] as Map<String, dynamic>);
     });
@@ -372,9 +380,17 @@ class PanelApi {
   Future<void> deleteEvent({
     required String projectSlug,
     required int eventId,
+    String? deleteScope,
+    String? occurrenceDate,
   }) {
     return _client.guard(() async {
-      await _client.deleteJson('/projects/$projectSlug/events/$eventId');
+      final query = <String, String>{};
+      if (deleteScope != null) query['delete_scope'] = deleteScope;
+      if (occurrenceDate != null) query['occurrence_date'] = occurrenceDate;
+      final suffix = query.isEmpty
+          ? ''
+          : '?${query.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
+      await _client.deleteJson('/projects/$projectSlug/events/$eventId$suffix');
     });
   }
 
@@ -403,6 +419,32 @@ class PanelApi {
       final data =
           await _client.putJson('/projects/$projectSlug/bugs/$bugId', data: fields);
       return WorkspaceBug.fromJson(data['bug'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<WorkspaceBug> linkBugTask({
+    required String projectSlug,
+    required int bugId,
+    required int taskId,
+  }) {
+    return _client.guard(() async {
+      final data = await _client.postJson(
+        '/projects/$projectSlug/bugs/$bugId/link-task',
+        data: {'task_id': taskId},
+      );
+      return WorkspaceBug.fromJson(data['bug'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<Map<String, dynamic>> createTaskFromBug({
+    required String projectSlug,
+    required int bugId,
+  }) {
+    return _client.guard(() async {
+      return await _client.postJson(
+        '/projects/$projectSlug/bugs/$bugId/create-task',
+        data: {},
+      );
     });
   }
 

@@ -60,6 +60,10 @@ function expandSingleEvent(event, rangeStart, rangeEnd) {
     return [event];
   }
 
+  const exceptions = new Map(
+    (event.exceptions ?? []).map((ex) => [ex.occurrence_date, ex]),
+  );
+
   const seriesStart = new Date(event.start_at);
   const seriesEnd = new Date(event.end_at);
   if (Number.isNaN(seriesStart.getTime()) || Number.isNaN(seriesEnd.getTime())) {
@@ -82,17 +86,54 @@ function expandSingleEvent(event, rangeStart, rangeEnd) {
     guard += 1;
 
     if (shouldOccurOnDay(cursor, event, seriesStart)) {
-      const occurrenceStart = occurrenceDateTime(seriesStart, cursor);
-      const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
+      const dateKey = isoDate(cursor);
+      const exception = exceptions.get(dateKey);
+
+      if (exception?.type === "cancelled") {
+        cursor.setDate(cursor.getDate() + 1);
+        continue;
+      }
+
+      let occurrenceStart = occurrenceDateTime(seriesStart, cursor);
+      let occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
+      let occurrenceTitle = event.title;
+      let occurrenceDescription = event.description;
+      let occurrenceColor = event.color;
+      let occurrenceAllDay = event.all_day;
+
+      if (exception?.type === "modified") {
+        if (exception.start_at) {
+          occurrenceStart = new Date(exception.start_at);
+        }
+        if (exception.end_at) {
+          occurrenceEnd = new Date(exception.end_at);
+        }
+        if (exception.title) {
+          occurrenceTitle = exception.title;
+        }
+        if (exception.description != null) {
+          occurrenceDescription = exception.description;
+        }
+        if (exception.color) {
+          occurrenceColor = exception.color;
+        }
+        if (exception.all_day != null) {
+          occurrenceAllDay = exception.all_day;
+        }
+      }
 
       if (occurrenceEnd >= viewStart && occurrenceStart <= addDay(viewEnd, 1)) {
         occurrences.push({
           ...event,
-          id: `${event.id}-${isoDate(cursor)}`,
+          id: `${event.id}-${dateKey}`,
           series_id: event.id,
+          title: occurrenceTitle,
+          description: occurrenceDescription,
+          color: occurrenceColor,
+          all_day: occurrenceAllDay,
           start_at: occurrenceStart.toISOString(),
           end_at: occurrenceEnd.toISOString(),
-          _occurrence_date: isoDate(cursor),
+          occurrence_date: dateKey,
         });
       }
     }

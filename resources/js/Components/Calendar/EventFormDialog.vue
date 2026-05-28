@@ -24,6 +24,7 @@ const props = defineProps({
   open: { type: Boolean, required: true },
   projectSlug: { type: String, required: true },
   event: { type: Object, default: null },
+  occurrence: { type: Object, default: null },
   defaultDate: { type: String, default: null },
   rankId: { type: Number, default: null },
 });
@@ -33,6 +34,17 @@ const emits = defineEmits(["update:open"]);
 const isEdit = computed(() => Boolean(props.event));
 
 const DEFAULT_COLOR = "#7c5cff";
+
+const REMINDER_OPTIONS = [
+  { value: "", label: "Aucun rappel" },
+  { value: "5", label: "5 minutes avant" },
+  { value: "10", label: "10 minutes avant" },
+  { value: "15", label: "15 minutes avant" },
+  { value: "30", label: "30 minutes avant" },
+  { value: "60", label: "1 heure avant" },
+  { value: "120", label: "2 heures avant" },
+  { value: "1440", label: "1 jour avant" },
+];
 
 const form = useForm({
   title: "",
@@ -45,7 +57,13 @@ const form = useForm({
   recurrence: "",
   recurrence_weekdays: [],
   recurrence_until: "",
+  reminder_minutes: "",
+  edit_scope: "series",
 });
+
+const isOccurrenceEdit = computed(
+  () => isEdit.value && Boolean(props.event?.recurrence) && Boolean(props.occurrence?.occurrence_date),
+);
 
 const showWeekdayPicker = computed(() => form.recurrence === "weekly");
 const recurrenceHint = computed(() =>
@@ -113,16 +131,21 @@ function isWeekdaySelected(day) {
 
 function reset() {
   if (isEdit.value && props.event) {
-    const dateOnly = props.event.all_day;
-    form.title = props.event.title ?? "";
-    form.description = props.event.description ?? "";
-    form.start_at = toLocalInput(props.event.start_at, { dateOnly });
-    form.end_at = toLocalInput(props.event.end_at, { dateOnly });
-    form.all_day = Boolean(props.event.all_day);
-    form.color = props.event.color ?? DEFAULT_COLOR;
+    const source = props.occurrence?.occurrence_date ? props.occurrence : props.event;
+    const dateOnly = source.all_day;
+    form.title = source.title ?? "";
+    form.description = source.description ?? "";
+    form.start_at = toLocalInput(source.start_at, { dateOnly });
+    form.end_at = toLocalInput(source.end_at, { dateOnly });
+    form.all_day = Boolean(source.all_day);
+    form.color = source.color ?? DEFAULT_COLOR;
     form.recurrence = props.event.recurrence ?? "";
     form.recurrence_weekdays = [...(props.event.recurrence_weekdays ?? [])];
     form.recurrence_until = props.event.recurrence_until ?? "";
+    form.reminder_minutes = props.event.reminder_minutes
+      ? String(props.event.reminder_minutes)
+      : "";
+    form.edit_scope = props.occurrence?.occurrence_date ? "occurrence" : "series";
   } else {
     form.title = "";
     form.description = "";
@@ -133,6 +156,8 @@ function reset() {
     form.recurrence = "";
     form.recurrence_weekdays = [];
     form.recurrence_until = "";
+    form.reminder_minutes = "";
+    form.edit_scope = "series";
   }
   form.rank_id = props.rankId;
   ensureWeeklyWeekday();
@@ -140,7 +165,7 @@ function reset() {
 }
 
 watch(
-  () => [props.open, props.event?.id, props.defaultDate],
+  () => [props.open, props.event?.id, props.occurrence?.occurrence_date, props.defaultDate],
   ([open]) => {
     if (open) reset();
   },
@@ -199,7 +224,13 @@ function submit() {
       recurrence_weekdays:
         data.recurrence === "weekly" ? data.recurrence_weekdays : null,
       recurrence_until: data.recurrence ? data.recurrence_until || null : null,
+      reminder_minutes: data.reminder_minutes ? Number(data.reminder_minutes) : null,
     };
+
+    if (isEdit.value && data.edit_scope === "occurrence" && props.occurrence?.occurrence_date) {
+      next.edit_scope = "occurrence";
+      next.occurrence_date = props.occurrence.occurrence_date;
+    }
 
     return next;
   };
@@ -225,8 +256,24 @@ function submit() {
 
 function destroy() {
   if (!isEdit.value) return;
-  if (!confirm("Supprimer cet événement ?")) return;
-  form.delete(
+
+  let deleteScope = "series";
+  if (isOccurrenceEdit.value) {
+    const choice = window.prompt(
+      "Supprimer « cette occurrence » (tapez 1) ou « toute la série » (tapez 2) ?",
+      "1",
+    );
+    if (choice == null) return;
+    deleteScope = choice.trim() === "2" ? "series" : "occurrence";
+  } else if (!confirm("Supprimer cet événement ?")) {
+    return;
+  }
+
+  form.transform((data) => ({
+    delete_scope: deleteScope,
+    occurrence_date:
+      deleteScope === "occurrence" ? props.occurrence?.occurrence_date : null,
+  })).delete(
     route("projects.events.destroy", [props.projectSlug, props.event.id]),
     { preserveScroll: true, onSuccess: () => emits("update:open", false) },
   );
@@ -335,6 +382,47 @@ function destroy() {
           <label class="text-[11px] text-muted-foreground">Répéter jusqu'au</label>
           <Input v-model="form.recurrence_until" type="date" />
           <InputError :message="form.errors.recurrence_until" />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] text-muted-foreground">Rappel</label>
+          <Select v-model="form.reminder_minutes">
+            <option
+              v-for="option in REMINDER_OPTIONS"
+              :key="option.value || 'none'"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </Select>
+          <InputError :message="form.errors.reminder_minutes" />
+        </div>
+
+        <div
+          v-if="isOccurrenceEdit"
+          class="rounded-lg border border-border/60 bg-muted/20 p-3"
+        >
+          <p class="mb-2 text-[11px] font-medium text-muted-foreground">
+            Modifier
+          </p>
+          <label class="mb-1 flex items-center gap-2 text-sm">
+            <input
+              v-model="form.edit_scope"
+              type="radio"
+              value="occurrence"
+              class="h-4 w-4 accent-primary"
+            />
+            Cette occurrence uniquement
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input
+              v-model="form.edit_scope"
+              type="radio"
+              value="series"
+              class="h-4 w-4 accent-primary"
+            />
+            Toute la série
+          </label>
         </div>
 
         <div class="flex flex-col gap-1.5">

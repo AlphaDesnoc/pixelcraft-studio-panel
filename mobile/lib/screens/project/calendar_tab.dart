@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
 
-import '../../utils/calendar_recurrence.dart';
 import '../../api/panel_api_extensions.dart';
 import '../../models/workspace.dart';
 import '../../services/auth_session.dart';
+import '../../utils/calendar_recurrence.dart';
+import '../../widgets/calendar_event_dialog.dart';
 
 class CalendarTab extends StatefulWidget {
   const CalendarTab({
@@ -29,11 +30,6 @@ class _CalendarTabState extends State<CalendarTab> {
   bool get _canWrite => widget.workspace.canWrite('calendar');
   String get _slug => widget.workspace.project.slug;
 
-  DateTime? _parseEventDate(String? iso) {
-    if (iso == null || iso.isEmpty) return null;
-    return DateTime.tryParse(iso)?.toLocal();
-  }
-
   List<WorkspaceEvent> _eventsForDay(DateTime day) {
     return expandEventsForDay(widget.workspace.events, day);
   }
@@ -48,61 +44,55 @@ class _CalendarTabState extends State<CalendarTab> {
     return event;
   }
 
+  String _occurrenceDate(WorkspaceEvent event) {
+    if (event.occurrenceDate != null) return event.occurrenceDate!;
+    final start = event.startAtDate;
+    if (start == null) return '';
+    return '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _showEventForm({WorkspaceEvent? event}) async {
     final master = event == null ? null : _resolveMasterEvent(event);
-    final isEdit = master != null;
-    final titleController = TextEditingController(text: master?.title ?? '');
-    final descriptionController = TextEditingController(text: master?.description ?? '');
-    final start = _parseEventDate(master?.startAt) ?? _selectedDay ?? DateTime.now();
-    final end = _parseEventDate(master?.endAt) ?? start.add(const Duration(hours: 1));
+    final occurrence = event?.seriesId != null || event?.occurrenceDate != null ? event : null;
 
-    final saved = await showDialog<bool>(
+    final result = await showCalendarEventDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(isEdit ? 'Modifier l\'événement' : 'Nouvel événement'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: 'Titre'),
-            ),
-            TextField(
-              controller: descriptionController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Enregistrer')),
-        ],
-      ),
+      master: master,
+      occurrence: occurrence,
     );
-
-    if (saved != true || titleController.text.trim().isEmpty) return;
+    if (result == null) return;
 
     final api = context.read<AuthSession>().api;
+    final start = occurrence?.startAtDate ?? master?.startAtDate ?? _selectedDay ?? DateTime.now();
+    final end = occurrence?.endAtDate ?? master?.endAtDate ?? start.add(const Duration(hours: 1));
+
     if (master != null) {
-      await api.updateEvent(
-        projectSlug: _slug,
-        eventId: master.id,
-        fields: {
-          'title': titleController.text.trim(),
-          'description': descriptionController.text.trim(),
-          'start_at': start.toIso8601String(),
-          'end_at': end.toIso8601String(),
-        },
-      );
+      final fields = <String, dynamic>{
+        'title': result.title,
+        'description': result.description ?? '',
+        'start_at': start.toIso8601String(),
+        'end_at': end.toIso8601String(),
+        'recurrence': result.recurrence,
+        'recurrence_weekdays': result.recurrence == 'weekly' ? result.recurrenceWeekdays : null,
+        'recurrence_until': result.recurrenceUntil,
+        'reminder_minutes': result.reminderMinutes,
+      };
+      if (result.editScope == 'occurrence' && occurrence != null) {
+        fields['edit_scope'] = 'occurrence';
+        fields['occurrence_date'] = _occurrenceDate(occurrence);
+      }
+      await api.updateEvent(projectSlug: _slug, eventId: master.id, fields: fields);
     } else {
       await api.createEvent(
         projectSlug: _slug,
-        title: titleController.text.trim(),
+        title: result.title,
         startAt: start.toIso8601String(),
         endAt: end.toIso8601String(),
-        description: descriptionController.text.trim(),
+        description: result.description,
+        recurrence: result.recurrence,
+        recurrenceWeekdays: result.recurrenceWeekdays,
+        recurrenceUntil: result.recurrenceUntil,
+        reminderMinutes: result.reminderMinutes,
       );
     }
     await widget.onChanged();
@@ -110,21 +100,23 @@ class _CalendarTabState extends State<CalendarTab> {
 
   Future<void> _deleteEvent(WorkspaceEvent event) async {
     final master = _resolveMasterEvent(event);
-    final ok = await showDialog<bool>(
+    final occurrence = event.seriesId != null || event.occurrenceDate != null ? event : null;
+
+    final result = await showCalendarEventDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer l\'événement ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
-        ],
-      ),
+      master: master,
+      occurrence: occurrence,
+      deleteMode: true,
     );
-    if (ok != true) return;
+    if (result == null) return;
 
     await context.read<AuthSession>().api.deleteEvent(
           projectSlug: _slug,
           eventId: master.id,
+          deleteScope: result.deleteScope,
+          occurrenceDate: result.deleteScope == 'occurrence' && occurrence != null
+              ? _occurrenceDate(occurrence)
+              : null,
         );
     await widget.onChanged();
   }
@@ -207,13 +199,13 @@ class _CalendarTabState extends State<CalendarTab> {
                             [
                               if (event.recurrence != null || event.seriesId != null)
                                 'Récurrent',
+                              if (event.reminderMinutes != null)
+                                'Rappel ${event.reminderMinutes} min',
                               if (event.description?.isNotEmpty == true)
                                 event.description!,
                             ].join(' · '),
                           ),
-                          onTap: _canWrite
-                              ? () => _showEventForm(event: event)
-                              : null,
+                          onTap: _canWrite ? () => _showEventForm(event: event) : null,
                           trailing: _canWrite
                               ? IconButton(
                                   icon: const Icon(Icons.delete_outline),

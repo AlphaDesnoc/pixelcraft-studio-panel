@@ -10,11 +10,15 @@ use App\Support\BugSla;
 use App\Support\ProjectAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RankDashboardController extends Controller
 {
+    public const CAPACITY_OPEN_TASKS_THRESHOLD = 15;
+
     public function index(Request $request, Project $project): Response|JsonResponse
     {
         ProjectAccess::ensureAccess($request->user(), $project);
@@ -28,6 +32,43 @@ class RankDashboardController extends Controller
         return Inertia::render('Projects/RankDashboard', $payload);
     }
 
+    public function export(Request $request, Project $project): StreamedResponse
+    {
+        ProjectAccess::ensureAccess($request->user(), $project);
+
+        $payload = $this->buildPayload($project);
+        $filename = 'rank-dashboard-'.$project->slug.'-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($payload) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, [
+                'Rank',
+                'Tâches ouvertes',
+                'En retard',
+                'Bugs ouverts',
+                'SLA dépassés',
+                'Vélocité (2 sem.)',
+                'Membres actifs',
+            ], ';');
+
+            foreach ($payload['ranks'] as $rank) {
+                fputcsv($out, [
+                    $rank['name'],
+                    $rank['stats']['open_tasks'],
+                    $rank['stats']['overdue_tasks'],
+                    $rank['stats']['open_bugs'],
+                    $rank['stats']['sla_breached'],
+                    $rank['stats']['velocity'],
+                    $rank['stats']['active_members'],
+                ], ';');
+            }
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
     /** @return array<string, mixed> */
     public function buildPayload(Project $project): array
     {
@@ -39,6 +80,34 @@ class RankDashboardController extends Controller
             ->get()
             ->map(function ($rank) use ($project, $since) {
                 $memberIds = $rank->members->pluck('id');
+
+                $memberWorkload = $rank->members->map(function ($member) use ($project, $rank) {
+                    $tasksQuery = Task::query()
+                        ->where('project_id', $project->id)
+                        ->whereNull('archived_at')
+                        ->where('assignee_id', $member->id)
+                        ->whereHas('list', fn ($q) => $q->where('rank_id', $rank->id));
+
+                    $open = (clone $tasksQuery)->where('status', '!=', 'done')->count();
+                    $overdue = (clone $tasksQuery)
+                        ->where('status', '!=', 'done')
+                        ->whereNotNull('due_date')
+                        ->whereDate('due_date', '<', now())
+                        ->count();
+                    $stale = (clone $tasksQuery)
+                        ->where('status', '!=', 'done')
+                        ->where('updated_at', '<', now()->subDays(7))
+                        ->count();
+
+                    return [
+                        'id' => $member->id,
+                        'name' => $member->name,
+                        'open_tasks' => $open,
+                        'overdue_tasks' => $overdue,
+                        'stale_tasks' => $stale,
+                        'over_capacity' => $open >= self::CAPACITY_OPEN_TASKS_THRESHOLD,
+                    ];
+                })->values();
 
                 $tasksQuery = Task::query()
                     ->where('project_id', $project->id)
@@ -104,6 +173,11 @@ class RankDashboardController extends Controller
                         'name' => $rank->responsible->name,
                     ] : null,
                     'members_count' => $rank->members->count(),
+                    'member_workload' => $memberWorkload,
+                    'burndown' => $this->burndownForRank($project, $rank->id),
+                    'capacity_alerts' => $memberWorkload
+                        ->filter(fn ($m) => $m['over_capacity'])
+                        ->values(),
                     'stats' => [
                         'open_tasks' => $openTasks,
                         'overdue_tasks' => $overdueTasks,
@@ -122,7 +196,42 @@ class RankDashboardController extends Controller
                 'name' => $project->name,
                 'slug' => $project->slug,
             ],
+            'capacity_threshold' => self::CAPACITY_OPEN_TASKS_THRESHOLD,
             'ranks' => $ranks,
         ];
+    }
+
+    /** @return array<int, array{label: string, completed: int, open: int}> */
+    private function burndownForRank(Project $project, int $rankId): array
+    {
+        $weeks = [];
+
+        for ($i = 3; $i >= 0; $i--) {
+            $start = now()->subWeeks($i)->startOfWeek(Carbon::MONDAY);
+            $end = $start->copy()->endOfWeek(Carbon::SUNDAY);
+
+            $completed = Task::query()
+                ->where('project_id', $project->id)
+                ->where('status', Task::STATUS_DONE)
+                ->whereBetween('updated_at', [$start, $end])
+                ->whereHas('list', fn ($q) => $q->where('rank_id', $rankId))
+                ->count();
+
+            $openAtEnd = Task::query()
+                ->where('project_id', $project->id)
+                ->where('status', '!=', Task::STATUS_DONE)
+                ->whereNull('archived_at')
+                ->where('created_at', '<=', $end)
+                ->whereHas('list', fn ($q) => $q->where('rank_id', $rankId))
+                ->count();
+
+            $weeks[] = [
+                'label' => $start->format('d/m'),
+                'completed' => $completed,
+                'open' => $openAtEnd,
+            ];
+        }
+
+        return $weeks;
     }
 }
