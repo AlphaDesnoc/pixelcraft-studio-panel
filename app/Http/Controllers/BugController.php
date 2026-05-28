@@ -14,6 +14,7 @@ use App\Models\UserNotification;
 use App\Support\ActivityLogger;
 use App\Support\BugVisibility;
 use App\Support\PanelNotifier;
+use App\Support\ProjectAutomationRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +85,8 @@ class BugController extends Controller
                     );
                 }
             }
+
+            ProjectAutomationRunner::onBugCritical($bug->fresh(), $request->user());
         }
 
         return $this->apiOrBack($request, [
@@ -228,6 +231,8 @@ class BugController extends Controller
                     }
                 }
             }
+
+            ProjectAutomationRunner::onBugCritical($bug->fresh(), $request->user());
         }
 
         if ($bug->wasChanged('assignee_id') && $bug->assignee_id) {

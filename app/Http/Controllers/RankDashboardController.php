@@ -72,6 +72,7 @@ class RankDashboardController extends Controller
     /** @return array<string, mixed> */
     public function buildPayload(Project $project): array
     {
+        $threshold = $project->capacity_threshold ?? self::CAPACITY_OPEN_TASKS_THRESHOLD;
         $since = now()->subDays(14);
 
         $ranks = $project->ranks()
@@ -105,7 +106,7 @@ class RankDashboardController extends Controller
                         'open_tasks' => $open,
                         'overdue_tasks' => $overdue,
                         'stale_tasks' => $stale,
-                        'over_capacity' => $open >= self::CAPACITY_OPEN_TASKS_THRESHOLD,
+                        'over_capacity' => $open >= $threshold,
                     ];
                 })->values();
 
@@ -196,7 +197,7 @@ class RankDashboardController extends Controller
                 'name' => $project->name,
                 'slug' => $project->slug,
             ],
-            'capacity_threshold' => self::CAPACITY_OPEN_TASKS_THRESHOLD,
+            'capacity_threshold' => $threshold,
             'ranks' => $ranks,
         ];
     }

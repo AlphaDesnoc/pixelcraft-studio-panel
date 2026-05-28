@@ -12,7 +12,11 @@ import { Progress } from "@/Components/ui/progress";
 
 const props = defineProps({
   task: { type: Object, required: true },
+  bulkMode: { type: Boolean, default: false },
+  selected: { type: Boolean, default: false },
 });
+
+const emit = defineEmits(["click", "toggleSelect"]);
 
 const checklistProgress = computed(
   () => props.task.checklist_progress ?? { done: 0, total: 0 },
@@ -64,7 +68,11 @@ const timeLabel = computed(() => {
 <template>
   <article
     class="group relative cursor-pointer overflow-hidden rounded-md border bg-card/80 shadow-sm transition-colors hover:border-primary/40"
-    :class="task.is_overdue ? 'border-rose-500/60' : 'border-border'"
+    :class="[
+      task.is_overdue ? 'border-rose-500/60' : 'border-border',
+      selected ? 'ring-2 ring-primary/50' : '',
+    ]"
+    @click="bulkMode ? emit('toggleSelect', task.id) : emit('click', task)"
   >
     <div
       class="absolute inset-x-2 top-1.5 h-1 rounded-full"
@@ -72,7 +80,16 @@ const timeLabel = computed(() => {
     />
 
     <div class="flex items-start gap-1.5 px-2.5 pb-2.5 pt-3.5">
+      <input
+        v-if="bulkMode"
+        type="checkbox"
+        class="mt-1 h-3.5 w-3.5 shrink-0 accent-primary"
+        :checked="selected"
+        @click.stop
+        @change="emit('toggleSelect', task.id)"
+      />
       <GripVertical
+        v-else
         class="kanban-card-handle mt-0.5 h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground/40 active:cursor-grabbing"
       />
       <div class="min-w-0 flex-1">

@@ -10,7 +10,9 @@ use App\Models\Rank;
 use App\Models\Task;
 use App\Models\TaskList;
 use App\Models\TaskTag;
-use App\Models\TaskTemplate;
+use App\Models\KanbanSavedView;
+use App\Models\Milestone;
+use App\Models\ProjectAutomationRule;
 use App\Models\User;
 use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
@@ -18,7 +20,9 @@ use App\Support\ProjectSpace;
 use App\Support\SpaceChatAccess;
 use App\Support\TaskActivityFeed;
 use App\Support\BugVisibility;
-use Illuminate\Http\Request;
+use App\Http\Controllers\RankDashboardController;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,6 +31,23 @@ class ProjectController extends Controller
     public function show(Request $request, Project $project): Response
     {
         return Inertia::render('Projects/Show', $this->buildShowPayload($request, $project));
+    }
+
+    public function updateCapacityThreshold(Request $request, Project $project): JsonResponse|RedirectResponse
+    {
+        ProjectAccess::ensureCanManageTeam($request->user(), $project);
+
+        $validated = $request->validate([
+            'capacity_threshold' => ['required', 'integer', 'min:5', 'max:100'],
+        ]);
+
+        $project->update(['capacity_threshold' => $validated['capacity_threshold']]);
+
+        if ($request->expectsJson() || $request->is('api/*')) {
+            return response()->json(['capacity_threshold' => $project->capacity_threshold]);
+        }
+
+        return back();
     }
 
     /** @return array<string, mixed> */
@@ -447,6 +468,29 @@ class ProjectController extends Controller
                     'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name] : null,
                     'pinned_at' => $m->pinned_at?->toIso8601String(),
                 ])
+                ->values(),
+            'capacityThreshold' => $project->capacity_threshold ?? RankDashboardController::CAPACITY_OPEN_TASKS_THRESHOLD,
+            'kanbanSavedViews' => KanbanSavedView::query()
+                ->where('project_id', $project->id)
+                ->where(function ($q) use ($user) {
+                    $q->where('is_shared', true)->orWhere('user_id', $user->id);
+                })
+                ->orderBy('name')
+                ->get()
+                ->map->toPayload()
+                ->values(),
+            'milestones' => Milestone::query()
+                ->where('project_id', $project->id)
+                ->with('tasks:id,status')
+                ->orderBy('position')
+                ->get()
+                ->map->toPayload()
+                ->values(),
+            'automationRules' => ProjectAutomationRule::query()
+                ->where('project_id', $project->id)
+                ->orderBy('name')
+                ->get()
+                ->map->toPayload()
                 ->values(),
             'priorities' => Task::PRIORITIES,
             'statusKinds' => [

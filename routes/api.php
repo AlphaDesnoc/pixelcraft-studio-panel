@@ -39,6 +39,15 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TaskTagController;
 use App\Http\Controllers\TaskTemplateController;
+use App\Http\Controllers\TaskBulkController;
+use App\Http\Controllers\TaskTimerController;
+use App\Http\Controllers\TaskReminderController;
+use App\Http\Controllers\TaskSnoozeController;
+use App\Http\Controllers\KanbanSavedViewController;
+use App\Http\Controllers\MilestoneController;
+use App\Http\Controllers\ProjectAutomationController;
+use App\Http\Controllers\TaskPresenceController;
+use App\Http\Controllers\Admin\PortfolioController as AdminPortfolioController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -97,6 +106,7 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/projects/{project}', [AdminProjectController::class, 'update']);
             Route::delete('/projects/{project}', [AdminProjectController::class, 'destroy']);
             Route::get('/audit', [AdminAuditLogController::class, 'index']);
+            Route::get('/portfolio', [AdminPortfolioController::class, 'apiIndex']);
         });
 
         Route::prefix('projects/{project:slug}')->middleware('project.member')->group(function (): void {
@@ -121,7 +131,32 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/tasks/{task}/archive', [TaskController::class, 'archive']);
             Route::post('/tasks/{task}/unarchive', [TaskController::class, 'unarchive']);
             Route::post('/tasks/templates', [TaskTemplateController::class, 'store']);
+            Route::put('/tasks/templates/{template}', [TaskTemplateController::class, 'update']);
+            Route::delete('/tasks/templates/{template}', [TaskTemplateController::class, 'destroy']);
             Route::post('/tasks/{task}/templates/apply', [TaskTemplateController::class, 'apply']);
+            Route::post('/tasks/bulk', [TaskBulkController::class, 'store']);
+            Route::get('/tasks/{task}/timer', [TaskTimerController::class, 'status']);
+            Route::post('/tasks/{task}/timer/start', [TaskTimerController::class, 'start']);
+            Route::post('/tasks/{task}/timer/stop', [TaskTimerController::class, 'stop']);
+            Route::post('/tasks/{task}/reminders', [TaskReminderController::class, 'store']);
+            Route::delete('/tasks/{task}/reminders/{reminder}', [TaskReminderController::class, 'destroy']);
+            Route::post('/tasks/{task}/snooze', [TaskSnoozeController::class, 'store']);
+            Route::delete('/tasks/{task}/snooze', [TaskSnoozeController::class, 'destroy']);
+            Route::get('/kanban/views', [KanbanSavedViewController::class, 'index']);
+            Route::post('/kanban/views', [KanbanSavedViewController::class, 'store']);
+            Route::put('/kanban/views/{view}', [KanbanSavedViewController::class, 'update']);
+            Route::delete('/kanban/views/{view}', [KanbanSavedViewController::class, 'destroy']);
+            Route::get('/milestones', [MilestoneController::class, 'index']);
+            Route::post('/milestones', [MilestoneController::class, 'store']);
+            Route::put('/milestones/{milestone}', [MilestoneController::class, 'update']);
+            Route::delete('/milestones/{milestone}', [MilestoneController::class, 'destroy']);
+            Route::get('/automations', [ProjectAutomationController::class, 'index']);
+            Route::post('/automations', [ProjectAutomationController::class, 'store']);
+            Route::put('/automations/{rule}', [ProjectAutomationController::class, 'update']);
+            Route::delete('/automations/{rule}', [ProjectAutomationController::class, 'destroy']);
+            Route::get('/presence', [TaskPresenceController::class, 'index']);
+            Route::post('/presence', [TaskPresenceController::class, 'store']);
+            Route::put('/settings/capacity', [ProjectController::class, 'updateCapacityThreshold']);
             Route::put('/tasks/{task}/tags', [TaskTagController::class, 'sync']);
 
             Route::post('/tags', [TaskTagController::class, 'store']);

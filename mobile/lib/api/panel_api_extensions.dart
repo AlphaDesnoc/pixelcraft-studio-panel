@@ -642,6 +642,15 @@ extension PanelApiWorkspace on PanelApi {
     });
   }
 
+  Future<List<ActivityLogEntry>> fetchProjectActivityLogs(String projectSlug) {
+    return client.guard(() async {
+      final data = await client.getJson('/projects/${_slug(projectSlug)}/activity-logs');
+      return (data['logs'] as List<dynamic>? ?? [])
+          .map((e) => ActivityLogEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
   Future<ProjectRank> createRank({
     required String projectSlug,
     required String name,
@@ -736,6 +745,178 @@ extension PanelApiWorkspace on PanelApi {
         data: {'body': body},
       );
       return BugMessage.fromJson(data['message'] as Map<String, dynamic>);
+    });
+  }
+}
+
+extension PanelApiProductivity on PanelApi {
+  Future<Map<String, dynamic>> fetchTaskTimerStatus({
+    required String projectSlug,
+    required int taskId,
+  }) {
+    return client.guard(() async {
+      return await client.getJson('/projects/$projectSlug/tasks/$taskId/timer');
+    });
+  }
+
+  Future<KanbanTask> startTaskTimer({
+    required String projectSlug,
+    required int taskId,
+  }) {
+    return client.guard(() async {
+      final data =
+          await client.postJson('/projects/$projectSlug/tasks/$taskId/timer/start');
+      return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<KanbanTask> stopTaskTimer({
+    required String projectSlug,
+    required int taskId,
+  }) {
+    return client.guard(() async {
+      final data =
+          await client.postJson('/projects/$projectSlug/tasks/$taskId/timer/stop');
+      return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<KanbanTask> snoozeTask({
+    required String projectSlug,
+    required int taskId,
+    required String duration,
+    DateTime? until,
+  }) {
+    return client.guard(() async {
+      final data = await client.postJson('/projects/$projectSlug/tasks/$taskId/snooze', data: {
+        'duration': duration,
+        if (until != null) 'until': until.toUtc().toIso8601String(),
+      });
+      return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<KanbanTask> clearTaskSnooze({
+    required String projectSlug,
+    required int taskId,
+  }) {
+    return client.guard(() async {
+      final data = await client.deleteJson('/projects/$projectSlug/tasks/$taskId/snooze');
+      return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<Map<String, dynamic>> createTaskReminder({
+    required String projectSlug,
+    required int taskId,
+    required DateTime remindAt,
+  }) {
+    return client.guard(() async {
+      return await client.postJson('/projects/$projectSlug/tasks/$taskId/reminders', data: {
+        'remind_at': remindAt.toUtc().toIso8601String(),
+      });
+    });
+  }
+
+  Future<void> deleteTaskReminder({
+    required String projectSlug,
+    required int taskId,
+    required int reminderId,
+  }) {
+    return client.guard(() async {
+      await client.deleteJson(
+        '/projects/$projectSlug/tasks/$taskId/reminders/$reminderId',
+      );
+    });
+  }
+
+  Future<int> bulkTasks({
+    required String projectSlug,
+    required String action,
+    required List<int> taskIds,
+    int? assigneeId,
+    int? tagId,
+  }) {
+    return client.guard(() async {
+      final data = await client.postJson('/projects/$projectSlug/tasks/bulk', data: {
+        'action': action,
+        'task_ids': taskIds,
+        if (assigneeId != null) 'assignee_id': assigneeId,
+        if (tagId != null) 'tag_id': tagId,
+      });
+      return data['updated'] as int? ?? taskIds.length;
+    });
+  }
+
+  Future<List<KanbanSavedView>> fetchKanbanSavedViews(String projectSlug) {
+    return client.guard(() async {
+      final data = await client.getJson('/projects/$projectSlug/kanban/views');
+      return (data['views'] as List<dynamic>? ?? [])
+          .map((e) => KanbanSavedView.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
+  Future<KanbanSavedView> createKanbanSavedView({
+    required String projectSlug,
+    required String name,
+    required Map<String, dynamic> filters,
+    bool isShared = true,
+  }) {
+    return client.guard(() async {
+      final data = await client.postJson('/projects/$projectSlug/kanban/views', data: {
+        'name': name,
+        'filters': filters,
+        'is_shared': isShared,
+      });
+      return KanbanSavedView.fromJson(data['view'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<KanbanTask> applyTaskTemplate({
+    required String projectSlug,
+    required int taskId,
+    required int templateId,
+  }) {
+    return client.guard(() async {
+      final data = await client.postJson(
+        '/projects/$projectSlug/tasks/$taskId/templates/apply',
+        data: {'template_id': templateId},
+      );
+      return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<KanbanTask> updateTaskDependencies({
+    required String projectSlug,
+    required int taskId,
+    required List<int> dependencyIds,
+  }) {
+    return client.guard(() async {
+      final data = await client.putJson('/projects/$projectSlug/tasks/$taskId', data: {
+        'dependency_ids': dependencyIds,
+      });
+      return KanbanTask.fromJson(data['task'] as Map<String, dynamic>);
+    });
+  }
+
+  Future<void> sendPresenceHeartbeat({
+    required String projectSlug,
+    required String context,
+    int? taskId,
+  }) {
+    return client.guard(() async {
+      await client.postJson('/projects/$projectSlug/presence', data: {
+        'context': context,
+        if (taskId != null) 'task_id': taskId,
+      });
+    });
+  }
+
+  Future<AdminPortfolioData> fetchAdminPortfolio() {
+    return client.guard(() async {
+      final data = await client.getJson('/admin/portfolio');
+      return AdminPortfolioData.fromJson(data);
     });
   }
 }

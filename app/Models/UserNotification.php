@@ -27,6 +27,14 @@ class UserNotification extends Model
 
     public const TYPE_BUG_SLA_BREACH = 'bug_sla_breach';
 
+    public const TYPE_WEEKLY_DIGEST = 'weekly_digest';
+
+    public const TYPE_DAILY_DIGEST = 'daily_digest';
+
+    public const TYPE_TASK_REMINDER = 'task_reminder';
+
+    public const TYPE_TASK_COMMENT_MENTION = 'task_comment_mention';
+
     protected $fillable = [
         'user_id',
         'type',
