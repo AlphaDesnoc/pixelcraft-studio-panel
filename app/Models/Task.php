@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
     'estimated_minutes',
     'logged_minutes',
     'auto_archive_at',
+    'snoozed_until',
 ])]
 class Task extends Model
 {
@@ -70,6 +71,7 @@ class Task extends Model
             'archived_at' => 'datetime',
             'next_recurrence_at' => 'datetime',
             'auto_archive_at' => 'datetime',
+            'snoozed_until' => 'datetime',
             'estimated_minutes' => 'integer',
             'logged_minutes' => 'integer',
         ];
@@ -118,6 +120,16 @@ class Task extends Model
     public function dependencies(): BelongsToMany
     {
         return $this->belongsToMany(Task::class, 'task_dependencies', 'task_id', 'depends_on_task_id');
+    }
+
+    public function timeEntries(): HasMany
+    {
+        return $this->hasMany(TaskTimeEntry::class);
+    }
+
+    public function reminders(): HasMany
+    {
+        return $this->hasMany(TaskReminder::class);
     }
 
     public function isBlocked(): bool

@@ -10,6 +10,7 @@ class LocalNotificationService {
 
   static bool _initialized = false;
   static int _id = 0;
+  static void Function(String? payload)? _onNotificationTap;
 
   static const _channelMessages = AndroidNotificationChannel(
     'pixelcraft_messages',
@@ -29,8 +30,12 @@ class LocalNotificationService {
     enableVibration: true,
   );
 
-  static Future<bool> initialize() async {
+  static Future<bool> initialize({
+    void Function(String? payload)? onNotificationTap,
+  }) async {
     if (_initialized) return true;
+
+    _onNotificationTap = onNotificationTap;
 
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings(
@@ -41,6 +46,9 @@ class LocalNotificationService {
 
     await _plugin.initialize(
       const InitializationSettings(android: android, iOS: ios),
+      onDidReceiveNotificationResponse: (response) {
+        _onNotificationTap?.call(response.payload);
+      },
     );
 
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {

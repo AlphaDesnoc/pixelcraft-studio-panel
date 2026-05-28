@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\UserNotification;
 use App\Support\ActivityLogger;
 use App\Support\PanelNotifier;
+use App\Support\ProjectAutomationRunner;
 use App\Support\TaskKanbanPayload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -128,8 +129,13 @@ class TaskController extends Controller
             $task->next_recurrence_at = $task->next_recurrence_at ?? now()->addWeek();
         }
 
+        $previousStatus = $task->status;
         $previousAssignee = $task->assignee_id;
         $task->update(collect($validated)->except('dependency_ids')->all());
+
+        if ($task->status === Task::STATUS_DONE && $previousStatus !== Task::STATUS_DONE) {
+            ProjectAutomationRunner::onTaskDone($task->fresh(), $request->user());
+        }
 
         if (! empty($validated)) {
             $this->logTask(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/panel_api.dart';
 import '../models/user.dart';
+import 'push_registration_service.dart';
 
 class AuthSession extends ChangeNotifier {
   AuthSession({PanelApi? api}) : _api = api ?? PanelApi();
@@ -24,6 +25,7 @@ class AuthSession extends ChangeNotifier {
     try {
       if (await _api.client.hasToken()) {
         _user = await _api.fetchUser();
+        await PushRegistrationService.registerIfNeeded(_api);
       }
     } catch (_) {
       await _api.client.clearToken();
@@ -36,6 +38,7 @@ class AuthSession extends ChangeNotifier {
 
   Future<void> completeLogin(PanelUser user) async {
     _user = user;
+    await PushRegistrationService.registerIfNeeded(_api);
     notifyListeners();
   }
 

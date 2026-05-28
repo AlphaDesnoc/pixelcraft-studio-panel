@@ -44,6 +44,7 @@ class TaskKanbanPayload
             'due_date' => optional($task->due_date)?->toDateString(),
             'is_overdue' => $task->isOverdue(),
             'archived_at' => optional($task->archived_at)?->toIso8601String(),
+            'snoozed_until' => optional($task->snoozed_until)?->toIso8601String(),
             'recurrence_rule' => $task->recurrence_rule,
             'estimated_minutes' => $task->estimated_minutes,
             'logged_minutes' => (int) ($task->logged_minutes ?? 0),

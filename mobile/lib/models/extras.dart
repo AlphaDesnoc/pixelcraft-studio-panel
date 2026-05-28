@@ -97,12 +97,14 @@ class RankDashboardEntry {
     required this.name,
     required this.color,
     required this.stats,
+    this.capacityAlerts = const [],
   });
 
   final int id;
   final String name;
   final String color;
   final Map<String, dynamic> stats;
+  final List<Map<String, dynamic>> capacityAlerts;
 
   factory RankDashboardEntry.fromJson(Map<String, dynamic> json) {
     return RankDashboardEntry(
@@ -110,6 +112,9 @@ class RankDashboardEntry {
       name: json['name'] as String? ?? '',
       color: json['color'] as String? ?? '#7c5cff',
       stats: json['stats'] as Map<String, dynamic>? ?? {},
+      capacityAlerts: (json['capacity_alerts'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
   }
 }
@@ -121,6 +126,7 @@ class TeamMember {
     required this.email,
     required this.role,
     required this.isOwner,
+    this.permissions = const {},
   });
 
   final int id;
@@ -128,14 +134,19 @@ class TeamMember {
   final String email;
   final String role;
   final bool isOwner;
+  final Map<String, bool> permissions;
 
   factory TeamMember.fromJson(Map<String, dynamic> json) {
+    final permsRaw = json['permissions'];
     return TeamMember(
       id: json['id'] as int,
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
       role: json['role'] as String? ?? 'member',
       isOwner: json['is_owner'] as bool? ?? false,
+      permissions: permsRaw is Map
+          ? permsRaw.map((k, v) => MapEntry(k.toString(), v == true))
+          : const {},
     );
   }
 }
@@ -197,6 +208,62 @@ class AdminProject {
       status: json['status'] as String? ?? 'active',
       membersCount: json['members_count'] as int? ?? 0,
       tasksCount: json['tasks_count'] as int? ?? 0,
+    );
+  }
+}
+
+class KanbanSavedView {
+  const KanbanSavedView({
+    required this.id,
+    required this.name,
+    required this.filters,
+    required this.isShared,
+    this.userId,
+  });
+
+  final int id;
+  final String name;
+  final Map<String, dynamic> filters;
+  final bool isShared;
+  final int? userId;
+
+  factory KanbanSavedView.fromJson(Map<String, dynamic> json) {
+    final filtersRaw = json['filters'];
+    return KanbanSavedView(
+      id: json['id'] as int,
+      name: json['name'] as String? ?? '',
+      filters: filtersRaw is Map<String, dynamic>
+          ? filtersRaw
+          : (filtersRaw is Map ? Map<String, dynamic>.from(filtersRaw) : {}),
+      isShared: json['is_shared'] as bool? ?? true,
+      userId: json['user_id'] as int?,
+    );
+  }
+}
+
+class AdminPortfolioData {
+  const AdminPortfolioData({
+    required this.projects,
+    required this.capacityAlerts,
+    required this.summary,
+    this.capacityThreshold = 15,
+  });
+
+  final List<Map<String, dynamic>> projects;
+  final List<Map<String, dynamic>> capacityAlerts;
+  final Map<String, dynamic> summary;
+  final int capacityThreshold;
+
+  factory AdminPortfolioData.fromJson(Map<String, dynamic> json) {
+    return AdminPortfolioData(
+      projects: (json['projects'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
+      capacityAlerts: (json['capacityAlerts'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
+      summary: json['summary'] as Map<String, dynamic>? ?? {},
+      capacityThreshold: json['capacityThreshold'] as int? ?? 15,
     );
   }
 }

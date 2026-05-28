@@ -244,37 +244,83 @@ class _RanksTabState extends State<RanksTab> {
       return ListView(children: const [SizedBox(height: 120), Center(child: Text('Aucune stat'))]);
     }
 
-    return ListView.builder(
+    final overloaded = _dashboard.where((e) => e.capacityAlerts.isNotEmpty).toList();
+
+    return ListView(
       padding: const EdgeInsets.all(12),
-      itemCount: _dashboard.length,
-      itemBuilder: (context, index) {
-        final entry = _dashboard[index];
-        final stats = entry.stats;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.name, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _StatChip('Ouvertes', '${stats['open_tasks'] ?? 0}'),
-                    _StatChip('Retard', '${stats['overdue_tasks'] ?? 0}'),
-                    _StatChip('Bugs', '${stats['open_bugs'] ?? 0}'),
-                    _StatChip('Vélocité', '${stats['velocity'] ?? 0}'),
-                    _StatChip('SLA', '${stats['sla_breached'] ?? 0}'),
-                  ],
-                ),
-              ],
+      children: [
+        if (overloaded.isNotEmpty) ...[
+          Card(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Theme.of(context).colorScheme.onErrorContainer),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Ranks surchargés',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onErrorContainer,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...overloaded.expand((entry) {
+                    return entry.capacityAlerts.map((alert) {
+                      final name = alert['name'] as String? ?? 'Membre';
+                      final open = alert['open_tasks'] as int? ?? 0;
+                      return Text(
+                        '• $name (${entry.name}) — $open tâches ouvertes',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+                      );
+                    });
+                  }),
+                ],
+              ),
             ),
           ),
-        );
-      },
+          const SizedBox(height: 8),
+        ],
+        ..._dashboard.map((entry) {
+          final stats = entry.stats;
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.name, style: Theme.of(context).textTheme.titleMedium),
+                  if (entry.capacityAlerts.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${entry.capacityAlerts.length} membre(s) surchargé(s)',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _StatChip('Ouvertes', '${stats['open_tasks'] ?? 0}'),
+                      _StatChip('Retard', '${stats['overdue_tasks'] ?? 0}'),
+                      _StatChip('Bugs', '${stats['open_bugs'] ?? 0}'),
+                      _StatChip('Vélocité', '${stats['velocity'] ?? 0}'),
+                      _StatChip('SLA', '${stats['sla_breached'] ?? 0}'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 }

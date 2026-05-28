@@ -25,9 +25,40 @@ class TaskTemplateController extends Controller
             'priority' => ['nullable', Rule::in(array_keys(Task::PRIORITIES))],
             'rank_id' => ['nullable', 'integer', Rule::exists('ranks', 'id')->where('project_id', $project->id)],
             'checklist' => ['nullable', 'array'],
+            'checklist.*' => ['string', 'max:500'],
         ]);
 
         $project->taskTemplates()->create($validated);
+
+        return back();
+    }
+
+    public function update(Request $request, Project $project, TaskTemplate $template): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($template->project_id === $project->id, 404);
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:10000'],
+            'priority' => ['nullable', Rule::in(array_keys(Task::PRIORITIES))],
+            'rank_id' => ['nullable', 'integer', Rule::exists('ranks', 'id')->where('project_id', $project->id)],
+            'checklist' => ['nullable', 'array'],
+            'checklist.*' => ['string', 'max:500'],
+        ]);
+
+        $template->update($validated);
+
+        return back();
+    }
+
+    public function destroy(Request $request, Project $project, TaskTemplate $template): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'kanban');
+        abort_unless($template->project_id === $project->id, 404);
+
+        $template->delete();
 
         return back();
     }
@@ -43,11 +74,17 @@ class TaskTemplateController extends Controller
 
         $template = TaskTemplate::query()->findOrFail($validated['template_id']);
 
-        $task->update([
+        $updates = [
             'title' => $template->title,
             'description' => $template->description,
             'priority' => $template->priority,
-        ]);
+        ];
+
+        if ($template->rank_id) {
+            $updates['rank_id'] = $template->rank_id;
+        }
+
+        $task->update($updates);
 
         if ($template->checklist) {
             $checklist = $task->checklists()->create([

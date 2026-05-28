@@ -21,6 +21,10 @@ class NotificationPreferences
             UserNotification::TYPE_OVERDUE => 'Tâche en retard',
             UserNotification::TYPE_CALENDAR_REMINDER => 'Rappels calendrier',
             UserNotification::TYPE_BUG_SLA_BREACH => 'Alertes SLA bugs',
+            UserNotification::TYPE_WEEKLY_DIGEST => 'Résumé hebdomadaire',
+            UserNotification::TYPE_DAILY_DIGEST => 'Résumé quotidien',
+            UserNotification::TYPE_TASK_REMINDER => 'Rappels de tâche',
+            UserNotification::TYPE_TASK_COMMENT_MENTION => 'Mentions (commentaires tâche)',
         ];
     }
 
