@@ -29,6 +29,7 @@ import { useImageLightbox } from "@/composables/useImageLightbox.js";
 import { useMessageDraft } from "@/composables/useMessageDraft.js";
 import { useMentionAutocomplete } from "@/composables/useMentionAutocomplete.js";
 import { useSpaceChat } from "@/composables/useSpaceChat.js";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import { isImageAttachment, isPdfAttachment, isVideoAttachment } from "@/lib/attachments.js";
 import { insertTextAtCursor } from "@/lib/insertTextAtCursor.js";
 import { buildMessageClusters, getMessageCluster } from "@/lib/messageClusters.js";
@@ -358,7 +359,13 @@ async function saveEdit(message) {
 }
 
 async function confirmDelete(message) {
-  if (!confirm("Supprimer ce message ?")) return;
+  if (
+    !(await confirmDialog({
+      title: "Supprimer le message",
+      message: "Ce message sera définitivement supprimé.",
+    }))
+  )
+    return;
   await deleteMessage(message.id);
 }
 

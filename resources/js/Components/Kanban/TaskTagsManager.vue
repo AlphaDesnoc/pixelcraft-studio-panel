@@ -4,6 +4,7 @@ import { router } from "@inertiajs/vue3";
 import { Plus, Tag, Trash2, X } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -88,8 +89,15 @@ function createTag() {
   );
 }
 
-function deleteTag(tagId) {
+async function deleteTag(tagId) {
   if (props.readOnly || deletingId.value) return;
+  if (
+    !(await confirmDialog({
+      title: "Supprimer l'étiquette",
+      message: "Cette étiquette sera retirée de toutes les cartes et supprimée.",
+    }))
+  )
+    return;
   deletingId.value = tagId;
   router.delete(route("projects.tags.destroy", [props.projectSlug, tagId]), {
     preserveScroll: true,

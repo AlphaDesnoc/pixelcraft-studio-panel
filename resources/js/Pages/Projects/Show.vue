@@ -60,6 +60,7 @@ const props = defineProps({
   notes: { type: Array, default: () => [] },
   sheets: { type: Array, default: () => [] },
   voiceChannels: { type: Array, default: () => [] },
+  voiceManageRanks: { type: Array, default: () => [] },
   fileNodes: { type: Array, default: () => [] },
   members: { type: Array, default: () => [] },
   teamMembers: { type: Array, default: () => [] },
@@ -456,6 +457,7 @@ const kanbanBugLinkTasks = computed(() =>
         :voice-channels="voiceChannels"
         :ranks="ranks"
         :can-manage="canManageTeam"
+        :manage-ranks="voiceManageRanks"
       />
 
       <aside

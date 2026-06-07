@@ -1,23 +1,53 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { router } from "@inertiajs/vue3";
-import { Hash, Plus, Trash2, Video, Volume2, X } from "lucide-vue-next";
+import {
+  Check,
+  ChevronDown,
+  Loader2,
+  Lock,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
+  Video,
+  Volume2,
+  X,
+} from "lucide-vue-next";
 import { Avatar } from "@/Components/ui/avatar";
 import {
+  connecting,
   currentRoom,
   joinRoom,
   leaveRoom,
 } from "@/composables/useVoiceRoom.js";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
   projectId: { type: Number, required: true },
   voiceChannels: { type: Array, default: () => [] },
   ranks: { type: Array, default: () => [] },
+  // « Admin » du projet (admin/proprio/gestionnaire) : gère tous les salons.
   canManage: { type: Boolean, default: false },
+  // Rangs dont l'utilisateur est responsable : [{ id, name, color }].
+  manageRanks: { type: Array, default: () => [] },
 });
 
 const channels = ref([]);
+
+// ---- Droits de gestion ----
+const allowGlobal = computed(() => props.canManage);
+const manageableRankIds = computed(
+  () => new Set(props.manageRanks.map((r) => r.id)),
+);
+const canCreate = computed(
+  () => props.canManage || props.manageRanks.length > 0,
+);
+
+function canManageChannel(channel) {
+  return props.canManage || manageableRankIds.value.has(channel.rank_id);
+}
 
 function syncFromProps() {
   channels.value = (props.voiceChannels ?? []).map((c) => ({
@@ -27,20 +57,77 @@ function syncFromProps() {
 }
 watch(() => props.voiceChannels, syncFromProps, { immediate: true, deep: true });
 
+// ---- Regroupement par rang ----
+const collapsed = ref({});
+
+function toggleGroup(key) {
+  collapsed.value = { ...collapsed.value, [key]: !collapsed.value[key] };
+}
+
+const groups = computed(() => {
+  const result = [];
+
+  const globalChannels = channels.value.filter((c) => !c.rank_id);
+  if (globalChannels.length) {
+    result.push({
+      key: "global",
+      label: "Tout le projet",
+      color: null,
+      channels: globalChannels,
+    });
+  }
+
+  const seen = new Set();
+  for (const r of props.ranks) {
+    const rc = channels.value.filter((c) => c.rank_id === r.id);
+    if (rc.length) {
+      result.push({
+        key: `rank-${r.id}`,
+        label: r.label ?? r.name,
+        color: r.color ?? null,
+        restricted: true,
+        channels: rc,
+      });
+      seen.add(r.id);
+    }
+  }
+
+  // Rangs non présents dans la liste accessible : on s'appuie sur channel.rank.
+  const leftover = {};
+  for (const c of channels.value) {
+    if (c.rank_id && !seen.has(c.rank_id)) {
+      const k = c.rank_id;
+      leftover[k] ??= {
+        key: `rank-${k}`,
+        label: c.rank?.name ?? "Rang",
+        color: c.rank?.color ?? null,
+        restricted: true,
+        channels: [],
+      };
+      leftover[k].channels.push(c);
+    }
+  }
+  Object.values(leftover).forEach((g) => result.push(g));
+
+  return result;
+});
+
 function isActive(channel) {
   return currentRoom.value?.channelId === channel.id;
 }
 
-async function toggleJoin(channel) {
-  if (isActive(channel)) {
-    await leaveRoom();
-    return;
-  }
+async function join(channel) {
+  if (isActive(channel) || connecting.value) return;
   if (currentRoom.value) await leaveRoom();
   await joinRoom(props.projectSlug, channel.id, channel.name, {
     withVideo: false,
+    openMeetingView: Boolean(channel.with_video),
     projectId: props.projectId,
   });
+}
+
+async function leave() {
+  await leaveRoom();
 }
 
 function initials(name) {
@@ -56,28 +143,89 @@ function initials(name) {
 const creating = ref(false);
 const newName = ref("");
 const newRankId = ref("");
+const newType = ref("voice"); // "voice" | "meeting"
+
+function openCreate() {
+  creating.value = true;
+  newName.value = "";
+  newType.value = "voice";
+  // Un responsable de rang ne peut pas créer de salon global : on présélectionne
+  // son rang.
+  newRankId.value = allowGlobal.value ? "" : (props.manageRanks[0]?.id ?? "");
+}
+
+function resetCreate() {
+  creating.value = false;
+  newName.value = "";
+  newRankId.value = "";
+  newType.value = "voice";
+}
 
 function submitCreate() {
   const name = newName.value.trim();
   if (!name) return;
+  if (!allowGlobal.value && !newRankId.value) return;
   router.post(
     route("projects.voice-channels.store", props.projectSlug),
-    { name, rank_id: newRankId.value ? Number(newRankId.value) : null },
+    {
+      name,
+      rank_id: newRankId.value ? Number(newRankId.value) : null,
+      with_video: newType.value === "meeting",
+    },
     {
       preserveScroll: true,
       preserveState: true,
       only: ["voiceChannels"],
-      onSuccess: () => {
-        creating.value = false;
-        newName.value = "";
-        newRankId.value = "";
-      },
+      onSuccess: resetCreate,
     },
   );
 }
 
-function removeChannel(channel) {
-  if (!confirm(`Supprimer le salon « ${channel.name} » ?`)) return;
+// ---- Renommage ----
+const editingId = ref(null);
+const editName = ref("");
+const editInput = ref(null);
+
+async function startRename(channel) {
+  editingId.value = channel.id;
+  editName.value = channel.name;
+  await nextTick();
+  const el = Array.isArray(editInput.value) ? editInput.value[0] : editInput.value;
+  el?.focus();
+  el?.select();
+}
+
+function cancelRename() {
+  editingId.value = null;
+  editName.value = "";
+}
+
+function submitRename(channel) {
+  const name = editName.value.trim();
+  if (!name || name === channel.name) {
+    cancelRename();
+    return;
+  }
+  router.patch(
+    route("projects.voice-channels.update", [props.projectSlug, channel.id]),
+    { name },
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["voiceChannels"],
+      onSuccess: cancelRename,
+    },
+  );
+}
+
+async function removeChannel(channel) {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer le salon",
+      message: `Le salon vocal « ${channel.name} » sera définitivement supprimé.`,
+    }))
+  )
+    return;
   router.delete(
     route("projects.voice-channels.destroy", [props.projectSlug, channel.id]),
     { preserveScroll: true, preserveState: true, only: ["voiceChannels"] },
@@ -89,7 +237,6 @@ let lobby = null;
 
 function applyMembership(evt) {
   if (!evt) return;
-  // Un utilisateur n'est que dans un salon : on le retire partout d'abord.
   channels.value.forEach((c) => {
     c.participants = c.participants.filter((p) => p.id !== evt.user?.id);
   });
@@ -113,113 +260,273 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
-    <header class="flex items-center justify-between">
-      <h3 class="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        <Volume2 class="h-4 w-4 text-emerald-400" />
+  <section
+    class="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+  >
+    <header
+      class="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2.5"
+    >
+      <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <span class="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/15">
+          <Volume2 class="h-3.5 w-3.5 text-emerald-400" />
+        </span>
         Salons vocaux
       </h3>
       <button
-        v-if="canManage"
+        v-if="canCreate"
         type="button"
-        class="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-        @click="creating = !creating"
+        class="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-muted-foreground transition-colors hover:border-emerald-500/40 hover:text-foreground"
+        @click="creating ? resetCreate() : openCreate()"
       >
-        <Plus class="h-3.5 w-3.5" />
-        Salon
+        <component :is="creating ? X : Plus" class="h-3.5 w-3.5" />
+        {{ creating ? "Annuler" : "Nouveau" }}
       </button>
     </header>
 
-    <div
-      v-if="creating"
-      class="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-2"
-    >
-      <input
-        v-model="newName"
-        type="text"
-        placeholder="Nom du salon"
-        class="h-8 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
-        @keydown.enter.prevent="submitCreate"
-      />
-      <select
-        v-model="newRankId"
-        class="h-8 rounded-md border border-input bg-background px-2 text-xs"
+    <!-- Formulaire de création -->
+    <Transition name="create-slide">
+      <div
+        v-if="creating"
+        class="flex flex-col gap-2.5 border-b border-border bg-muted/15 p-3"
       >
-        <option value="">Tout le projet</option>
-        <option v-for="r in ranks" :key="r.id ?? r.key" :value="r.id">
-          {{ r.label ?? r.name }}
-        </option>
-      </select>
-      <button
-        type="button"
-        class="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground"
-        @click="submitCreate"
-      >
-        Créer
-      </button>
-    </div>
+        <input
+          v-model="newName"
+          type="text"
+          placeholder="Nom du salon (ex. Réunion équipe)"
+          class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20"
+          @keydown.enter.prevent="submitCreate"
+        />
 
-    <p v-if="!channels.length" class="py-2 text-xs text-muted-foreground">
-      Aucun salon vocal. {{ canManage ? "Créez-en un." : "" }}
-    </p>
+        <div class="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            class="flex items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors"
+            :class="newType === 'voice'
+              ? 'border-emerald-500/50 bg-emerald-500/10 text-foreground'
+              : 'border-border bg-background text-muted-foreground hover:bg-muted/40'"
+            @click="newType = 'voice'"
+          >
+            <Volume2 class="h-4 w-4 shrink-0 text-emerald-400" />
+            <span>
+              <span class="block font-medium">Vocal</span>
+              <span class="block text-[10px] opacity-70">Audio seul</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors"
+            :class="newType === 'meeting'
+              ? 'border-sky-500/50 bg-sky-500/10 text-foreground'
+              : 'border-border bg-background text-muted-foreground hover:bg-muted/40'"
+            @click="newType = 'meeting'"
+          >
+            <Video class="h-4 w-4 shrink-0 text-sky-400" />
+            <span>
+              <span class="block font-medium">Réunion</span>
+              <span class="block text-[10px] opacity-70">Visio + écran</span>
+            </span>
+          </button>
+        </div>
 
-    <ul class="flex flex-col gap-1">
-      <li
-        v-for="channel in channels"
-        :key="channel.id"
-        class="rounded-lg border px-2 py-1.5 transition-colors"
-        :class="isActive(channel) ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-transparent hover:bg-muted/40'"
-      >
         <div class="flex items-center gap-2">
-          <Hash class="h-3.5 w-3.5 text-muted-foreground" />
+          <select
+            v-model="newRankId"
+            class="h-9 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-emerald-500/50"
+          >
+            <option v-if="allowGlobal" value="">Accès : tout le projet</option>
+            <option v-for="r in manageRanks" :key="r.id" :value="r.id">
+              Accès : {{ r.name }}
+            </option>
+          </select>
           <button
             type="button"
-            class="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground"
-            @click="toggleJoin(channel)"
+            class="inline-flex h-9 items-center gap-1 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            :disabled="!newName.trim() || (!allowGlobal && !newRankId)"
+            @click="submitCreate"
           >
-            {{ channel.name }}
-          </button>
-          <span
-            v-if="channel.rank"
-            class="rounded-full px-1.5 py-px text-[10px] font-medium"
-            :style="{ backgroundColor: (channel.rank.color ?? '#888') + '22', color: channel.rank.color ?? '#888' }"
-          >
-            {{ channel.rank.name }}
-          </span>
-          <button
-            type="button"
-            class="inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors"
-            :class="isActive(channel) ? 'bg-rose-500/15 text-rose-400' : 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'"
-            @click="toggleJoin(channel)"
-          >
-            {{ isActive(channel) ? "Quitter" : "Rejoindre" }}
-          </button>
-          <button
-            v-if="canManage"
-            type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-rose-400"
-            title="Supprimer"
-            @click="removeChannel(channel)"
-          >
-            <Trash2 class="h-3.5 w-3.5" />
+            Créer
           </button>
         </div>
+      </div>
+    </Transition>
 
-        <div
-          v-if="channel.participants.length"
-          class="mt-1 flex flex-wrap items-center gap-1 pl-5"
+    <div class="flex flex-col gap-3 p-2">
+      <p
+        v-if="!channels.length"
+        class="px-1 py-3 text-center text-xs text-muted-foreground"
+      >
+        Aucun salon vocal.
+        <span v-if="canCreate">Créez-en un pour commencer.</span>
+      </p>
+
+      <!-- Groupes par rang -->
+      <div v-for="group in groups" :key="group.key" class="flex flex-col gap-0.5">
+        <button
+          type="button"
+          class="group/head flex items-center gap-1.5 rounded px-1.5 py-1 text-left transition-colors hover:bg-muted/40"
+          @click="toggleGroup(group.key)"
         >
+          <ChevronDown
+            class="h-3 w-3 shrink-0 text-muted-foreground transition-transform"
+            :class="collapsed[group.key] ? '-rotate-90' : ''"
+          />
           <span
-            v-for="p in channel.participants"
-            :key="p.id"
-            class="inline-flex items-center gap-1 rounded-full bg-muted/60 py-0.5 pl-0.5 pr-1.5"
-            :title="p.name"
+            v-if="group.color"
+            class="h-2 w-2 shrink-0 rounded-full"
+            :style="{ backgroundColor: group.color }"
+          />
+          <span
+            class="flex-1 truncate text-[11px] font-semibold uppercase tracking-wide"
+            :style="group.color ? { color: group.color } : {}"
+            :class="group.color ? '' : 'text-muted-foreground'"
           >
-            <Avatar :src="p.avatar_url ?? ''" :fallback="initials(p.name)" size="xs" class="!h-4 !w-4 !text-[8px]" />
-            <span class="text-[10px] text-foreground">{{ p.name }}</span>
+            {{ group.label }}
           </span>
-        </div>
-      </li>
-    </ul>
+          <Lock
+            v-if="group.restricted"
+            class="h-3 w-3 shrink-0 text-muted-foreground/60"
+          />
+          <span class="text-[10px] text-muted-foreground">{{ group.channels.length }}</span>
+        </button>
+
+        <ul v-show="!collapsed[group.key]" class="flex flex-col gap-0.5 pl-1">
+          <li
+            v-for="channel in group.channels"
+            :key="channel.id"
+            class="rounded-lg border transition-colors"
+            :class="isActive(channel)
+              ? 'border-emerald-500/40 bg-emerald-500/[0.07]'
+              : 'border-transparent hover:bg-muted/40'"
+          >
+            <div class="flex items-center gap-2 px-2 py-1.5">
+              <span
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                :class="channel.with_video ? 'bg-sky-500/15' : 'bg-muted'"
+              >
+                <component
+                  :is="channel.with_video ? Video : Volume2"
+                  class="h-3.5 w-3.5"
+                  :class="channel.with_video ? 'text-sky-400' : 'text-muted-foreground'"
+                />
+              </span>
+
+              <div class="min-w-0 flex-1">
+                <div v-if="editingId === channel.id" class="flex items-center gap-1">
+                  <input
+                    ref="editInput"
+                    v-model="editName"
+                    type="text"
+                    maxlength="80"
+                    class="h-7 w-full rounded border border-input bg-background px-2 text-sm outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
+                    @keydown.enter.prevent="submitRename(channel)"
+                    @keydown.esc.prevent="cancelRename"
+                  />
+                  <button
+                    type="button"
+                    class="shrink-0 rounded p-1 text-emerald-400 hover:bg-muted"
+                    title="Valider"
+                    @click="submitRename(channel)"
+                  >
+                    <Check class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted"
+                    title="Annuler"
+                    @click="cancelRename"
+                  >
+                    <X class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <template v-else>
+                  <p class="truncate text-sm font-medium text-foreground">
+                    {{ channel.name }}
+                  </p>
+                  <p
+                    v-if="channel.participants.length"
+                    class="flex items-center gap-1 text-[10px] text-emerald-400"
+                  >
+                    <Users class="h-2.5 w-2.5" />
+                    {{ channel.participants.length }} connecté{{ channel.participants.length > 1 ? "s" : "" }}
+                  </p>
+                </template>
+              </div>
+
+              <template v-if="editingId !== channel.id">
+                <button
+                  v-if="isActive(channel)"
+                  type="button"
+                  class="inline-flex h-7 items-center gap-1 rounded-md bg-rose-500/15 px-2.5 text-[11px] font-semibold text-rose-400 transition-colors hover:bg-rose-500/25"
+                  @click="leave"
+                >
+                  Quitter
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-500/15 px-2.5 text-[11px] font-semibold text-emerald-400 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+                  :disabled="connecting"
+                  @click="join(channel)"
+                >
+                  <Loader2 v-if="connecting" class="h-3 w-3 animate-spin" />
+                  Rejoindre
+                </button>
+
+                <button
+                  v-if="canManageChannel(channel)"
+                  type="button"
+                  class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Renommer le salon"
+                  @click="startRename(channel)"
+                >
+                  <Pencil class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  v-if="canManageChannel(channel)"
+                  type="button"
+                  class="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-rose-400"
+                  title="Supprimer le salon"
+                  @click="removeChannel(channel)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                </button>
+              </template>
+            </div>
+
+            <!-- Participants connectés -->
+            <div
+              v-if="channel.participants.length"
+              class="flex flex-wrap items-center gap-1 px-2 pb-2 pl-10"
+            >
+              <span
+                v-for="p in channel.participants"
+                :key="p.id"
+                class="inline-flex items-center gap-1 rounded-full bg-muted/70 py-0.5 pl-0.5 pr-2"
+                :title="p.name"
+              >
+                <Avatar
+                  :src="p.avatar_url ?? ''"
+                  :fallback="initials(p.name)"
+                  size="xs"
+                  class="!h-4 !w-4 !text-[8px]"
+                />
+                <span class="text-[10px] text-foreground">{{ p.name }}</span>
+              </span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.create-slide-enter-active,
+.create-slide-leave-active {
+  transition: opacity 0.18s ease;
+}
+.create-slide-enter-from,
+.create-slide-leave-to {
+  opacity: 0;
+}
+</style>

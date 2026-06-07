@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import axios from "axios";
 import { router } from "@inertiajs/vue3";
 import { Loader2, ShieldCheck } from "lucide-vue-next";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import {
@@ -70,7 +71,14 @@ async function confirm() {
 }
 
 async function disable2fa() {
-  if (!window.confirm("Désactiver la double authentification ?")) return;
+  if (
+    !(await confirmDialog({
+      title: "Désactiver la 2FA",
+      message: "La double authentification sera désactivée sur votre compte.",
+      confirmLabel: "Désactiver",
+    }))
+  )
+    return;
   error.value = "";
   disabling.value = true;
   try {

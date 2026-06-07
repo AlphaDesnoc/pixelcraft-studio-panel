@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { router } from "@inertiajs/vue3";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import {
   Download,
   Palette,
@@ -863,12 +864,18 @@ function moveSheet({ id, dir }) {
   );
 }
 
-function deleteSheet(id) {
+async function deleteSheet(id) {
   if (localSheets.value.length <= 1) {
     alert("Impossible de supprimer la dernière feuille.");
     return;
   }
-  if (!confirm("Supprimer cette feuille ?")) return;
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la feuille",
+      message: "Cette feuille et son contenu seront définitivement supprimés.",
+    }))
+  )
+    return;
   router.delete(
     route("projects.sheets.destroy", [props.projectSlug, id]),
     {

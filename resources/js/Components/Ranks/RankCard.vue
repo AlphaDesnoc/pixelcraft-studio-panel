@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { Link, router, usePage } from "@inertiajs/vue3";
 import { Bug, Crown, Star, Trash2, UserPlus } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 const page = usePage();
 
@@ -36,9 +37,15 @@ const memberCount = computed(() => props.rank.counts?.members ?? props.rank.memb
 const taskCount = computed(() => props.rank.counts?.tasks ?? 0);
 const noteCount = computed(() => props.rank.counts?.notes ?? 0);
 
-function destroy() {
+async function destroy() {
   if (!props.canEdit) return;
-  if (!confirm(`Supprimer le rank "${props.rank.name}" ?`)) return;
+  if (
+    !(await confirmDialog({
+      title: "Supprimer le rank",
+      message: `Le rank "${props.rank.name}" sera supprimé.`,
+    }))
+  )
+    return;
   router.delete(
     route("projects.ranks.destroy", [props.projectSlug, props.rank.id]),
     { preserveScroll: true, preserveState: true, only: ["ranks", "members"] },
@@ -54,9 +61,16 @@ function toggleBugs() {
   );
 }
 
-function removeMember(userId) {
+async function removeMember(userId) {
   if (!canManageMembers.value) return;
-  if (!confirm("Retirer ce membre du rank ?")) return;
+  if (
+    !(await confirmDialog({
+      title: "Retirer du rank",
+      message: "Ce membre sera retiré du rank.",
+      confirmLabel: "Retirer",
+    }))
+  )
+    return;
   router.delete(
     route("projects.ranks.members.remove", [
       props.projectSlug,

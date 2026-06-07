@@ -7,6 +7,7 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
+import ConfirmDialog from './Components/ui/ConfirmDialog.vue';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -21,7 +22,13 @@ createInertiaApp({
         const userPref = props.initialPage?.props?.auth?.user?.theme_preference;
         initTheme(userPref);
 
-        return createApp({ render: () => h(App, props) })
+        return createApp({
+            render: () =>
+                h('div', { style: 'display: contents' }, [
+                    h(App, props),
+                    h(ConfirmDialog),
+                ]),
+        })
             .use(plugin)
             .use(ZiggyVue)
             .mount(el);

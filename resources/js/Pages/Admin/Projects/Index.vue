@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { Head, Link, router } from "@inertiajs/vue3";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import {
   ExternalLink,
   Pencil,
@@ -38,9 +39,12 @@ const openEdit = (project) => {
   dialogOpen.value = true;
 };
 
-const confirmDelete = (project) => {
+const confirmDelete = async (project) => {
   if (
-    !window.confirm(`Supprimer définitivement le projet "${project.name}" ?`)
+    !(await confirmDialog({
+      title: "Supprimer le projet",
+      message: `Le projet "${project.name}" et toutes ses données seront définitivement supprimés.`,
+    }))
   ) {
     return;
   }

@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
 import { Pencil, Plus, Trash2 } from "lucide-vue-next";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import AdminTabs from "@/Components/AdminTabs.vue";
 import UserFormDialog from "@/Components/Admin/UserFormDialog.vue";
@@ -44,13 +45,16 @@ const formatDate = (iso) => {
   return dateFormatter.format(new Date(iso));
 };
 
-const confirmDelete = (user) => {
+const confirmDelete = async (user) => {
   if (user.id === currentUserId.value) {
     window.alert("Vous ne pouvez pas supprimer votre propre compte.");
     return;
   }
   if (
-    !window.confirm(`Supprimer définitivement le compte de ${user.name} ?`)
+    !(await confirmDialog({
+      title: "Supprimer le compte",
+      message: `Le compte de ${user.name} sera définitivement supprimé.`,
+    }))
   ) {
     return;
   }
