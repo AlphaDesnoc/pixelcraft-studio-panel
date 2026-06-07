@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
 import { Camera, Trash2 } from "lucide-vue-next";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import UpdatePasswordForm from "./Partials/UpdatePasswordForm.vue";
 import NotificationPreferencesForm from "./Partials/NotificationPreferencesForm.vue";
@@ -62,8 +63,14 @@ function onAvatarSelected(event) {
   );
 }
 
-function removeAvatar() {
-  if (!confirm("Supprimer votre photo de profil ?")) return;
+async function removeAvatar() {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la photo",
+      message: "Votre photo de profil sera supprimée.",
+    }))
+  )
+    return;
   router.delete(route("profile.avatar.destroy"), { preserveScroll: true });
 }
 </script>

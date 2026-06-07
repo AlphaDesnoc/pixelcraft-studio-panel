@@ -5,6 +5,7 @@ import { ArrowDownUp, CheckSquare, GripVertical, Trash2, X } from "lucide-vue-ne
 import { VueDraggable } from "vue-draggable-plus";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -100,7 +101,14 @@ function addItem() {
   );
 }
 
-function deleteItem(item) {
+async function deleteItem(item) {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer l'élément",
+      message: "Cet élément de la checklist sera supprimé.",
+    }))
+  )
+    return;
   router.delete(
     route("projects.tasks.checklists.items.destroy", [
       props.projectSlug,
@@ -112,8 +120,14 @@ function deleteItem(item) {
   );
 }
 
-function deleteChecklist() {
-  if (!confirm("Supprimer cette checklist ?")) return;
+async function deleteChecklist() {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la checklist",
+      message: "La checklist et tous ses éléments seront supprimés.",
+    }))
+  )
+    return;
   router.delete(
     route("projects.tasks.checklists.destroy", [
       props.projectSlug,

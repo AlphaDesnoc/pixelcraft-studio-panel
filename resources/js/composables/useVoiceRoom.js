@@ -6,8 +6,8 @@ import { Room, RoomEvent, Track } from "livekit-client";
 // participants (100+) sans saturer les clients, contrairement au mesh.
 // Laravel délivre un access token ; le média transite par le serveur LiveKit.
 
-export const currentRoom = ref(null); // { projectId, spaceKey, label }
-export const roomParticipants = ref([]); // [{ identity, name, avatar_url, isLocal, speaking, micOn, camTrack }]
+export const currentRoom = ref(null); // { projectId, spaceKey, label, isStage }
+export const roomParticipants = ref([]); // [{ identity, name, avatar_url, isLocal, speaking, micOn, camTrack, role, canModerate, handRaised }]
 export const localMuted = ref(false);
 export const cameraEnabled = ref(false);
 export const screenSharing = ref(false);
@@ -15,13 +15,77 @@ export const deafened = ref(false);
 export const connecting = ref(false);
 export const meetingOpen = ref(false);
 
+// ---- Stage / réunion ----
+export const myRole = ref("speaker"); // "speaker" | "audience"
+export const amModerator = ref(false);
+export const canPublishLocal = ref(true);
+const handStates = ref({}); // identity -> bool
+
+// ---- Volume (local à chaque utilisateur, persisté) ----
+export const masterVolume = ref(1); // 0..1, volume global
+export const participantVolumes = ref({}); // identity -> 0..1
+
 export const inRoom = computed(() => currentRoom.value !== null);
+export const isStage = computed(() => Boolean(currentRoom.value?.isStage));
 
 let identity = null;
 let myName = null;
 let myAvatar = null;
 let room = null;
-const audioEls = new Map(); // trackSid -> HTMLAudioElement
+const audioEls = new Map(); // trackSid -> { el, identity }
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+function loadVolumes() {
+  try {
+    const m = parseFloat(localStorage.getItem("voice.masterVolume"));
+    if (!Number.isNaN(m)) masterVolume.value = clamp01(m);
+    const pv = JSON.parse(localStorage.getItem("voice.participantVolumes") || "{}");
+    if (pv && typeof pv === "object") participantVolumes.value = pv;
+  } catch (e) {
+    /* noop */
+  }
+}
+loadVolumes();
+
+function applyVolumes() {
+  audioEls.forEach(({ el, identity: pid }) => {
+    const pv = participantVolumes.value[pid] ?? 1;
+    el.volume = clamp01(masterVolume.value * pv);
+  });
+}
+
+export function setMasterVolume(v) {
+  masterVolume.value = clamp01(Number(v));
+  applyVolumes();
+  try {
+    localStorage.setItem("voice.masterVolume", String(masterVolume.value));
+  } catch (e) {
+    /* noop */
+  }
+}
+
+export function getParticipantVolume(pid) {
+  return participantVolumes.value[String(pid)] ?? 1;
+}
+
+export function setParticipantVolume(pid, v) {
+  participantVolumes.value = {
+    ...participantVolumes.value,
+    [String(pid)]: clamp01(Number(v)),
+  };
+  applyVolumes();
+  try {
+    localStorage.setItem(
+      "voice.participantVolumes",
+      JSON.stringify(participantVolumes.value),
+    );
+  } catch (e) {
+    /* noop */
+  }
+}
 
 export function setVoiceIdentity(user) {
   identity = user?.id != null ? String(user.id) : null;
@@ -53,7 +117,18 @@ function describe(p, isLocal) {
       : Boolean(micPub && !micPub.isMuted),
     camTrack: camPub && !camPub.isMuted ? camPub.track ?? null : null,
     screenTrack: screenPub && !screenPub.isMuted ? screenPub.track ?? null : null,
+    role: meta.role ?? "speaker",
+    canModerate: Boolean(meta.can_moderate),
+    handRaised: Boolean(handStates.value[p.identity]),
   };
+}
+
+function updateLocalRole() {
+  if (!room) return;
+  const meta = parseMeta(room.localParticipant);
+  myRole.value = meta.role ?? "speaker";
+  amModerator.value = Boolean(meta.can_moderate);
+  canPublishLocal.value = Boolean(room.localParticipant.permissions?.canPublish);
 }
 
 function rebuild() {
@@ -68,11 +143,13 @@ function rebuild() {
 
 function bindEvents() {
   const r = room;
-  r.on(RoomEvent.TrackSubscribed, (track) => {
+  r.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
     if (track.kind === "audio") {
       const el = track.attach();
       el.muted = deafened.value;
-      audioEls.set(track.sid, el);
+      const pid = participant?.identity ?? null;
+      el.volume = clamp01(masterVolume.value * (participantVolumes.value[pid] ?? 1));
+      audioEls.set(track.sid, { el, identity: pid });
     }
     rebuild();
   })
@@ -84,18 +161,56 @@ function bindEvents() {
       rebuild();
     })
     .on(RoomEvent.ParticipantConnected, rebuild)
-    .on(RoomEvent.ParticipantDisconnected, rebuild)
+    .on(RoomEvent.ParticipantDisconnected, (p) => {
+      if (p?.identity && handStates.value[p.identity] !== undefined) {
+        const next = { ...handStates.value };
+        delete next[p.identity];
+        handStates.value = next;
+      }
+      rebuild();
+    })
     .on(RoomEvent.TrackMuted, rebuild)
     .on(RoomEvent.TrackUnmuted, rebuild)
     .on(RoomEvent.LocalTrackPublished, rebuild)
     .on(RoomEvent.LocalTrackUnpublished, rebuild)
-    .on(RoomEvent.ParticipantMetadataChanged, rebuild)
+    .on(RoomEvent.ParticipantMetadataChanged, (_meta, p) => {
+      if (p === r.localParticipant) updateLocalRole();
+      rebuild();
+    })
+    .on(RoomEvent.ParticipantPermissionsChanged, (_prev, p) => {
+      if (p === r.localParticipant) {
+        const couldPublish = canPublishLocal.value;
+        updateLocalRole();
+        // Promu intervenant : on active le micro automatiquement.
+        if (!couldPublish && canPublishLocal.value) {
+          localMuted.value = false;
+          r.localParticipant.setMicrophoneEnabled(true).catch(() => {});
+        }
+        // Rétrogradé auditeur : LiveKit retire nos pistes, on remet l'état à plat.
+        if (!canPublishLocal.value) {
+          cameraEnabled.value = false;
+          screenSharing.value = false;
+        }
+      }
+      rebuild();
+    })
+    .on(RoomEvent.DataReceived, (payload, p) => {
+      try {
+        const msg = JSON.parse(textDecoder.decode(payload));
+        if (msg?.t === "hand" && p?.identity) {
+          handStates.value = { ...handStates.value, [p.identity]: Boolean(msg.raised) };
+          rebuild();
+        }
+      } catch (e) {
+        /* noop */
+      }
+    })
     .on(RoomEvent.ActiveSpeakersChanged, rebuild)
     .on(RoomEvent.Disconnected, () => cleanup());
 }
 
 function cleanup() {
-  audioEls.forEach((el) => el.remove());
+  audioEls.forEach(({ el }) => el.remove());
   audioEls.clear();
   room = null;
   currentRoom.value = null;
@@ -105,9 +220,13 @@ function cleanup() {
   screenSharing.value = false;
   deafened.value = false;
   meetingOpen.value = false;
+  myRole.value = "speaker";
+  amModerator.value = false;
+  canPublishLocal.value = true;
+  handStates.value = {};
 }
 
-export async function joinRoom(projectSlug, channelId, label, { withVideo = false, projectId = null } = {}) {
+export async function joinRoom(projectSlug, channelId, label, { withVideo = false, openMeetingView = false, projectId = null } = {}) {
   if (inRoom.value || connecting.value) return;
   connecting.value = true;
   try {
@@ -119,13 +238,26 @@ export async function joinRoom(projectSlug, channelId, label, { withVideo = fals
     bindEvents();
 
     await room.connect(data.url, data.token);
-    currentRoom.value = { projectSlug, projectId, channelId, label };
+    currentRoom.value = {
+      projectSlug,
+      projectId,
+      channelId,
+      label,
+      isStage: Boolean(data.is_stage),
+    };
     window.addEventListener("beforeunload", beaconLeave);
+    updateLocalRole();
 
-    await room.localParticipant.setMicrophoneEnabled(true);
-    if (withVideo) {
-      await room.localParticipant.setCameraEnabled(true);
-      cameraEnabled.value = true;
+    // Auditeur de réunion : pas de publication tant qu'il n'est pas promu.
+    if (canPublishLocal.value) {
+      await room.localParticipant.setMicrophoneEnabled(true);
+      if (withVideo) {
+        await room.localParticipant.setCameraEnabled(true);
+        cameraEnabled.value = true;
+      }
+    }
+    // Salon de réunion : on ouvre la vue scène (visio) sans forcer la caméra.
+    if (withVideo || openMeetingView) {
       meetingOpen.value = true;
     }
     rebuild();
@@ -170,14 +302,14 @@ export async function leaveRoom() {
 }
 
 export async function toggleMute() {
-  if (!room) return;
+  if (!room || !canPublishLocal.value) return;
   localMuted.value = !localMuted.value;
   await room.localParticipant.setMicrophoneEnabled(!localMuted.value);
   rebuild();
 }
 
 export async function toggleCamera() {
-  if (!room) return;
+  if (!room || !canPublishLocal.value) return;
   cameraEnabled.value = !cameraEnabled.value;
   await room.localParticipant.setCameraEnabled(cameraEnabled.value);
   if (cameraEnabled.value) meetingOpen.value = true;
@@ -185,7 +317,7 @@ export async function toggleCamera() {
 }
 
 export async function toggleScreenShare() {
-  if (!room) return;
+  if (!room || !canPublishLocal.value) return;
   const next = !screenSharing.value;
   try {
     await room.localParticipant.setScreenShareEnabled(next, { audio: true });
@@ -199,10 +331,56 @@ export async function toggleScreenShare() {
 
 export function toggleDeafen() {
   deafened.value = !deafened.value;
-  audioEls.forEach((el) => {
+  audioEls.forEach(({ el }) => {
     el.muted = deafened.value;
   });
   if (deafened.value && !localMuted.value) toggleMute();
+}
+
+// ---- Stage : lever la main, promotion/rétrogradation ----
+export async function raiseHand(raised) {
+  if (!room) return;
+  if (identity != null) {
+    handStates.value = { ...handStates.value, [identity]: raised };
+    rebuild();
+  }
+  try {
+    await room.localParticipant.publishData(
+      textEncoder.encode(JSON.stringify({ t: "hand", raised })),
+      { reliable: true },
+    );
+  } catch (e) {
+    /* noop */
+  }
+}
+
+export async function setParticipantRole(targetIdentity, role) {
+  const r = currentRoom.value;
+  if (!r) return;
+  try {
+    const { data } = await axios.post(
+      route("projects.voice.set-role", [r.projectSlug, r.channelId]),
+      { identity: String(targetIdentity), role },
+    );
+    if (!data?.ok) {
+      alert("Action impossible. Le serveur LiveKit est-il démarré ?");
+      return;
+    }
+    if (role === "speaker") {
+      handStates.value = { ...handStates.value, [String(targetIdentity)]: false };
+      rebuild();
+    }
+  } catch (e) {
+    alert("Action impossible. Accès refusé ou serveur indisponible.");
+  }
+}
+
+export function leaveStage() {
+  if (identity != null) setParticipantRole(identity, "audience");
+}
+
+export function joinStage() {
+  if (identity != null) setParticipantRole(identity, "speaker");
 }
 
 export function openMeeting() {

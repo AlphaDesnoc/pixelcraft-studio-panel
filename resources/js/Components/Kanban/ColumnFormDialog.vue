@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from "vue";
 import { useForm } from "@inertiajs/vue3";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import InputError from "@/Components/InputError.vue";
 import { Button } from "@/Components/ui/button";
 import {
@@ -70,9 +71,15 @@ function submit() {
   }
 }
 
-function destroy() {
+async function destroy() {
   if (!isEdit.value) return;
-  if (!confirm("Supprimer la colonne et toutes ses cartes ?")) return;
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la colonne",
+      message: "La colonne et toutes ses cartes seront définitivement supprimées.",
+    }))
+  )
+    return;
   form.delete(
     route("projects.lists.destroy", [props.projectSlug, props.list.id]),
     {

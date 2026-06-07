@@ -153,6 +153,19 @@ class ProjectController extends Controller
             ->map(fn ($c) => $c->toPayload())
             ->values();
 
+        // Rangs dont l'utilisateur peut gérer les salons vocaux : tous s'il est
+        // « admin » (admin/proprio/gestionnaire), sinon ceux dont il est responsable.
+        $voiceManageRanks = ($canManageTeam
+            ? $project->ranks
+            : $project->ranks->where('responsible_id', $user->id))
+            ->sortBy('position')
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'name' => $r->name,
+                'color' => $r->color,
+            ])
+            ->values();
+
         $lists = $space->isFull
             ? $this->buildMergedKanbanLists($project)
             : $this->mapLists($project->lists);
@@ -407,6 +420,7 @@ class ProjectController extends Controller
             'notes' => $notes,
             'sheets' => $sheets,
             'voiceChannels' => $voiceChannels,
+            'voiceManageRanks' => $voiceManageRanks,
             'fileNodes' => $fileNodes,
             'chatMessages' => $chatMessages,
             'chatMembers' => $space->isFull

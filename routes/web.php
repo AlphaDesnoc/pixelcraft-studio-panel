@@ -193,12 +193,16 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::post('/projects/{project}/voice-channels', [VoiceChannelController::class, 'store'])
         ->name('projects.voice-channels.store');
+    Route::patch('/projects/{project}/voice-channels/{voiceChannel}', [VoiceChannelController::class, 'update'])
+        ->name('projects.voice-channels.update');
     Route::delete('/projects/{project}/voice-channels/{voiceChannel}', [VoiceChannelController::class, 'destroy'])
         ->name('projects.voice-channels.destroy');
     Route::post('/projects/{project}/voice-channels/{voiceChannel}/token', [VoiceController::class, 'token'])
         ->name('projects.voice.token');
     Route::post('/projects/{project}/voice-channels/{voiceChannel}/leave', [VoiceController::class, 'leave'])
         ->name('projects.voice.leave');
+    Route::post('/projects/{project}/voice-channels/{voiceChannel}/set-role', [VoiceController::class, 'setRole'])
+        ->name('projects.voice.set-role');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::post('/profile/avatar', [ProfileAvatarController::class, 'update'])

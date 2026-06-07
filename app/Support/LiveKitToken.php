@@ -9,7 +9,7 @@ class LiveKitToken
      *
      * @param  array<string, mixed>  $metadata
      */
-    public static function create(string $identity, string $name, string $room, array $metadata = []): string
+    public static function create(string $identity, string $name, string $room, array $metadata = [], bool $canPublish = true): string
     {
         $now = time();
 
@@ -24,9 +24,32 @@ class LiveKitToken
             'video' => [
                 'room' => $room,
                 'roomJoin' => true,
-                'canPublish' => true,
+                'canPublish' => $canPublish,
                 'canSubscribe' => true,
                 'canPublishData' => true,
+            ],
+        ];
+
+        return self::encode($payload, (string) config('livekit.api_secret'));
+    }
+
+    /**
+     * Token d'administration (roomAdmin) pour piloter un salon via l'API serveur
+     * LiveKit : promotion/rétrogradation d'intervenants, etc.
+     */
+    public static function admin(string $room): string
+    {
+        $now = time();
+
+        $payload = [
+            'iss' => config('livekit.api_key'),
+            'sub' => 'server',
+            'nbf' => $now,
+            'iat' => $now,
+            'exp' => $now + 300,
+            'video' => [
+                'room' => $room,
+                'roomAdmin' => true,
             ],
         ];
 

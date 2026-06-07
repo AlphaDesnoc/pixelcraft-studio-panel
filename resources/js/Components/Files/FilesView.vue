@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { router } from "@inertiajs/vue3";
 import { ChevronRight, FolderPlus, Home, Upload } from "lucide-vue-next";
 import { Button } from "@/Components/ui/button";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import FileNodeCard from "./FileNodeCard.vue";
 import NodeFormDialog from "./NodeFormDialog.vue";
 import MoveDialog from "./MoveDialog.vue";
@@ -74,12 +75,18 @@ function openMove(node) {
   moveOpen.value = true;
 }
 
-function deleteNode(node) {
-  const label =
+async function deleteNode(node) {
+  const message =
     node.type === "folder"
-      ? "Supprimer ce dossier et tout son contenu ?"
-      : "Supprimer ce fichier ?";
-  if (!confirm(label)) return;
+      ? "Ce dossier et tout son contenu seront définitivement supprimés."
+      : "Ce fichier sera définitivement supprimé.";
+  if (
+    !(await confirmDialog({
+      title: node.type === "folder" ? "Supprimer le dossier" : "Supprimer le fichier",
+      message,
+    }))
+  )
+    return;
   router.delete(
     route("projects.files.destroy", [props.projectSlug, node.id]),
     { preserveScroll: true, preserveState: true, only: ["fileNodes"] },
