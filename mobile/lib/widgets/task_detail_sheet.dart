@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,8 +6,6 @@ import '../api/panel_api_extensions.dart';
 import '../models/workspace.dart';
 import '../services/auth_session.dart';
 import '../utils/format.dart';
-import 'chat_bubble.dart';
-import 'media_preview_dialog.dart';
 
 Future<void> showTaskDetailSheet({
   required BuildContext context,
@@ -54,17 +50,10 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
   DateTime? _startDate;
   late Set<int> _selectedTagIds;
   late KanbanTask _task;
-  String? _recurrenceRule;
-  final _estimatedController = TextEditingController();
-  final _loggedController = TextEditingController();
   bool _saving = false;
   final _commentController = TextEditingController();
   final _checklistNameController = TextEditingController();
   final _checklistItemController = TextEditingController();
-  late Set<int> _selectedDependencyIds;
-  bool _timerRunning = false;
-  String? _timerStartedAt;
-  int? _selectedTemplateId;
 
   bool get _canWrite => widget.workspace.canWrite('kanban');
   String get _slug => widget.workspace.project.slug;
@@ -80,160 +69,6 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     _dueDate = _parseDate(_task.dueDate);
     _startDate = _parseDate(_task.startDate);
     _selectedTagIds = _task.tags.map((t) => t.id).toSet();
-    _recurrenceRule = _task.recurrenceRule;
-    _estimatedController.text = _task.estimatedMinutes?.toString() ?? '';
-    _loggedController.text = _task.loggedMinutes?.toString() ?? '';
-    _selectedDependencyIds = _task.dependencyIds.toSet();
-    unawaited(_loadTimerStatus());
-  }
-
-  Future<void> _loadTimerStatus() async {
-    try {
-      final status = await context.read<AuthSession>().api.fetchTaskTimerStatus(
-            projectSlug: _slug,
-            taskId: _task.id,
-          );
-      if (!mounted) return;
-      setState(() {
-        _timerRunning = status['running'] as bool? ?? false;
-        final entry = status['entry'];
-        _timerStartedAt = entry is Map ? entry['started_at'] as String? : null;
-        final logged = status['logged_minutes'];
-        if (logged is int) {
-          _loggedController.text = logged.toString();
-        }
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _toggleTimer() async {
-    final api = context.read<AuthSession>().api;
-    _task = _timerRunning
-        ? await api.stopTaskTimer(projectSlug: _slug, taskId: _task.id)
-        : await api.startTaskTimer(projectSlug: _slug, taskId: _task.id);
-    await _loadTimerStatus();
-    await widget.onChanged();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _snooze(String duration) async {
-    _task = await context.read<AuthSession>().api.snoozeTask(
-          projectSlug: _slug,
-          taskId: _task.id,
-          duration: duration,
-        );
-    await widget.onChanged();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _pickReminder() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2100),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: const TimeOfDay(hour: 9, minute: 0),
-    );
-    if (time == null || !mounted) return;
-    final remindAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    await context.read<AuthSession>().api.createTaskReminder(
-          projectSlug: _slug,
-          taskId: _task.id,
-          remindAt: remindAt,
-        );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rappel programmé')),
-      );
-    }
-  }
-
-  Future<void> _saveDependencies() async {
-    if (!_canWrite) return;
-    _task = await context.read<AuthSession>().api.updateTaskDependencies(
-          projectSlug: _slug,
-          taskId: _task.id,
-          dependencyIds: _selectedDependencyIds.toList(),
-        );
-    setState(() {});
-    await widget.onChanged();
-  }
-
-  Future<void> _applyTemplate() async {
-    if (_selectedTemplateId == null) return;
-    _task = await context.read<AuthSession>().api.applyTaskTemplate(
-          projectSlug: _slug,
-          taskId: _task.id,
-          templateId: _selectedTemplateId!,
-        );
-    _titleController.text = _task.title;
-    _descriptionController.text = _task.description ?? '';
-    _priority = _task.priority;
-    setState(() {});
-    await widget.onChanged();
-  }
-
-  Future<void> _editDependencies() async {
-    final options = _allProjectTasks.where((t) => t.id != _task.id).toList();
-    final selected = Set<int>.from(_selectedDependencyIds);
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Dépendances', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 12),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 320),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: options.map((task) {
-                          final checked = selected.contains(task.id);
-                          return CheckboxListTile(
-                            value: checked,
-                            title: Text(task.title),
-                            onChanged: (value) {
-                              setModalState(() {
-                                if (value == true) {
-                                  selected.add(task.id);
-                                } else {
-                                  selected.remove(task.id);
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    FilledButton(
-                      onPressed: () async {
-                        setState(() => _selectedDependencyIds = selected);
-                        Navigator.pop(context);
-                        await _saveDependencies();
-                      },
-                      child: const Text('Enregistrer'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
   }
 
   @override
@@ -243,30 +78,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     _commentController.dispose();
     _checklistNameController.dispose();
     _checklistItemController.dispose();
-    _estimatedController.dispose();
-    _loggedController.dispose();
     super.dispose();
-  }
-
-  int? _parseMinutes(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return null;
-    return int.tryParse(trimmed);
-  }
-
-  List<KanbanTask> get _allProjectTasks {
-    final tasks = <KanbanTask>[];
-    for (final list in widget.workspace.lists) {
-      tasks.addAll(list.tasks);
-    }
-    return tasks;
-  }
-
-  String _dependencyLabel(int taskId) {
-    for (final task in _allProjectTasks) {
-      if (task.id == taskId) return task.title;
-    }
-    return 'Tâche #$taskId';
   }
 
   DateTime? _parseDate(String? iso) {
@@ -294,9 +106,6 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
           'assignee_id': _assigneeId,
           'due_date': _formatDate(_dueDate),
           'start_date': _formatDate(_startDate),
-          'recurrence_rule': _recurrenceRule,
-          'estimated_minutes': _parseMinutes(_estimatedController.text),
-          'logged_minutes': _parseMinutes(_loggedController.text),
         },
       );
       await api.syncTaskTags(
@@ -339,7 +148,28 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       body: body,
     );
     _commentController.clear();
-    setState(() => _task = _task.copyWith(comments: [..._task.comments, comment]));
+    setState(() => _task = KanbanTask(
+      id: _task.id,
+      listId: _task.listId,
+      title: _task.title,
+      description: _task.description,
+      priority: _task.priority,
+      status: _task.status,
+      dueDate: _task.dueDate,
+      startDate: _task.startDate,
+      isOverdue: _task.isOverdue,
+      assigneeId: _task.assigneeId,
+      position: _task.position,
+      progress: _task.progress,
+      archivedAt: _task.archivedAt,
+      dependencyIds: _task.dependencyIds,
+      isBlocked: _task.isBlocked,
+      tags: _task.tags,
+      checklists: _task.checklists,
+      comments: [..._task.comments, comment],
+      attachments: _task.attachments,
+      checklistProgress: _task.checklistProgress,
+    ));
     await widget.onChanged();
   }
 
@@ -806,152 +636,6 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String?>(
-                      value: _recurrenceRule,
-                      decoration: const InputDecoration(labelText: 'Récurrence'),
-                      items: const [
-                        DropdownMenuItem<String?>(value: null, child: Text('Aucune')),
-                        DropdownMenuItem(value: 'weekly', child: Text('Hebdomadaire')),
-                        DropdownMenuItem(value: 'monthly', child: Text('Mensuelle')),
-                      ],
-                      onChanged: !_canWrite
-                          ? null
-                          : (value) async {
-                              setState(() => _recurrenceRule = value);
-                              await _saveFields();
-                            },
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: !_canWrite ? null : _toggleTimer,
-                            icon: Icon(_timerRunning ? Icons.stop_circle_outlined : Icons.timer_outlined),
-                            label: Text(_timerRunning ? 'Arrêter chrono' : 'Démarrer chrono'),
-                          ),
-                        ),
-                        if (_timerRunning && _timerStartedAt != null)
-                          Expanded(
-                            child: Text(
-                              'Depuis $_timerStartedAt',
-                              style: Theme.of(context).textTheme.labelSmall,
-                              textAlign: TextAlign.end,
-                            ),
-                          ),
-                      ],
-                    ),
-                    if (_canWrite) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          OutlinedButton(
-                            onPressed: () => _snooze('1d'),
-                            child: const Text('Reporter 1j'),
-                          ),
-                          OutlinedButton(
-                            onPressed: () => _snooze('1w'),
-                            child: const Text('Reporter 1 sem.'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _pickReminder,
-                            icon: const Icon(Icons.notifications_outlined, size: 18),
-                            label: const Text('Rappel'),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (widget.workspace.taskTemplates.isNotEmpty && _canWrite) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<int?>(
-                              value: _selectedTemplateId,
-                              decoration: const InputDecoration(labelText: 'Modèle de tâche'),
-                              items: [
-                                const DropdownMenuItem<int?>(value: null, child: Text('Choisir…')),
-                                ...widget.workspace.taskTemplates.map(
-                                  (t) => DropdownMenuItem<int?>(
-                                    value: t['id'] as int?,
-                                    child: Text(t['name'] as String? ?? t['title'] as String? ?? 'Modèle'),
-                                  ),
-                                ),
-                              ],
-                              onChanged: (value) => setState(() => _selectedTemplateId = value),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Appliquer le modèle',
-                            onPressed: _selectedTemplateId == null ? null : _applyTemplate,
-                            icon: const Icon(Icons.layers_outlined),
-                          ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _estimatedController,
-                            readOnly: !_canWrite,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Temps estimé (min)'),
-                            onSubmitted: (_) => _saveFields(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: _loggedController,
-                            readOnly: !_canWrite,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Temps loggé (min)'),
-                            onSubmitted: (_) => _saveFields(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text('Dépendances', style: Theme.of(context).textTheme.titleSmall),
-                        ),
-                        if (_canWrite)
-                          TextButton(
-                            onPressed: _editDependencies,
-                            child: Text(
-                              _selectedDependencyIds.isEmpty ? 'Ajouter' : 'Modifier',
-                            ),
-                          ),
-                      ],
-                    ),
-                    if (_task.isBlocked)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          'Bloquée — dépendances non terminées',
-                          style: TextStyle(color: Theme.of(context).colorScheme.error),
-                        ),
-                      ),
-                    if (_selectedDependencyIds.isEmpty)
-                      Text(
-                        'Aucune dépendance',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      )
-                    else
-                      ..._selectedDependencyIds.map(
-                        (id) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          leading: const Icon(Icons.link, size: 18),
-                          title: Text(_dependencyLabel(id)),
-                        ),
-                      ),
                     if (_canWrite) ...[
                       const SizedBox(height: 12),
                       FilledButton(onPressed: _saveFields, child: const Text('Enregistrer')),
@@ -1103,46 +787,12 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                     const SizedBox(height: 20),
                     Text('Pièces jointes', style: Theme.of(context).textTheme.titleSmall),
                     ..._task.attachments.map(
-                      (a) {
-                        final url = chatAttachmentUrl(a.url);
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: chatIsImageAttachment(a)
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Image.network(
-                                    url,
-                                    width: 40,
-                                    height: 40,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        const Icon(Icons.image),
-                                  ),
-                                )
-                              : Icon(
-                                  MediaPreviewDialog.isPreviewable(a.mimeType, a.originalName)
-                                      ? Icons.play_circle_outline
-                                      : Icons.attach_file,
-                                ),
-                          title: Text(a.originalName),
-                          subtitle: Text('${a.size} o'),
-                          onTap: url.isEmpty ||
-                                  !MediaPreviewDialog.isPreviewable(a.mimeType, a.originalName)
-                              ? null
-                              : () async {
-                                  final token =
-                                      await context.read<AuthSession>().api.client.readToken();
-                                  if (!context.mounted) return;
-                                  await MediaPreviewDialog.show(
-                                    context,
-                                    url: url,
-                                    name: a.originalName,
-                                    mimeType: a.mimeType,
-                                    token: token,
-                                  );
-                                },
-                        );
-                      },
+                      (a) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.attach_file),
+                        title: Text(a.originalName),
+                        subtitle: Text('${a.size} o'),
+                      ),
                     ),
                     if (_canWrite)
                       OutlinedButton.icon(

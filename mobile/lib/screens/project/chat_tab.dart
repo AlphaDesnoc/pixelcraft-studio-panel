@@ -22,12 +22,10 @@ class ChatTab extends StatefulWidget {
     super.key,
     required this.workspace,
     required this.onChanged,
-    this.onSpaceChanged,
   });
 
   final ProjectWorkspace workspace;
   final Future<void> Function() onChanged;
-  final Future<void> Function(String? spaceKey)? onSpaceChanged;
 
   @override
   State<ChatTab> createState() => _ChatTabState();
@@ -334,64 +332,10 @@ class _ChatTabState extends State<ChatTab> {
     await _refresh();
   }
 
-  List<({String key, String label, String? color})> get _channels {
-    final channels = <({String key, String label, String? color})>[
-      for (final space in widget.workspace.spaces)
-        (key: space.key, label: space.label, color: null),
-      for (final rank in widget.workspace.ranks)
-        (key: rank.key, label: rank.label, color: rank.color),
-    ];
-    return channels;
-  }
-
-  Future<void> _selectChannel(String key) async {
-    if (key == widget.workspace.activeSpace) return;
-    await widget.onSpaceChanged?.call(key);
-  }
-
-  Color? _parseChannelColor(String? hex) {
-    if (hex == null || hex.isEmpty) return null;
-    final value = hex.replaceFirst('#', '');
-    if (value.length == 6) {
-      return Color(int.parse('FF$value', radix: 16));
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final channels = _channels;
-
     return Column(
       children: [
-        if (channels.length > 1)
-          Material(
-            elevation: 1,
-            child: SizedBox(
-              height: 48,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                itemCount: channels.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 6),
-                itemBuilder: (context, index) {
-                  final channel = channels[index];
-                  final selected = channel.key == widget.workspace.activeSpace;
-                  final color = _parseChannelColor(channel.color);
-                  return FilterChip(
-                    label: Text(channel.label),
-                    selected: selected,
-                    avatar: Icon(
-                      Icons.tag,
-                      size: 16,
-                      color: color ?? Theme.of(context).colorScheme.primary,
-                    ),
-                    onSelected: (_) => _selectChannel(channel.key),
-                  );
-                },
-              ),
-            ),
-          ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { cellKey, indexToColLetters, normalizeRange } from "./cells.js";
-import { evalCell, formatValue } from "./formula.js";
+import { evalCell, formatCell } from "./formula.js";
 
 const props = defineProps({
   rows: { type: Number, required: true },
@@ -9,6 +9,8 @@ const props = defineProps({
   cells: { type: Object, required: true },
   anchor: { type: Object, default: null },
   focus: { type: Object, default: null },
+  hiddenRows: { type: Array, default: () => [] },
+  conditionalRules: { type: Array, default: () => [] },
 });
 
 const emits = defineEmits([
@@ -17,6 +19,8 @@ const emits = defineEmits([
   "cell-change",
   "request-clear",
   "navigate",
+  "fill",
+  "header-menu",
 ]);
 
 const COL_WIDTH = 100;
@@ -29,6 +33,33 @@ const editorValue = ref("");
 const editorRef = ref(null);
 const gridRef = ref(null);
 const dragging = ref(false);
+const filling = ref(false);
+const fillTarget = ref(null);
+const menu = ref(null);
+
+const hiddenSet = computed(() => new Set(props.hiddenRows ?? []));
+
+// Position visuelle d'une ligne (en sautant les lignes masquées au-dessus).
+function visibleBefore(dataRow) {
+  let count = 0;
+  for (let r = 0; r < dataRow; r++) if (!hiddenSet.value.has(r)) count++;
+  return count;
+}
+
+function visibleInRange(r1, r2) {
+  let count = 0;
+  for (let r = r1; r <= r2; r++) if (!hiddenSet.value.has(r)) count++;
+  return count;
+}
+
+function nextVisibleRow(from, dir) {
+  let r = from;
+  for (;;) {
+    r += dir;
+    if (r < 0 || r > props.rows - 1) return from;
+    if (!hiddenSet.value.has(r)) return r;
+  }
+}
 
 function cellAt(col, row) {
   return props.cells[cellKey(col, row)] ?? null;
@@ -39,17 +70,58 @@ function evaluatedDisplay(col, row) {
   if (!cell) return "";
   if (cell.v == null || cell.v === "") return "";
   const result = evalCell(cell.v, props.cells, cellKey(col, row));
-  return formatValue(result);
+  return formatCell(result, cell.fmt);
+}
+
+function matchRule(val, rule) {
+  const num = typeof val === "number" ? val : parseFloat(String(val).replace(",", "."));
+  const rnum = parseFloat(String(rule.value).replace(",", "."));
+  const isEmpty = val === "" || val == null;
+  switch (rule.op) {
+    case "gt":
+      return !isNaN(num) && !isNaN(rnum) && num > rnum;
+    case "lt":
+      return !isNaN(num) && !isNaN(rnum) && num < rnum;
+    case "eq":
+      return String(val) === String(rule.value) || (!isNaN(num) && num === rnum);
+    case "neq":
+      return !(String(val) === String(rule.value) || (!isNaN(num) && num === rnum));
+    case "contains":
+      return String(val).toLowerCase().includes(String(rule.value).toLowerCase());
+    case "empty":
+      return isEmpty;
+    case "notempty":
+      return !isEmpty;
+  }
+  return false;
+}
+
+function matchedRule(col, row, cell) {
+  const rules = props.conditionalRules;
+  if (!rules || !rules.length) return null;
+  const raw = cell?.v;
+  const val =
+    raw == null || raw === "" ? "" : evalCell(raw, props.cells, cellKey(col, row));
+  for (const rule of rules) {
+    if (matchRule(val, rule)) return rule;
+  }
+  return null;
 }
 
 function cellStyle(col, row) {
   const cell = cellAt(col, row);
-  if (!cell) return {};
   const style = {};
-  if (cell.bg) style.backgroundColor = cell.bg;
-  if (cell.fg) style.color = cell.fg;
-  if (cell.b) style.fontWeight = "600";
-  if (cell.i) style.fontStyle = "italic";
+  if (cell) {
+    if (cell.bg) style.backgroundColor = cell.bg;
+    if (cell.fg) style.color = cell.fg;
+    if (cell.b) style.fontWeight = "600";
+    if (cell.i) style.fontStyle = "italic";
+  }
+  const rule = matchedRule(col, row, cell);
+  if (rule) {
+    if (rule.bg) style.backgroundColor = rule.bg;
+    if (rule.fg) style.color = rule.fg;
+  }
   return style;
 }
 
@@ -70,9 +142,9 @@ function selectionRect() {
   const r = normalizeRange(props.anchor, target);
   return {
     left: r.c1 * COL_WIDTH,
-    top: r.r1 * ROW_HEIGHT,
+    top: visibleBefore(r.r1) * ROW_HEIGHT,
     width: (r.c2 - r.c1 + 1) * COL_WIDTH,
-    height: (r.r2 - r.r1 + 1) * ROW_HEIGHT,
+    height: visibleInRange(r.r1, r.r2) * ROW_HEIGHT,
   };
 }
 
@@ -96,12 +168,79 @@ function onCellPointerDown(e, col, row) {
 }
 
 function onCellPointerEnter(col, row) {
+  if (filling.value) {
+    fillTarget.value = { col, row };
+    return;
+  }
   if (!dragging.value) return;
   emits("update:focus", { col, row });
 }
 
 function onPointerUp() {
   dragging.value = false;
+}
+
+// ---- Poignée de recopie ----
+function onFillHandleDown(e) {
+  if (e.button !== 0) return;
+  e.stopPropagation();
+  if (editing.value) commitEditor();
+  filling.value = true;
+  fillTarget.value = props.focus ?? props.anchor;
+  window.addEventListener("pointerup", onFillUp, { once: true });
+}
+
+function onFillUp() {
+  if (filling.value && fillTarget.value) {
+    emits("fill", { col: fillTarget.value.col, row: fillTarget.value.row });
+  }
+  filling.value = false;
+  fillTarget.value = null;
+}
+
+// ---- Sélection ligne / colonne entière + menu contextuel ----
+function selectRow(row, shift) {
+  if (editing.value) commitEditor();
+  if (shift && props.anchor) {
+    emits("update:focus", { col: props.cols - 1, row });
+    return;
+  }
+  emits("update:anchor", { col: 0, row });
+  emits("update:focus", { col: props.cols - 1, row });
+}
+
+function selectCol(col, shift) {
+  if (editing.value) commitEditor();
+  if (shift && props.anchor) {
+    emits("update:focus", { col, row: props.rows - 1 });
+    return;
+  }
+  emits("update:anchor", { col, row: 0 });
+  emits("update:focus", { col, row: props.rows - 1 });
+}
+
+function openHeaderMenu(e, kind, index) {
+  e.preventDefault();
+  if (kind === "row") selectRow(index, false);
+  else selectCol(index, false);
+  menu.value = { x: e.clientX, y: e.clientY, kind, index };
+  window.addEventListener("pointerdown", closeMenuOnOutside, true);
+}
+
+function closeMenu() {
+  menu.value = null;
+  window.removeEventListener("pointerdown", closeMenuOnOutside, true);
+}
+
+function closeMenuOnOutside(e) {
+  if (e.target?.closest?.("[data-ss-menu]")) return;
+  closeMenu();
+}
+
+function menuAction(action) {
+  if (!menu.value) return;
+  emits("header-menu", { kind: menu.value.kind, action, index: menu.value.index });
+  closeMenu();
 }
 
 function onCellDblClick(col, row) {
@@ -142,7 +281,10 @@ function navigateBy(dCol, dRow) {
   const a = props.anchor;
   if (!a) return;
   const nc = Math.max(0, Math.min(props.cols - 1, a.col + dCol));
-  const nr = Math.max(0, Math.min(props.rows - 1, a.row + dRow));
+  let nr = Math.max(0, Math.min(props.rows - 1, a.row + dRow));
+  if (dRow !== 0 && hiddenSet.value.has(nr)) {
+    nr = nextVisibleRow(a.row, dRow > 0 ? 1 : -1);
+  }
   emits("update:anchor", { col: nc, row: nr });
   emits("update:focus", { col: nc, row: nr });
   emits("navigate", { col: nc, row: nr });
@@ -211,15 +353,34 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeyDown);
   window.removeEventListener("pointerup", onPointerUp);
+  window.removeEventListener("pointerup", onFillUp);
+  window.removeEventListener("pointerdown", closeMenuOnOutside, true);
 });
 
 const totalWidth = computed(() => ROW_HEADER_WIDTH + props.cols * COL_WIDTH);
-const totalHeight = computed(() => HEADER_HEIGHT + props.rows * ROW_HEIGHT);
+const visibleRowCount = computed(() => props.rows - hiddenSet.value.size);
+const totalHeight = computed(() => HEADER_HEIGHT + visibleRowCount.value * ROW_HEIGHT);
 
 const colArray = computed(() => Array.from({ length: props.cols }, (_, i) => i));
 const rowArray = computed(() => Array.from({ length: props.rows }, (_, i) => i));
 
 const selRect = computed(() => selectionRect());
+
+const fillRect = computed(() => {
+  if (!filling.value || !fillTarget.value || !props.anchor) return null;
+  const src = normalizeRange(props.anchor, props.focus ?? props.anchor);
+  const t = fillTarget.value;
+  const c1 = Math.min(src.c1, t.col);
+  const c2 = Math.max(src.c2, t.col);
+  const r1 = Math.min(src.r1, t.row);
+  const r2 = Math.max(src.r2, t.row);
+  return {
+    left: c1 * COL_WIDTH,
+    top: visibleBefore(r1) * ROW_HEIGHT,
+    width: (c2 - c1 + 1) * COL_WIDTH,
+    height: visibleInRange(r1, r2) * ROW_HEIGHT,
+  };
+});
 </script>
 
 <template>
@@ -246,7 +407,7 @@ const selRect = computed(() => selectionRect());
         <div
           v-for="c in colArray"
           :key="'h-' + c"
-          class="flex h-full items-center justify-center border-b border-r border-border text-[11px] font-medium text-muted-foreground"
+          class="flex h-full cursor-pointer items-center justify-center border-b border-r border-border text-[11px] font-medium text-muted-foreground hover:bg-muted/70"
           :class="
             anchor &&
             ((focus ?? anchor).col >= Math.min(anchor.col, (focus ?? anchor).col) &&
@@ -256,6 +417,8 @@ const selRect = computed(() => selectionRect());
               : ''
           "
           :style="{ width: COL_WIDTH + 'px', minWidth: COL_WIDTH + 'px' }"
+          @pointerdown="(e) => e.button === 0 && selectCol(c, e.shiftKey)"
+          @contextmenu="(e) => openHeaderMenu(e, 'col', c)"
         >
           {{ indexToColLetters(c) }}
         </div>
@@ -263,12 +426,13 @@ const selRect = computed(() => selectionRect());
 
       <div
         v-for="r in rowArray"
+        v-show="!hiddenSet.has(r)"
         :key="'r-' + r"
         class="flex"
         :style="{ height: ROW_HEIGHT + 'px' }"
       >
         <div
-          class="sticky left-0 z-20 flex items-center justify-center border-b border-r border-border bg-muted/40 text-[11px] font-medium text-muted-foreground"
+          class="sticky left-0 z-20 flex cursor-pointer items-center justify-center border-b border-r border-border bg-muted/40 text-[11px] font-medium text-muted-foreground hover:bg-muted/70"
           :class="
             anchor &&
             r >= Math.min(anchor.row, (focus ?? anchor).row) &&
@@ -281,6 +445,8 @@ const selRect = computed(() => selectionRect());
             minWidth: ROW_HEADER_WIDTH + 'px',
             height: ROW_HEIGHT + 'px',
           }"
+          @pointerdown="(e) => e.button === 0 && selectRow(r, e.shiftKey)"
+          @contextmenu="(e) => openHeaderMenu(e, 'row', r)"
         >
           {{ r + 1 }}
         </div>
@@ -314,11 +480,33 @@ const selRect = computed(() => selectionRect());
       />
 
       <div
+        v-if="fillRect"
+        class="pointer-events-none absolute border-2 border-dashed border-primary/60"
+        :style="{
+          left: ROW_HEADER_WIDTH + fillRect.left + 'px',
+          top: HEADER_HEIGHT + fillRect.top + 'px',
+          width: fillRect.width + 'px',
+          height: fillRect.height + 'px',
+        }"
+      />
+
+      <div
+        v-if="selRect && !editing"
+        class="absolute z-40 h-2 w-2 cursor-crosshair rounded-sm border border-background bg-primary"
+        :style="{
+          left: ROW_HEADER_WIDTH + selRect.left + selRect.width - 4 + 'px',
+          top: HEADER_HEIGHT + selRect.top + selRect.height - 4 + 'px',
+        }"
+        title="Recopier (glisser)"
+        @pointerdown="onFillHandleDown"
+      />
+
+      <div
         v-if="editing"
         class="absolute z-50"
         :style="{
           left: ROW_HEADER_WIDTH + editing.col * COL_WIDTH + 'px',
-          top: HEADER_HEIGHT + editing.row * ROW_HEIGHT + 'px',
+          top: HEADER_HEIGHT + visibleBefore(editing.row) * ROW_HEIGHT + 'px',
           width: COL_WIDTH + 'px',
           height: ROW_HEIGHT + 'px',
         }"
@@ -332,4 +520,60 @@ const selRect = computed(() => selectionRect());
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="menu"
+      data-ss-menu
+      class="fixed z-[100] min-w-[200px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-foreground shadow-lg"
+      :style="{ left: menu.x + 'px', top: menu.y + 'px' }"
+    >
+      <template v-if="menu.kind === 'col'">
+        <button
+          type="button"
+          class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+          @click="menuAction('sort-asc')"
+        >
+          Trier la feuille A → Z
+        </button>
+        <button
+          type="button"
+          class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+          @click="menuAction('sort-desc')"
+        >
+          Trier la feuille Z → A
+        </button>
+        <button
+          type="button"
+          class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+          @click="menuAction('filter')"
+        >
+          Filtrer cette colonne…
+        </button>
+        <div class="my-1 h-px bg-border" />
+      </template>
+      <button
+        type="button"
+        class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+        @click="menuAction('insert-before')"
+      >
+        {{ menu.kind === "row" ? "Insérer une ligne au-dessus" : "Insérer une colonne à gauche" }}
+      </button>
+      <button
+        type="button"
+        class="block w-full px-3 py-1.5 text-left hover:bg-muted"
+        @click="menuAction('insert-after')"
+      >
+        {{ menu.kind === "row" ? "Insérer une ligne en dessous" : "Insérer une colonne à droite" }}
+      </button>
+      <div class="my-1 h-px bg-border" />
+      <button
+        type="button"
+        class="block w-full px-3 py-1.5 text-left text-rose-400 hover:bg-rose-500/10"
+        @click="menuAction('delete')"
+      >
+        {{ menu.kind === "row" ? "Supprimer la ligne" : "Supprimer la colonne" }}
+      </button>
+    </div>
+  </Teleport>
 </template>

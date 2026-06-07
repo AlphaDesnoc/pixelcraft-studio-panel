@@ -5,14 +5,10 @@ import 'package:provider/provider.dart';
 // Extensions loaded app-wide for PanelApi.
 // ignore: unused_import
 import 'api/panel_api_extensions.dart';
-import 'app_navigator.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/app_update_service.dart';
 import 'services/auth_session.dart';
-import 'services/focus_mode_service.dart';
-import 'services/local_notification_service.dart';
-import 'services/notification_router.dart';
 import 'services/realtime_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/system_ui.dart';
@@ -21,14 +17,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr_FR');
   await configureSystemUi();
-  await LocalNotificationService.initialize(
-    onNotificationTap: (payload) {
-      final context = rootNavigatorKey.currentContext;
-      if (context != null) {
-        NotificationRouter.openPayload(context, payload);
-      }
-    },
-  );
   runApp(const PixelCraftPanelApp());
 }
 
@@ -41,7 +29,6 @@ class PixelCraftPanelApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthSession()..bootstrap()),
         ChangeNotifierProvider(create: (_) => RealtimeService()),
-        ChangeNotifierProvider(create: (_) => FocusModeService()..load()),
       ],
       child: const _AppRoot(),
     );
@@ -95,7 +82,6 @@ class _AppRootState extends State<_AppRoot> {
     final themePreference = session.user?.themePreference ?? 'dark';
 
     return MaterialApp(
-      navigatorKey: rootNavigatorKey,
       title: 'PixelCraft Panel',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.themeFor(themePreference, platformBrightness),

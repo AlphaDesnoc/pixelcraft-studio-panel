@@ -19,7 +19,6 @@ use Illuminate\Support\Facades\Storage;
     'status',
     'start_date',
     'owner_id',
-    'capacity_threshold',
 ])]
 class Project extends Model
 {
@@ -106,6 +105,11 @@ class Project extends Model
     public function sheets(): HasMany
     {
         return $this->hasMany(Sheet::class)->orderBy('position');
+    }
+
+    public function voiceChannels(): HasMany
+    {
+        return $this->hasMany(VoiceChannel::class)->orderBy('position');
     }
 
     public function fileNodes(): HasMany

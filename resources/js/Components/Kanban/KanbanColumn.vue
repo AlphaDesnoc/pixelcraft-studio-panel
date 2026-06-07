@@ -10,8 +10,6 @@ const props = defineProps({
   swimlaneMode: { type: Boolean, default: false },
   readonlyColumn: { type: Boolean, default: false },
   disableTasksDrag: { type: Boolean, default: false },
-  bulkMode: { type: Boolean, default: false },
-  selectedTaskIds: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits([
@@ -19,7 +17,6 @@ const emit = defineEmits([
   "addCard",
   "openCard",
   "tasksReorder",
-  "toggleBulkSelect",
 ]);
 
 const tasks = computed({
@@ -158,10 +155,7 @@ function onSwimlaneDragEnd(groupKey, laneTasks) {
             v-for="task in group.tasks"
             :key="task.id"
             :task="task"
-            :bulk-mode="bulkMode"
-            :selected="selectedTaskIds.includes(task.id)"
             @click="emit('openCard', task)"
-            @toggle-select="emit('toggleBulkSelect', $event)"
           />
         </VueDraggable>
       </div>
@@ -183,10 +177,7 @@ function onSwimlaneDragEnd(groupKey, laneTasks) {
         v-for="task in tasks"
         :key="task.id"
         :task="task"
-        :bulk-mode="bulkMode"
-        :selected="selectedTaskIds.includes(task.id)"
         @click="emit('openCard', task)"
-        @toggle-select="emit('toggleBulkSelect', $event)"
       />
     </VueDraggable>
   </div>

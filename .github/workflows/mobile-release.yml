@@ -87,6 +87,9 @@ jobs:
           test -s android/app/release.keystore
           test -f android/key.properties
 
+          test -s android/app/release.keystore
+          test -f android/key.properties
+
       - name: Analyze
         run: flutter analyze
 

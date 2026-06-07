@@ -136,7 +136,7 @@ const userInitials = computed(() => {
 
     <div class="border-t border-border/60 px-3 py-3">
       <div class="flex items-center gap-2.5 px-1 py-1.5">
-        <Avatar :fallback="userInitials" size="sm" />
+        <Avatar :src="user?.avatar_url ?? ''" :fallback="userInitials" size="sm" />
         <div class="min-w-0 flex-1">
           <p class="truncate text-xs font-semibold leading-tight">
             {{ user?.name }}

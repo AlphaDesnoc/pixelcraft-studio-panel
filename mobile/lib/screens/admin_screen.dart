@@ -16,39 +16,11 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-class _PortfolioStatCard extends StatelessWidget {
-  const _PortfolioStatCard({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 150,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-              const SizedBox(height: 4),
-              Text(value, style: Theme.of(context).textTheme.titleLarge),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _AdminScreenState extends State<AdminScreen> {
   int _tab = 0;
   List<AdminUser> _users = [];
   List<AdminProject> _projects = [];
   List<Map<String, dynamic>> _auditLogs = [];
-  AdminPortfolioData? _portfolio;
   bool _loading = true;
 
   @override
@@ -64,13 +36,11 @@ class _AdminScreenState extends State<AdminScreen> {
       final users = await api.fetchAdminUsers();
       final projects = await api.fetchAdminProjects();
       final audit = await api.fetchAdminAudit();
-      final portfolio = await api.fetchAdminPortfolio();
       if (!mounted) return;
       setState(() {
         _users = users;
         _projects = projects;
         _auditLogs = audit;
-        _portfolio = portfolio;
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -255,7 +225,7 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('Administration'),
         actions: [
-          if (_tab == 3)
+          if (_tab == 2)
             IconButton(onPressed: _exportAudit, icon: const Icon(Icons.download_outlined)),
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
         ],
@@ -270,8 +240,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     segments: const [
                       ButtonSegment(value: 0, label: Text('Utilisateurs')),
                       ButtonSegment(value: 1, label: Text('Projets')),
-                      ButtonSegment(value: 2, label: Text('Portfolio')),
-                      ButtonSegment(value: 3, label: Text('Audit')),
+                      ButtonSegment(value: 2, label: Text('Audit')),
                     ],
                     selected: {_tab},
                     onSelectionChanged: (value) => setState(() => _tab = value.first),
@@ -281,7 +250,6 @@ class _AdminScreenState extends State<AdminScreen> {
                   child: switch (_tab) {
                     0 => _usersList(),
                     1 => _projectsList(),
-                    2 => _portfolioView(),
                     _ => _auditList(),
                   },
                 ),
@@ -369,71 +337,6 @@ class _AdminScreenState extends State<AdminScreen> {
             onTap: () => _showProjectForm(project: project),
           );
         },
-      ),
-    );
-  }
-
-  Widget _portfolioView() {
-    final data = _portfolio;
-    if (data == null) {
-      return const Center(child: Text('Portfolio indisponible'));
-    }
-
-    final summary = data.summary;
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _PortfolioStatCard(label: 'Projets', value: '${summary['projects'] ?? 0}'),
-              _PortfolioStatCard(label: 'Tâches ouvertes', value: '${summary['tasks_open'] ?? 0}'),
-              _PortfolioStatCard(label: 'En retard', value: '${summary['tasks_overdue'] ?? 0}'),
-              _PortfolioStatCard(label: 'Bugs ouverts', value: '${summary['bugs_open'] ?? 0}'),
-              _PortfolioStatCard(label: 'SLA dépassés', value: '${summary['sla_breached'] ?? 0}'),
-            ],
-          ),
-          if (data.capacityAlerts.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text('Alertes capacité', style: Theme.of(context).textTheme.titleSmall),
-            ...data.capacityAlerts.map((alert) {
-              final project = alert['project'];
-              return Card(
-                margin: const EdgeInsets.only(top: 8),
-                child: ListTile(
-                  title: Text('${alert['user_name'] ?? ''} · ${alert['rank_name'] ?? ''}'),
-                  subtitle: Text(project is Map ? project['name']?.toString() ?? '' : ''),
-                  trailing: Text('${alert['open_tasks'] ?? 0} tâches'),
-                ),
-              );
-            }),
-          ],
-          const SizedBox(height: 16),
-          Text('Projets', style: Theme.of(context).textTheme.titleSmall),
-          ...data.projects.map((project) {
-            return Card(
-              margin: const EdgeInsets.only(top: 8),
-              child: ListTile(
-                title: Text(project['name']?.toString() ?? ''),
-                subtitle: Text(
-                  '${project['members_count'] ?? 0} membres · '
-                  '${project['tasks_open'] ?? 0} tâches · '
-                  '${project['bugs_open'] ?? 0} bugs',
-                ),
-                trailing: (project['tasks_overdue'] as int? ?? 0) > 0
-                    ? Chip(
-                        label: Text('${project['tasks_overdue']} retard'),
-                        visualDensity: VisualDensity.compact,
-                      )
-                    : null,
-              ),
-            );
-          }),
-        ],
       ),
     );
   }

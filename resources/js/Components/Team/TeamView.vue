@@ -4,18 +4,21 @@ import { Link, router, usePage } from "@inertiajs/vue3";
 import {
   ChevronDown,
   Crown,
+  Phone,
   Shield,
   Trash2,
   UserPlus,
   Users,
+  Video,
 } from "lucide-vue-next";
+import { startCall } from "@/composables/useCall.js";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Select } from "@/Components/ui/select";
 import MemberPermissionsMatrix from "@/Components/Team/MemberPermissionsMatrix.vue";
 import ProjectMemberPickerDialog from "@/Components/Team/ProjectMemberPickerDialog.vue";
-import { writeKeyFor, PERMISSION_PRESETS, permissionsForPreset } from "@/lib/projectPermissions.js";
+import { writeKeyFor } from "@/lib/projectPermissions.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -28,6 +31,11 @@ const props = defineProps({
 
 const page = usePage();
 const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+
+function callMember(member, withVideo) {
+  startCall({ id: member.id, name: member.name, avatar_url: member.avatar_url }, { withVideo });
+}
 
 const MEMBER_PERM_KEYS = Object.freeze([
   { key: "kanban", label: "Kanban" },
@@ -87,12 +95,6 @@ function savePermissions(member, permissions) {
       only: ["teamMembers", "members"],
     },
   );
-}
-
-function applyPreset(member, presetId) {
-  const permissions = permissionsForPreset(presetId);
-  if (!permissions) return;
-  savePermissions(member, permissions);
 }
 
 const pickerOpen = ref(false);
@@ -215,6 +217,7 @@ function removeMember(member) {
           <Avatar
             class="shrink-0"
             size="md"
+            :src="member.avatar_url ?? ''"
             :fallback="initials(member.name)"
           />
 
@@ -231,6 +234,28 @@ function removeMember(member) {
             <p class="mt-0.5 truncate text-xs text-muted-foreground">
               {{ member.email }}
             </p>
+          </div>
+
+          <div
+            v-if="member.id !== currentUserId"
+            class="flex shrink-0 items-center gap-1"
+          >
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
+              title="Appel audio"
+              @click="callMember(member, false)"
+            >
+              <Phone class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              title="Appel vidéo"
+              @click="callMember(member, true)"
+            >
+              <Video class="h-4 w-4" />
+            </button>
           </div>
 
           <div class="flex shrink-0 flex-col items-end gap-0.5 text-right">
@@ -296,18 +321,6 @@ function removeMember(member) {
             v-show="isPermissionsExpanded(member.id)"
             class="border-t border-border/40 px-4 pb-4 pt-3"
           >
-            <div class="mb-3 flex flex-wrap gap-2">
-              <button
-                v-for="preset in PERMISSION_PRESETS"
-                :key="preset.id"
-                type="button"
-                class="rounded-full border border-border/60 bg-background px-3 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10"
-                :title="preset.description"
-                @click="applyPreset(member, preset.id)"
-              >
-                {{ preset.label }}
-              </button>
-            </div>
             <MemberPermissionsMatrix
               :modules="MEMBER_PERM_KEYS"
               :permissions="memberPermState(member)"

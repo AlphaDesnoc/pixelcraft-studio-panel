@@ -1,9 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AuditLogController;
-use App\Http\Controllers\Admin\PortfolioController;
 use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
-use App\Http\Controllers\Admin\ProjectTemplateController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\AttachmentController;
@@ -13,7 +11,11 @@ use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\MyTasksController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\CallController;
+use App\Http\Controllers\VoiceController;
+use App\Http\Controllers\VoiceChannelController;
 use App\Http\Controllers\NotificationPreferenceController;
+use App\Http\Controllers\ProfileAvatarController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProfileTwoFactorController;
 use App\Http\Controllers\ProjectController;
@@ -39,14 +41,6 @@ use App\Http\Controllers\DirectMessageReactionController;
 use App\Http\Controllers\ProfileThemeController;
 use App\Http\Controllers\ProfileDashboardWidgetsController;
 use App\Http\Controllers\TaskTemplateController;
-use App\Http\Controllers\TaskBulkController;
-use App\Http\Controllers\TaskTimerController;
-use App\Http\Controllers\TaskReminderController;
-use App\Http\Controllers\TaskSnoozeController;
-use App\Http\Controllers\KanbanSavedViewController;
-use App\Http\Controllers\MilestoneController;
-use App\Http\Controllers\ProjectAutomationController;
-use App\Http\Controllers\TaskPresenceController;
 use App\Http\Controllers\Api\PanelSessionController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -110,32 +104,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/tasks/{task}/archive', [TaskController::class, 'archive'])->name('tasks.archive');
         Route::post('/tasks/{task}/unarchive', [TaskController::class, 'unarchive'])->name('tasks.unarchive');
         Route::post('/tasks/templates', [TaskTemplateController::class, 'store'])->name('tasks.templates.store');
-        Route::put('/tasks/templates/{template}', [TaskTemplateController::class, 'update'])->name('tasks.templates.update');
-        Route::delete('/tasks/templates/{template}', [TaskTemplateController::class, 'destroy'])->name('tasks.templates.destroy');
         Route::post('/tasks/{task}/templates/apply', [TaskTemplateController::class, 'apply'])->name('tasks.templates.apply');
-        Route::post('/tasks/bulk', [TaskBulkController::class, 'store'])->name('tasks.bulk');
-        Route::get('/tasks/{task}/timer', [TaskTimerController::class, 'status'])->name('tasks.timer.status');
-        Route::post('/tasks/{task}/timer/start', [TaskTimerController::class, 'start'])->name('tasks.timer.start');
-        Route::post('/tasks/{task}/timer/stop', [TaskTimerController::class, 'stop'])->name('tasks.timer.stop');
-        Route::post('/tasks/{task}/reminders', [TaskReminderController::class, 'store'])->name('tasks.reminders.store');
-        Route::delete('/tasks/{task}/reminders/{reminder}', [TaskReminderController::class, 'destroy'])->name('tasks.reminders.destroy');
-        Route::post('/tasks/{task}/snooze', [TaskSnoozeController::class, 'store'])->name('tasks.snooze.store');
-        Route::delete('/tasks/{task}/snooze', [TaskSnoozeController::class, 'destroy'])->name('tasks.snooze.destroy');
-        Route::get('/kanban/views', [KanbanSavedViewController::class, 'index'])->name('kanban.views.index');
-        Route::post('/kanban/views', [KanbanSavedViewController::class, 'store'])->name('kanban.views.store');
-        Route::put('/kanban/views/{view}', [KanbanSavedViewController::class, 'update'])->name('kanban.views.update');
-        Route::delete('/kanban/views/{view}', [KanbanSavedViewController::class, 'destroy'])->name('kanban.views.destroy');
-        Route::get('/milestones', [MilestoneController::class, 'index'])->name('milestones.index');
-        Route::post('/milestones', [MilestoneController::class, 'store'])->name('milestones.store');
-        Route::put('/milestones/{milestone}', [MilestoneController::class, 'update'])->name('milestones.update');
-        Route::delete('/milestones/{milestone}', [MilestoneController::class, 'destroy'])->name('milestones.destroy');
-        Route::get('/automations', [ProjectAutomationController::class, 'index'])->name('automations.index');
-        Route::post('/automations', [ProjectAutomationController::class, 'store'])->name('automations.store');
-        Route::put('/automations/{rule}', [ProjectAutomationController::class, 'update'])->name('automations.update');
-        Route::delete('/automations/{rule}', [ProjectAutomationController::class, 'destroy'])->name('automations.destroy');
-        Route::get('/presence', [TaskPresenceController::class, 'index'])->name('presence.index');
-        Route::post('/presence', [TaskPresenceController::class, 'store'])->name('presence.store');
-        Route::put('/settings/capacity', [ProjectController::class, 'updateCapacityThreshold'])->name('settings.capacity');
         Route::put('/tasks/{task}/tags', [TaskTagController::class, 'sync'])->name('tasks.tags.sync');
 
         Route::post('/tags', [TaskTagController::class, 'store'])->name('tags.store');
@@ -216,7 +185,26 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/ranks/{rank}/bugs', [RankController::class, 'toggleBugs'])->name('ranks.bugs');
     });
 
+    Route::post('/calls', [CallController::class, 'store'])->name('calls.store');
+    Route::post('/calls/{call}/signal', [CallController::class, 'signal'])->name('calls.signal');
+    Route::post('/calls/{call}/accept', [CallController::class, 'accept'])->name('calls.accept');
+    Route::post('/calls/{call}/decline', [CallController::class, 'decline'])->name('calls.decline');
+    Route::post('/calls/{call}/hangup', [CallController::class, 'hangup'])->name('calls.hangup');
+
+    Route::post('/projects/{project}/voice-channels', [VoiceChannelController::class, 'store'])
+        ->name('projects.voice-channels.store');
+    Route::delete('/projects/{project}/voice-channels/{voiceChannel}', [VoiceChannelController::class, 'destroy'])
+        ->name('projects.voice-channels.destroy');
+    Route::post('/projects/{project}/voice-channels/{voiceChannel}/token', [VoiceController::class, 'token'])
+        ->name('projects.voice.token');
+    Route::post('/projects/{project}/voice-channels/{voiceChannel}/leave', [VoiceController::class, 'leave'])
+        ->name('projects.voice.leave');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::post('/profile/avatar', [ProfileAvatarController::class, 'update'])
+        ->name('profile.avatar.update');
+    Route::delete('/profile/avatar', [ProfileAvatarController::class, 'destroy'])
+        ->name('profile.avatar.destroy');
     Route::put('/profile/notifications', [NotificationPreferenceController::class, 'update'])
         ->name('profile.notifications.update');
     Route::put('/profile/theme', [ProfileThemeController::class, 'update'])
@@ -245,13 +233,6 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/projects/{project}', [AdminProjectController::class, 'destroy'])->name('projects.destroy');
 
         Route::get('/audit', [AuditLogController::class, 'index'])->name('audit.index');
-        Route::get('/portfolio', [PortfolioController::class, 'index'])->name('portfolio.index');
-        Route::get('/portfolio/export', [PortfolioController::class, 'export'])->name('portfolio.export');
-
-        Route::get('/project-templates', [ProjectTemplateController::class, 'index'])->name('project-templates.index');
-        Route::post('/project-templates', [ProjectTemplateController::class, 'store'])->name('project-templates.store');
-        Route::put('/project-templates/{template}', [ProjectTemplateController::class, 'update'])->name('project-templates.update');
-        Route::delete('/project-templates/{template}', [ProjectTemplateController::class, 'destroy'])->name('project-templates.destroy');
     });
 });
 

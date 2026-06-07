@@ -79,7 +79,7 @@ class ChatMessage extends Model
 
     public function toPayload(): array
     {
-        $this->loadMissing('user:id,name', 'attachments', 'replyTo.user:id,name');
+        $this->loadMissing('user:id,name,avatar_path', 'attachments', 'replyTo.user:id,name');
 
         $replyPreview = null;
         if ($this->replyTo) {
@@ -106,6 +106,7 @@ class ChatMessage extends Model
             'user' => $this->user ? [
                 'id' => $this->user->id,
                 'name' => $this->user->name,
+                'avatar_url' => $this->user->avatar_url,
             ] : null,
             'attachments' => $this->attachments->map(fn (Attachment $a) => $a->toPayload())->values(),
             'can_edit' => auth()->user()?->id === $this->user_id

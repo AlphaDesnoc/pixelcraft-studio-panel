@@ -29,7 +29,6 @@ import {
 import { Input } from "@/Components/ui/input";
 import { Select } from "@/Components/ui/select";
 import { Textarea } from "@/Components/ui/textarea";
-import TaskProductivityPanel from "./TaskProductivityPanel.vue";
 import Checklist from "./Checklist.vue";
 import TaskComments from "./TaskComments.vue";
 import TaskTagsManager from "./TaskTagsManager.vue";
@@ -396,7 +395,8 @@ function formatFileSize(bytes) {
               {{ form.title }}
             </h2>
             <p class="mt-0.5 text-xs text-muted-foreground">
-              dans la liste
+              <span class="font-mono font-medium text-foreground">#{{ task.id }}</span>
+              · dans la liste
               <span class="font-medium text-foreground">
                 {{ currentList?.name ?? "—" }}
               </span>
@@ -581,14 +581,10 @@ function formatFileSize(bytes) {
       </div>
 
       <aside v-if="task" class="flex flex-col gap-4 border-l border-border/60 md:pl-4">
-        <TaskProductivityPanel
-          v-if="task"
-          :project-slug="projectSlug"
-          :task-id="task.id"
-          :read-only="readOnly"
-        />
-
         <div class="flex flex-col gap-1.5">
+          <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Ajouter à la carte
+          </p>
           <button
             type="button"
             class="inline-flex items-center gap-1.5 rounded-md bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted/60"

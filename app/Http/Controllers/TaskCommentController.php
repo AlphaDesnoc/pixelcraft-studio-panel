@@ -6,10 +6,7 @@ use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskComment;
-use App\Models\UserNotification;
 use App\Support\ActivityLogger;
-use App\Support\MentionParser;
-use App\Support\PanelNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -26,29 +23,11 @@ class TaskCommentController extends Controller
             'body' => ['required', 'string', 'max:5000'],
         ]);
 
-        $body = trim($validated['body']);
-
         $comment = TaskComment::query()->create([
             'task_id' => $task->id,
             'user_id' => $request->user()->id,
-            'body' => $body,
+            'body' => trim($validated['body']),
         ]);
-
-        $candidates = $project->members()->get(['users.id', 'users.email', 'users.name']);
-        $mentions = MentionParser::extract($body, $candidates);
-        $notified = MentionParser::notifiedUserIds($project, $mentions)
-            ->reject(fn ($id) => (int) $id === (int) $request->user()->id);
-
-        foreach ($notified as $userId) {
-            PanelNotifier::send(
-                (int) $userId,
-                UserNotification::TYPE_TASK_COMMENT_MENTION,
-                'Mention dans un commentaire',
-                sprintf('%s vous a mentionné sur « %s »', $request->user()->name, $task->title),
-                route('projects.show', $project->slug).'?tab=kanban&task='.$task->id,
-                ['project_id' => $project->id, 'task_id' => $task->id],
-            );
-        }
 
         $task->loadMissing('list:id,rank_id');
 
@@ -80,5 +59,14 @@ class TaskCommentController extends Controller
         $comment->delete();
 
         return back();
+    }
+
+    private function ensureCanEdit(Request $request, Project $project): void
+    {
+        $user = $request->user();
+        abort_unless(
+            $user->is_admin || $project->members()->whereKey($user->id)->exists(),
+            403,
+        );
     }
 }

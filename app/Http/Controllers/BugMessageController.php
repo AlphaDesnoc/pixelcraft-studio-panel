@@ -19,7 +19,7 @@ class BugMessageController extends Controller
         $this->authorizeAccess($request, $project, $bug);
 
         $messages = $bug->messages()
-            ->with('user:id,name')
+            ->with('user:id,name,avatar_path')
             ->orderBy('created_at')
             ->get()
             ->map(fn ($m) => $m->toPayload())
@@ -41,7 +41,7 @@ class BugMessageController extends Controller
             'body' => trim($validated['body']),
         ]);
 
-        $message->load('user:id,name');
+        $message->load('user:id,name,avatar_path');
 
         BugMessageSent::dispatch($message);
 

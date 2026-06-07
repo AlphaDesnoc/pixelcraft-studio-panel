@@ -1,14 +1,12 @@
 <script setup>
 import { computed, onMounted, onUnmounted, provide, ref, watch } from "vue";
 import { canWriteFeature } from "@/lib/projectPermissions.js";
-import { useFocusMode } from "@/composables/useFocusMode.js";
 import { Head, Link, router, usePage } from "@inertiajs/vue3";
 import {
   BarChart3,
   Bell,
   CheckCircle2,
   Clock,
-  Focus,
   StickyNote,
   TriangleAlert,
   Users,
@@ -16,6 +14,7 @@ import {
   Calendar,
 } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import VoiceChannelsPanel from "@/Components/Call/VoiceChannelsPanel.vue";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -41,9 +40,6 @@ import BugsView from "@/Components/Bugs/BugsView.vue";
 import ChatView from "@/Components/Chat/ChatView.vue";
 import TeamView from "@/Components/Team/TeamView.vue";
 import ProjectHistoryPanel from "@/Components/Projects/ProjectHistoryPanel.vue";
-import MilestonesPanel from "@/Components/Projects/MilestonesPanel.vue";
-import AutomationRulesPanel from "@/Components/Projects/AutomationRulesPanel.vue";
-import ProjectPresenceBar from "@/Components/Projects/ProjectPresenceBar.vue";
 import TaskActivityByRank from "@/Components/Projects/TaskActivityByRank.vue";
 import { spaceOnlyProps } from "@/composables/useProjectSpace.js";
 
@@ -63,6 +59,7 @@ const props = defineProps({
   events: { type: Array, default: () => [] },
   notes: { type: Array, default: () => [] },
   sheets: { type: Array, default: () => [] },
+  voiceChannels: { type: Array, default: () => [] },
   fileNodes: { type: Array, default: () => [] },
   members: { type: Array, default: () => [] },
   teamMembers: { type: Array, default: () => [] },
@@ -85,10 +82,6 @@ const props = defineProps({
   tags: { type: Array, default: () => [] },
   myPermissions: { type: Object, default: () => ({}) },
   taskTemplates: { type: Array, default: () => [] },
-  kanbanSavedViews: { type: Array, default: () => [] },
-  milestones: { type: Array, default: () => [] },
-  automationRules: { type: Array, default: () => [] },
-  capacityThreshold: { type: Number, default: 15 },
   pinnedChatMessages: { type: Array, default: () => [] },
 });
 
@@ -132,31 +125,6 @@ watch(activeSpace, (space) => {
 });
 
 const activeRankId = computed(() => props.activeRankId);
-
-const chatChannels = computed(() =>
-  props.spaces
-    .filter((space) => space.key !== "full")
-    .map((space) => ({
-      key: space.key,
-      label: space.label ?? space.key,
-      color: space.color ?? null,
-    })),
-);
-
-const { isFocusMode, toggleFocusMode } = useFocusMode();
-
-function switchChatChannel(key) {
-  if (key === activeSpace.value) return;
-  router.get(
-    route("projects.show", props.project.slug),
-    { space: key, tab: "chat" },
-    {
-      preserveState: true,
-      preserveScroll: true,
-      only: spaceOnlyProps(),
-    },
-  );
-}
 
 const bugsAccess = computed(() => {
   const space = activeSpace.value;
@@ -435,30 +403,18 @@ const kanbanBugLinkTasks = computed(() =>
             </div>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              class="gap-1.5"
-              :class="isFocusMode ? 'border-primary/40 bg-primary/10' : ''"
-              @click="toggleFocusMode"
-            >
-              <Focus class="h-3.5 w-3.5" />
-              {{ isFocusMode ? "Quitter focus" : "Mode focus" }}
-            </Button>
-            <Button
-              v-if="canManageRanks"
-              as-child
-              variant="outline"
-              size="sm"
-              class="gap-1.5"
-            >
-              <Link :href="route('projects.ranks.index', project.slug)">
-                <Shield class="h-3.5 w-3.5" />
-                Gérer les ranks
-              </Link>
-            </Button>
-          </div>
+          <Button
+            v-if="canManageRanks"
+            as-child
+            variant="outline"
+            size="sm"
+            class="gap-1.5"
+          >
+            <Link :href="route('projects.ranks.index', project.slug)">
+              <Shield class="h-3.5 w-3.5" />
+              Gérer les ranks
+            </Link>
+          </Button>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -484,6 +440,7 @@ const kanbanBugLinkTasks = computed(() =>
             :active="activeSpace === rank.key"
             @click="activeSpace = rank.key"
           />
+
         </div>
       </header>
 
@@ -492,6 +449,14 @@ const kanbanBugLinkTasks = computed(() =>
       <p class="text-xs text-muted-foreground">
         Espace actif : <span class="font-medium text-foreground">{{ spaceLabel }}</span>
       </p>
+
+      <VoiceChannelsPanel
+        :project-slug="project.slug"
+        :project-id="project.id"
+        :voice-channels="voiceChannels"
+        :ranks="ranks"
+        :can-manage="canManageTeam"
+      />
 
       <aside
         v-if="pinnedChatMessages.length || chatUnreadSummary.length"
@@ -641,28 +606,13 @@ const kanbanBugLinkTasks = computed(() =>
           </Card>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
-          <MilestonesPanel
-            :project-slug="project.slug"
-            :milestones="milestones"
-            :can-write="canWriteKanban"
-          />
-          <AutomationRulesPanel
-            :project-slug="project.slug"
-            :rules="automationRules"
-            :ranks="ranks"
-            :can-write="canWriteKanban"
-          />
-        </div>
-
         <TaskActivityByRank
           :groups="taskActivityByRank"
           :export-url="route('projects.export.activity', project.slug)"
         />
       </section>
 
-      <section v-else-if="activeTab === 'kanban'" class="flex flex-col gap-3">
-        <ProjectPresenceBar :project-slug="project.slug" context="kanban" />
+      <section v-else-if="activeTab === 'kanban'">
         <KanbanBoard
           ref="kanbanBoardRef"
           :project-slug="project.slug"
@@ -675,8 +625,6 @@ const kanbanBugLinkTasks = computed(() =>
           :global-kanban="activeSpace === 'full'"
           :tags="tags"
           :task-templates="taskTemplates"
-          :kanban-saved-views="kanbanSavedViews"
-          :ranks="ranks"
           :swimlane-mode="swimlaneMode"
           :my-permissions="myPermissions"
           :current-user-id="currentUserId"
@@ -735,8 +683,6 @@ const kanbanBugLinkTasks = computed(() =>
           :active="activeTab === 'chat'"
           :initial-chat-members="chatMembers"
           :chat-rank-mentions="chatRankMentions"
-          :channels="chatChannels"
-          @select-channel="switchChatChannel"
         />
       </section>
 

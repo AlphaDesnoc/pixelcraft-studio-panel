@@ -6,9 +6,6 @@ import { VueDraggable } from "vue-draggable-plus";
 import { Button } from "@/Components/ui/button";
 import KanbanColumn from "./KanbanColumn.vue";
 import KanbanFilters from "./KanbanFilters.vue";
-import KanbanSavedViewsMenu from "./KanbanSavedViewsMenu.vue";
-import KanbanBulkBar from "./KanbanBulkBar.vue";
-import TaskTemplatesPanel from "./TaskTemplatesPanel.vue";
 import ColumnFormDialog from "./ColumnFormDialog.vue";
 import TaskFormDialog from "./TaskFormDialog.vue";
 import TaskDetailDialog from "./TaskDetailDialog.vue";
@@ -26,8 +23,6 @@ const props = defineProps({
   globalKanban: { type: Boolean, default: false },
   tags: { type: Array, default: () => [] },
   taskTemplates: { type: Array, default: () => [] },
-  kanbanSavedViews: { type: Array, default: () => [] },
-  ranks: { type: Array, default: () => [] },
   swimlaneMode: { type: Boolean, default: false },
   myPermissions: { type: Object, default: () => ({}) },
   currentUserId: { type: Number, default: null },
@@ -80,21 +75,6 @@ watch(
   },
   { deep: true },
 );
-
-const selectedTaskIds = ref([]);
-const bulkMode = ref(false);
-
-function toggleBulkSelect(taskId) {
-  const id = Number(taskId);
-  const idx = selectedTaskIds.value.indexOf(id);
-  if (idx >= 0) selectedTaskIds.value.splice(idx, 1);
-  else selectedTaskIds.value.push(id);
-}
-
-function applySavedView(filters) {
-  activeFilters.value = { ...activeFilters.value, ...filters };
-  showArchived.value = Boolean(filters.showArchived);
-}
 
 const kanbanFiltersRef = ref(null);
 
@@ -324,11 +304,6 @@ function applyMyTasksPreset() {
   };
 }
 
-function toggleBulkMode() {
-  bulkMode.value = !bulkMode.value;
-  if (!bulkMode.value) selectedTaskIds.value = [];
-}
-
 defineExpose({
   openNewTask: () => openCreateTask(null),
   focusFilters: () => kanbanFiltersRef.value?.focusSearch?.(),
@@ -338,32 +313,6 @@ defineExpose({
 
 <template>
   <div class="flex flex-col gap-3">
-    <TaskTemplatesPanel
-      v-if="canWrite && !globalKanban"
-      :project-slug="projectSlug"
-      :templates="taskTemplates"
-      :priorities="priorities"
-      :ranks="ranks"
-      :can-write="canWrite"
-    />
-
-    <KanbanSavedViewsMenu
-      v-if="canWrite"
-      :project-slug="projectSlug"
-      :views="kanbanSavedViews"
-      :current-filters="activeFilters"
-      @apply="applySavedView"
-    />
-
-    <KanbanBulkBar
-      v-if="selectedTaskIds.length"
-      :project-slug="projectSlug"
-      :selected-ids="selectedTaskIds"
-      :members="members"
-      :tags="tags"
-      @clear="selectedTaskIds = []"
-    />
-
     <KanbanFilters
       ref="kanbanFiltersRef"
       :members="members"
@@ -403,15 +352,6 @@ defineExpose({
         </template>
       </p>
       <Button
-        v-if="canWrite"
-        size="sm"
-        variant="outline"
-        class="gap-1.5"
-        @click="toggleBulkMode"
-      >
-        {{ bulkMode ? "Annuler sélection" : "Sélection multiple" }}
-      </Button>
-      <Button
         v-if="!globalKanban && canWrite"
         size="sm"
         variant="outline"
@@ -438,15 +378,12 @@ defineExpose({
         :list="list"
         :members="members"
         :swimlane-mode="effectiveSwimlaneMode"
-        :disable-tasks-drag="hasActiveFilters || !canWrite || bulkMode"
-        :bulk-mode="bulkMode"
-        :selected-task-ids="selectedTaskIds"
+        :disable-tasks-drag="hasActiveFilters || !canWrite"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
         @add-card="openCreateTask"
         @open-card="openCard"
         @tasks-reorder="handleTasksReorder"
-        @toggle-bulk-select="toggleBulkSelect"
       />
     </VueDraggable>
 
@@ -461,15 +398,12 @@ defineExpose({
         :members="members"
         :swimlane-mode="effectiveSwimlaneMode"
         :readonly-column="globalKanban || !canWrite"
-        :disable-tasks-drag="hasActiveFilters || !canWrite || bulkMode"
-        :bulk-mode="bulkMode"
-        :selected-task-ids="selectedTaskIds"
+        :disable-tasks-drag="hasActiveFilters || !canWrite"
         class="min-h-[420px]"
         @edit-list="openEditColumn"
         @add-card="openCreateTask"
         @open-card="openCard"
         @tasks-reorder="handleTasksReorder"
-        @toggle-bulk-select="toggleBulkSelect"
       />
     </div>
 

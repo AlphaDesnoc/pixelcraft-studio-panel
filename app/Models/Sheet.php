@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'rows',
     'cols',
     'data',
+    'meta',
 ])]
 class Sheet extends Model
 {
@@ -21,6 +22,7 @@ class Sheet extends Model
     {
         return [
             'data' => 'array',
+            'meta' => 'array',
             'rows' => 'integer',
             'cols' => 'integer',
             'position' => 'integer',

@@ -13,6 +13,7 @@ Guide complet pour faire tourner **PixelCraft Studio Panel** sur un serveur **De
 | **nginx** | Serveur web interne + proxy WebSocket Reverb |
 | **reverb** | Temps réel (messages instantanés) |
 | **worker** | Queue Laravel (jobs en arrière-plan) |
+| **livekit** | Salons vocaux / visio (WebRTC SFU) |
 
 Stack séparée **`reverse-proxy`** (optionnelle mais recommandée) :
 
@@ -262,6 +263,59 @@ docker compose up -d --build
 
 ---
 
+## Partie 7bis — LiveKit (voix / visio)
+
+LiveKit tourne dans le conteneur **livekit** (déjà dans `docker-compose.yml`). Deux flux distincts :
+
+- **Signalisation** (WebSocket) : exposée en `wss://` par le reverse-proxy via un **sous-domaine dédié** (ex. `livekit.tondomaine.fr`).
+- **Média WebRTC** : ne passe **pas** par nginx. Il va en direct sur l'**IP publique** du serveur via **UDP 7882** (mux) et **TCP 7881** (repli). Ces ports sont publiés par le conteneur — il faut les **ouvrir au pare-feu** du VPS.
+
+### 1. Variables `.env`
+
+```env
+LIVEKIT_API_KEY=pixelcraft
+LIVEKIT_API_SECRET=<au moins 32 caractères aléatoires>   # openssl rand -hex 32
+LIVEKIT_URL=wss://livekit.tondomaine.fr
+```
+
+> Le secret est injecté dans le conteneur via `LIVEKIT_KEYS` (construit depuis `.env` dans `docker-compose.yml`) — il n'est jamais committé. `LIVEKIT_URL` est renvoyé au navigateur au runtime par l'API ; **pas besoin de rebuild** si tu le changes (contrairement aux `VITE_*`).
+
+### 2. DNS
+
+Ajoute un enregistrement **A** : `livekit.tondomaine.fr` → IP publique du serveur (la même que le panel).
+
+### 3. Pare-feu du VPS
+
+Ouvre les ports média (en plus de 80/443) :
+
+```bash
+ufw allow 7881/tcp
+ufw allow 7882/udp
+```
+
+### 4. Certificat du sous-domaine
+
+Les blocs `server` du sous-domaine LiveKit sont déjà dans `panel.http.conf.example` / `panel.ssl.conf.example`. Émets le certificat (après avoir basculé `panel.conf` sur la version HTTP, cf. Partie 7.2) :
+
+```bash
+./docker/nginx-proxy/init-letsencrypt.sh livekit.tondomaine.fr admin@tondomaine.fr
+```
+
+Puis active la version SSL (`panel.ssl.conf.example` contient déjà le bloc `wss` → `livekit:7880`) et `restart reverse-proxy`.
+
+### 5. Vérifier
+
+```bash
+docker compose logs -f livekit          # "starting LiveKit server", nodeIP = IP publique
+curl -sI https://livekit.tondomaine.fr  # 200 (validation HTTP de LiveKit)
+```
+
+Dans le navigateur (panel en HTTPS), rejoindre un salon vocal : la signalisation passe en `wss://`, le micro est autorisé (contexte sécurisé HTTPS), et le média s'établit en UDP 7882.
+
+> **NAT très restrictifs :** si certains utilisateurs n'ont jamais de son, activer le TURN/TLS intégré de LiveKit (`turn.enabled: true` dans `docker/livekit/livekit.yaml`, port 5349 + certificat). Pas nécessaire dans la majorité des cas grâce au repli TCP 7881.
+
+---
+
 ## Partie 8 — Vérifier que tout tourne
 
 Dans **Portainer** → **Stacks** → `pixelcraft-panel` → clique sur chaque conteneur :
@@ -273,6 +327,7 @@ Dans **Portainer** → **Stacks** → `pixelcraft-panel` → clique sur chaque c
 | nginx | running |
 | reverb | running |
 | worker | running |
+| livekit | running |
 
 Test navigateur :
 
@@ -472,6 +527,10 @@ app / reverb / worker ──► db:3306 (MariaDB, réseau interne "pixelcraft")
 | Certificat Let's Encrypt obtenu | ☐ |
 | `panel.ssl.conf` activé + rebuild panel | ☐ |
 | Premier admin créé | ☐ |
+| LiveKit : `LIVEKIT_*` dans `.env` (secret ≥ 32 car.) | ☐ |
+| LiveKit : DNS `livekit.tondomaine.fr` → IP serveur | ☐ |
+| LiveKit : pare-feu UDP 7882 + TCP 7881 ouverts | ☐ |
+| LiveKit : certificat sous-domaine obtenu | ☐ |
 
 ---
 
