@@ -5,6 +5,7 @@ import { MessageSquare, Send, Trash2 } from "lucide-vue-next";
 import { Avatar } from "@/Components/ui/avatar";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 function initials(name) {
   return (name ?? "?")
@@ -68,8 +69,14 @@ function submitComment() {
   );
 }
 
-function deleteComment(comment) {
-  if (!confirm("Supprimer ce commentaire ?")) return;
+async function deleteComment(comment) {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer le commentaire",
+      message: "Ce commentaire sera définitivement supprimé.",
+    }))
+  )
+    return;
   router.delete(
     route("projects.tasks.comments.destroy", [
       props.projectSlug,

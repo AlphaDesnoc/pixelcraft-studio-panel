@@ -19,6 +19,7 @@ import { Select } from "@/Components/ui/select";
 import MemberPermissionsMatrix from "@/Components/Team/MemberPermissionsMatrix.vue";
 import ProjectMemberPickerDialog from "@/Components/Team/ProjectMemberPickerDialog.vue";
 import { writeKeyFor } from "@/lib/projectPermissions.js";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -155,9 +156,16 @@ function updateRole(member, role) {
   );
 }
 
-function removeMember(member) {
+async function removeMember(member) {
   if (!props.canManageTeam || member.is_owner) return;
-  if (!confirm(`Retirer ${member.name} du projet ?`)) return;
+  if (
+    !(await confirmDialog({
+      title: "Retirer du projet",
+      message: `${member.name} sera retiré de ce projet.`,
+      confirmLabel: "Retirer",
+    }))
+  )
+    return;
   router.delete(route("projects.members.destroy", [props.projectSlug, member.id]), {
     preserveScroll: true,
     preserveState: true,

@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { router } from "@inertiajs/vue3";
 import { Pencil, Pin, PinOff, Trash2 } from "lucide-vue-next";
+import { confirmDialog } from "@/composables/useConfirm.js";
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -49,8 +50,14 @@ function togglePin() {
   );
 }
 
-function destroy() {
-  if (!confirm("Supprimer cette note ?")) return;
+async function destroy() {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la note",
+      message: "Cette note sera définitivement supprimée.",
+    }))
+  )
+    return;
   router.delete(
     route("projects.notes.destroy", [props.projectSlug, props.note.id]),
     { preserveScroll: true, preserveState: true, only: ["notes", "stats"] },

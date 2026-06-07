@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import { Avatar } from "@/Components/ui/avatar";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import ImageLightbox from "@/Components/ImageLightbox.vue";
 import { useImageLightbox } from "@/composables/useImageLightbox.js";
 
@@ -93,8 +94,14 @@ const slaInfo = computed(() => {
   };
 });
 
-function destroy() {
-  if (!confirm("Supprimer ce bug ?")) return;
+async function destroy() {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer le bug",
+      message: "Ce signalement de bug sera définitivement supprimé.",
+    }))
+  )
+    return;
   router.delete(route("projects.bugs.destroy", [props.projectSlug, props.bug.id]), {
     preserveScroll: true,
     preserveState: true,

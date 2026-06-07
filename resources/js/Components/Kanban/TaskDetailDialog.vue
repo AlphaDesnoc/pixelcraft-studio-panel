@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import { router, useForm, usePage } from "@inertiajs/vue3";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import {
   AlignLeft,
   Archive,
@@ -211,9 +212,17 @@ function saveDescription() {
   }
 }
 
-function archiveTask() {
+async function archiveTask() {
   if (!props.task) return;
-  if (!confirm("Archiver cette carte ? Elle disparaîtra du tableau.")) return;
+  if (
+    !(await confirmDialog({
+      title: "Archiver la carte",
+      message: "Cette carte disparaîtra du tableau. Vous pourrez la restaurer depuis les archives.",
+      confirmLabel: "Archiver",
+      variant: "default",
+    }))
+  )
+    return;
   router.post(
     route("projects.tasks.archive", [props.projectSlug, props.task.id]),
     {},
@@ -291,9 +300,15 @@ function duplicateTask() {
   );
 }
 
-function destroyTask() {
+async function destroyTask() {
   if (!props.task) return;
-  if (!confirm("Supprimer cette carte ?")) return;
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la carte",
+      message: "Cette carte sera définitivement supprimée.",
+    }))
+  )
+    return;
   form.delete(
     route("projects.tasks.destroy", [props.projectSlug, props.task.id]),
     {
@@ -331,8 +346,14 @@ function onFileSelected(event) {
   );
 }
 
-function deleteAttachment(attachment) {
-  if (!confirm(`Supprimer « ${attachment.original_name} » ?`)) return;
+async function deleteAttachment(attachment) {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer la pièce jointe",
+      message: `« ${attachment.original_name} » sera définitivement supprimé.`,
+    }))
+  )
+    return;
   router.delete(
     route("projects.attachments.destroy", [
       props.projectSlug,

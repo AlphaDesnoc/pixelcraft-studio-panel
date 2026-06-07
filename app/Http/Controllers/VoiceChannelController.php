@@ -15,7 +15,7 @@ class VoiceChannelController extends Controller
 {
     public function store(Request $request, Project $project): JsonResponse|RedirectResponse
     {
-        abort_unless(ProjectAccess::canManageTeam($request->user(), $project), 403);
+        abort_unless(ProjectAccess::canAccess($request->user(), $project), 403);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:80'],
@@ -26,6 +26,15 @@ class VoiceChannelController extends Controller
             ],
             'with_video' => ['nullable', 'boolean'],
         ]);
+
+        $rank = isset($validated['rank_id'])
+            ? $project->ranks()->whereKey($validated['rank_id'])->first()
+            : null;
+
+        abort_unless(
+            ProjectAccess::canManageVoiceChannel($request->user(), $project, $rank),
+            403,
+        );
 
         $maxPos = (int) $project->voiceChannels()->max('position');
 
@@ -39,10 +48,30 @@ class VoiceChannelController extends Controller
         return $this->respond($request, ['voice_channel' => $channel->toPayload()]);
     }
 
+    public function update(Request $request, Project $project, VoiceChannel $voiceChannel): JsonResponse|RedirectResponse
+    {
+        abort_unless($voiceChannel->project_id === $project->id, 404);
+        abort_unless(
+            ProjectAccess::canManageVoiceChannel($request->user(), $project, $voiceChannel->rank),
+            403,
+        );
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+        ]);
+
+        $voiceChannel->update(['name' => $validated['name']]);
+
+        return $this->respond($request, ['voice_channel' => $voiceChannel->toPayload()]);
+    }
+
     public function destroy(Request $request, Project $project, VoiceChannel $voiceChannel): JsonResponse|RedirectResponse
     {
         abort_unless($voiceChannel->project_id === $project->id, 404);
-        abort_unless(ProjectAccess::canManageTeam($request->user(), $project), 403);
+        abort_unless(
+            ProjectAccess::canManageVoiceChannel($request->user(), $project, $voiceChannel->rank),
+            403,
+        );
 
         $voiceChannel->delete();
 

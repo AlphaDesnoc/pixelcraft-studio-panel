@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Project;
+use App\Models\Rank;
 use App\Models\User;
 
 class ProjectAccess
@@ -41,6 +42,21 @@ class ProjectAccess
         $role = self::memberRole($user, $project);
 
         return in_array($role, [self::ROLE_OWNER, self::ROLE_MANAGER], true);
+    }
+
+    /**
+     * Gestion (création/renommage/suppression) d'un salon vocal.
+     * Les « admins » du projet (admin global, propriétaire, gestionnaire) gèrent
+     * tous les salons ; un responsable de rang ne gère que les salons de SON
+     * rang. Les salons globaux (rang nul) restent réservés aux « admins ».
+     */
+    public static function canManageVoiceChannel(User $user, Project $project, ?Rank $rank): bool
+    {
+        if (self::canManageTeam($user, $project)) {
+            return true;
+        }
+
+        return $rank !== null && (int) $rank->responsible_id === (int) $user->id;
     }
 
     public static function memberRole(User $user, Project $project): ?string

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from "vue";
 import { useForm } from "@inertiajs/vue3";
+import { confirmDialog } from "@/composables/useConfirm.js";
 import InputError from "@/Components/InputError.vue";
 import { Button } from "@/Components/ui/button";
 import {
@@ -254,7 +255,7 @@ function submit() {
   }
 }
 
-function destroy() {
+async function destroy() {
   if (!isEdit.value) return;
 
   let deleteScope = "series";
@@ -265,7 +266,12 @@ function destroy() {
     );
     if (choice == null) return;
     deleteScope = choice.trim() === "2" ? "series" : "occurrence";
-  } else if (!confirm("Supprimer cet événement ?")) {
+  } else if (
+    !(await confirmDialog({
+      title: "Supprimer l'événement",
+      message: "Cet événement sera définitivement supprimé.",
+    }))
+  ) {
     return;
   }
 
