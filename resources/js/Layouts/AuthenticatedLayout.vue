@@ -6,7 +6,12 @@ import AppSidebar from "@/Components/AppSidebar.vue";
 import NotificationBell from "@/Components/Notifications/NotificationBell.vue";
 import GlobalSearchModal from "@/Components/Search/GlobalSearchModal.vue";
 import FloatingMessenger from "@/Components/Messages/FloatingMessenger.vue";
+import CallOverlay from "@/Components/Call/CallOverlay.vue";
+import VoiceDock from "@/Components/Call/VoiceDock.vue";
+import VoiceMeeting from "@/Components/Call/VoiceMeeting.vue";
 import KeyboardShortcutsHelp from "@/Components/KeyboardShortcutsHelp.vue";
+import { initCall } from "@/composables/useCall.js";
+import { setVoiceIdentity } from "@/composables/useVoiceRoom.js";
 import {
   initSiteRealtime,
   setUnreadCount,
@@ -91,6 +96,8 @@ function bootstrapRealtime() {
   if (!user?.id) return;
   initSiteRealtime(user.id, page.props.sidebar?.unread_messages ?? 0);
   initNotifications(user.id, page.props.sidebar?.unread_notifications ?? 0);
+  initCall(user.id);
+  setVoiceIdentity(user);
 }
 
 let removeEscapeListener = null;
@@ -210,5 +217,8 @@ watch(
     <GlobalSearchModal v-model:open="searchOpen" />
     <KeyboardShortcutsHelp v-model:open="shortcutsOpen" />
     <FloatingMessenger />
+    <CallOverlay />
+    <VoiceDock />
+    <VoiceMeeting />
   </div>
 </template>

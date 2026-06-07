@@ -87,7 +87,7 @@ class BugController extends Controller
         }
 
         return $this->apiOrBack($request, [
-            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name,avatar_path', 'assignee:id,name', 'assignedRank:id,name'])),
         ]);
     }
 
@@ -257,7 +257,7 @@ class BugController extends Controller
         }
 
         return $this->apiOrBack($request, [
-            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name,avatar_path', 'assignee:id,name', 'assignedRank:id,name'])),
         ]);
     }
 
@@ -277,7 +277,7 @@ class BugController extends Controller
         $bug->update(['task_id' => $task->id]);
 
         return $this->apiOrBack($request, [
-            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name,avatar_path', 'assignee:id,name', 'assignedRank:id,name'])),
         ]);
     }
 
@@ -287,11 +287,28 @@ class BugController extends Controller
         $this->ensureFeature($request, $project, 'bugs');
         abort_unless($bug->project_id === $project->id, 404);
 
-        $list = $project->lists()
+        // Crée la tâche dans le Kanban du rang assigné au bug (le cas échéant),
+        // sinon sur le tableau global (rank_id null).
+        $rankId = $bug->assigned_rank_id;
+
+        $scopedLists = fn () => $rankId === null
+            ? $project->lists()->whereNull('rank_id')
+            : $project->lists()->where('rank_id', $rankId);
+
+        $list = $scopedLists()
             ->where('status_kind', TaskList::STATUS_TODO)
             ->orderBy('position')
             ->first()
-            ?? $project->lists()->orderBy('position')->first();
+            ?? $scopedLists()->orderBy('position')->first();
+
+        // Repli sur le tableau global si le rang assigné n'a aucune colonne.
+        if (! $list && $rankId !== null) {
+            $list = $project->lists()->whereNull('rank_id')
+                ->where('status_kind', TaskList::STATUS_TODO)
+                ->orderBy('position')
+                ->first()
+                ?? $project->lists()->whereNull('rank_id')->orderBy('position')->first();
+        }
 
         abort_if(! $list, 422, 'Aucune colonne disponible pour créer la tâche.');
 
@@ -313,7 +330,7 @@ class BugController extends Controller
         $bug->update(['task_id' => $task->id]);
 
         return $this->apiOrBack($request, [
-            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name'])),
+            'bug' => $this->bugPayload($bug->fresh(['reporter:id,name,avatar_path', 'assignee:id,name', 'assignedRank:id,name'])),
             'task_id' => $task->id,
         ]);
     }
@@ -365,7 +382,7 @@ class BugController extends Controller
                 && $bug->sla_due_at->isPast()
                 && $bug->status !== Bug::STATUS_CLOSED,
             'created_at' => optional($bug->created_at)?->toIso8601String(),
-            'reporter' => $bug->reporter ? ['id' => $bug->reporter->id, 'name' => $bug->reporter->name] : null,
+            'reporter' => $bug->reporter ? ['id' => $bug->reporter->id, 'name' => $bug->reporter->name, 'avatar_url' => $bug->reporter->avatar_url] : null,
             'assignee' => $bug->assignee ? ['id' => $bug->assignee->id, 'name' => $bug->assignee->name] : null,
             'assigned_rank' => $bug->assignedRank ? ['id' => $bug->assignedRank->id, 'name' => $bug->assignedRank->name] : null,
             'screenshots' => collect($bug->screenshots ?? [])->map(fn ($p) => '/storage/'.ltrim($p, '/'))->values(),

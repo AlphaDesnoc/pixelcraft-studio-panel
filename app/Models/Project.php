@@ -107,6 +107,11 @@ class Project extends Model
         return $this->hasMany(Sheet::class)->orderBy('position');
     }
 
+    public function voiceChannels(): HasMany
+    {
+        return $this->hasMany(VoiceChannel::class)->orderBy('position');
+    }
+
     public function fileNodes(): HasMany
     {
         return $this->hasMany(FileNode::class)

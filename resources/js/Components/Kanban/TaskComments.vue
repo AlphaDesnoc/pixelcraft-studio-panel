@@ -2,8 +2,18 @@
 import { computed, ref } from "vue";
 import { router, usePage } from "@inertiajs/vue3";
 import { MessageSquare, Send, Trash2 } from "lucide-vue-next";
+import { Avatar } from "@/Components/ui/avatar";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
+
+function initials(name) {
+  return (name ?? "?")
+    .split(" ")
+    .map((part) => part.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 const props = defineProps({
   projectSlug: { type: String, required: true },
@@ -93,7 +103,13 @@ function deleteComment(comment) {
         :key="comment.id"
         class="group rounded-md border border-border/60 bg-muted/20 px-3 py-2"
       >
-        <div class="flex items-start justify-between gap-2">
+        <div class="flex items-start gap-2">
+          <Avatar
+            class="mt-0.5 shrink-0"
+            size="xs"
+            :src="comment.user?.avatar_url ?? ''"
+            :fallback="initials(comment.user?.name)"
+          />
           <div class="min-w-0 flex-1">
             <p class="text-[11px] font-medium text-muted-foreground">
               {{ comment.user?.name ?? "Utilisateur" }}

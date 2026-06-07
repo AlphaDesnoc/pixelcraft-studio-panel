@@ -31,7 +31,7 @@ class ChatMessageController extends Controller
 
         $query = $project->chatMessages()
             ->where('space_key', $space->key)
-            ->with(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+            ->with(['user:id,name,avatar_path', 'attachments', 'replyTo.user:id,name,avatar_path']);
 
         if ($search = trim((string) $request->query('q', ''))) {
             $query->where('body', 'like', '%'.addcslashes($search, '%_\\').'%');
@@ -85,7 +85,7 @@ class ChatMessageController extends Controller
             'reply_to_id' => $validated['reply_to_id'] ?? null,
         ]);
 
-        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+        $message->load(['user:id,name,avatar_path', 'attachments', 'replyTo.user:id,name,avatar_path']);
         $url = route('projects.show', $project->slug).'?space='.$space->key.'&tab=chat';
 
         $mentionedIds = MentionParser::notifiedUserIds($project, $mentions);
@@ -139,7 +139,7 @@ class ChatMessageController extends Controller
             'edited_at' => now(),
         ]);
 
-        $message->load('user:id,name', 'attachments');
+        $message->load('user:id,name,avatar_path', 'attachments');
         ChatMessageUpdated::dispatch($message);
 
         return response()->json(['message' => $message->toPayload()]);
@@ -175,7 +175,7 @@ class ChatMessageController extends Controller
             $message->update(['pinned_at' => now(), 'pinned_by' => $user->id]);
         }
 
-        $message->load(['user:id,name', 'attachments', 'replyTo.user:id,name']);
+        $message->load(['user:id,name,avatar_path', 'attachments', 'replyTo.user:id,name,avatar_path']);
 
         return response()->json(['message' => $message->toPayload()]);
     }

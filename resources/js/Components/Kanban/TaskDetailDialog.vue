@@ -395,7 +395,8 @@ function formatFileSize(bytes) {
               {{ form.title }}
             </h2>
             <p class="mt-0.5 text-xs text-muted-foreground">
-              dans la liste
+              <span class="font-mono font-medium text-foreground">#{{ task.id }}</span>
+              · dans la liste
               <span class="font-medium text-foreground">
                 {{ currentList?.name ?? "—" }}
               </span>

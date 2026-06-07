@@ -431,6 +431,7 @@ async function onFileSelected(event) {
               :show-sender-name="!messageCluster(message, true).isMine && messageCluster(message, true).clusterStart"
               :show-avatar="!messageCluster(message, true).isMine && messageCluster(message, true).clusterEnd"
               :avatar-initials="initials(message.user?.name)"
+              :avatar-url="message.user?.avatar_url ?? ''"
               pinned
             >
               <div
@@ -462,6 +463,7 @@ async function onFileSelected(event) {
             :show-sender-name="!messageCluster(message).isMine && messageCluster(message).clusterStart"
             :show-avatar="!messageCluster(message).isMine && messageCluster(message).clusterEnd"
             :avatar-initials="initials(message.user?.name)"
+              :avatar-url="message.user?.avatar_url ?? ''"
           >
             <template #toolbar>
               <button

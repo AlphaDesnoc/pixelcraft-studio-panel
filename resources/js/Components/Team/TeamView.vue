@@ -4,11 +4,14 @@ import { Link, router, usePage } from "@inertiajs/vue3";
 import {
   ChevronDown,
   Crown,
+  Phone,
   Shield,
   Trash2,
   UserPlus,
   Users,
+  Video,
 } from "lucide-vue-next";
+import { startCall } from "@/composables/useCall.js";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -28,6 +31,11 @@ const props = defineProps({
 
 const page = usePage();
 const isAdmin = computed(() => Boolean(page.props.auth?.user?.is_admin));
+const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
+
+function callMember(member, withVideo) {
+  startCall({ id: member.id, name: member.name, avatar_url: member.avatar_url }, { withVideo });
+}
 
 const MEMBER_PERM_KEYS = Object.freeze([
   { key: "kanban", label: "Kanban" },
@@ -209,6 +217,7 @@ function removeMember(member) {
           <Avatar
             class="shrink-0"
             size="md"
+            :src="member.avatar_url ?? ''"
             :fallback="initials(member.name)"
           />
 
@@ -225,6 +234,28 @@ function removeMember(member) {
             <p class="mt-0.5 truncate text-xs text-muted-foreground">
               {{ member.email }}
             </p>
+          </div>
+
+          <div
+            v-if="member.id !== currentUserId"
+            class="flex shrink-0 items-center gap-1"
+          >
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
+              title="Appel audio"
+              @click="callMember(member, false)"
+            >
+              <Phone class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              title="Appel vidéo"
+              @click="callMember(member, true)"
+            >
+              <Video class="h-4 w-4" />
+            </button>
           </div>
 
           <div class="flex shrink-0 flex-col items-end gap-0.5 text-right">

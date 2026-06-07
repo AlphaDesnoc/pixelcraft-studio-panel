@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Bug;
+use App\Models\Call;
 use App\Models\DirectConversation;
 use App\Models\Project;
 use App\Support\BugChatAccess;
@@ -55,6 +56,26 @@ Broadcast::channel('direct.{conversationId}', function ($user, $conversationId) 
 
 Broadcast::channel('site-presence', function ($user) {
     return PresenceUser::payload($user);
+});
+
+Broadcast::channel('call.{callId}', function ($user, $callId) {
+    $call = Call::query()->find($callId);
+
+    if (! $call) {
+        return false;
+    }
+
+    return $call->isParticipant((int) $user->id);
+});
+
+Broadcast::channel('voice-lobby.{projectId}', function ($user, $projectId) {
+    $project = Project::query()->find($projectId);
+
+    if (! $project) {
+        return false;
+    }
+
+    return ProjectPermissions::canRead($user, $project, 'chat');
 });
 
 Broadcast::channel('project-kanban.{projectId}', function ($user, $projectId) {

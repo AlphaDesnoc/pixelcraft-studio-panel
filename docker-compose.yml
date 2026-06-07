@@ -119,6 +119,25 @@ services:
     networks:
       - pixelcraft
 
+  # Serveur LiveKit (salons vocaux / visio).
+  # Signalisation WS proxifiée en wss:// par le reverse-proxy (réseau "web").
+  # Média WebRTC en direct sur l'IP publique : TCP 7881 + UDP 7882 (à ouvrir au pare-feu).
+  livekit:
+    image: livekit/livekit-server:v1.12.0
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    environment:
+      # Clés injectées depuis .env (jamais committées). Format "key: secret".
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./docker/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7881:7881"        # ICE/TCP (repli quand l'UDP est bloqué)
+      - "7882:7882/udp"    # média UDP (mux)
+    networks:
+      - pixelcraft
+      - web
+
 volumes:
   db_data:
   storage_data:

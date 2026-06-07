@@ -25,7 +25,7 @@ class TaskComment extends Model
 
     public function toPayload(): array
     {
-        $this->loadMissing('user:id,name');
+        $this->loadMissing('user:id,name,avatar_path');
 
         return [
             'id' => $this->id,
@@ -34,6 +34,7 @@ class TaskComment extends Model
             'user' => $this->user ? [
                 'id' => $this->user->id,
                 'name' => $this->user->name,
+                'avatar_url' => $this->user->avatar_url,
             ] : null,
         ];
     }

@@ -42,3 +42,18 @@ server {
         proxy_send_timeout 60s;
     }
 }
+
+# Sous-domaine LiveKit (signalisation WebSocket). HTTP seul = uniquement pour
+# l'émission du certificat Let's Encrypt ; bascule sur panel.ssl.conf.example ensuite.
+server {
+    listen 80;
+    server_name livekit.pixelcraft-studios.fr;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

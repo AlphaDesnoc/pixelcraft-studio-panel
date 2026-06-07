@@ -319,6 +319,7 @@ function createTaskFromBug() {
             :show-sender-name="!messageCluster(message).isMine && messageCluster(message).clusterStart"
             :show-avatar="!messageCluster(message).isMine && messageCluster(message).clusterEnd"
             :avatar-initials="initials(message.user?.name)"
+            :avatar-url="message.user?.avatar_url ?? ''"
           >
             <p class="whitespace-pre-wrap">{{ message.body }}</p>
             <template #meta>
