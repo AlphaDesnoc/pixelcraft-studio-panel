@@ -81,6 +81,12 @@ const timeLabel = computed(() => {
             {{ task.title }}
           </h4>
           <span
+            class="mt-px shrink-0 rounded bg-primary/15 px-1.5 py-px font-mono text-[11px] font-semibold text-primary"
+            title="Identifiant de la tâche"
+          >
+            #{{ task.id }}
+          </span>
+          <span
             v-if="isBlocked"
             class="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400"
             title="Dépendances incomplètes"

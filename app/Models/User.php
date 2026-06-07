@@ -17,6 +17,7 @@ use Laravel\Sanctum\HasApiTokens;
 #[Fillable([
     'name',
     'email',
+    'avatar_path',
     'password',
     'role',
     'is_active',
@@ -42,7 +43,7 @@ class User extends Authenticatable
         self::ROLE_MEMBER => 'Membre',
     ];
 
-    protected $appends = ['pseudo', 'is_admin'];
+    protected $appends = ['pseudo', 'is_admin', 'avatar_url'];
 
     protected function casts(): array
     {
@@ -92,5 +93,20 @@ class User extends Authenticatable
     protected function isAdmin(): Attribute
     {
         return Attribute::get(fn () => $this->role === self::ROLE_ADMIN);
+    }
+
+    protected function avatarUrl(): Attribute
+    {
+        return Attribute::get(function () {
+            if (! $this->avatar_path) {
+                return null;
+            }
+
+            if (str_starts_with($this->avatar_path, 'http')) {
+                return $this->avatar_path;
+            }
+
+            return '/storage/'.ltrim($this->avatar_path, '/');
+        });
     }
 }

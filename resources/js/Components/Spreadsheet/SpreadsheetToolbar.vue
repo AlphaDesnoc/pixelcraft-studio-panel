@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
-import { Bold, Eraser, Italic, Trash2 } from "lucide-vue-next";
+import { Bold, Eraser, Hash, Italic, Percent, Trash2 } from "lucide-vue-next";
 import { Input } from "@/Components/ui/input";
 import { Button } from "@/Components/ui/button";
 import ColorPickerPopover from "@/Components/ui/ColorPickerPopover.vue";
@@ -10,6 +10,8 @@ const props = defineProps({
   selectionCount: { type: Number, default: 0 },
   editorValue: { type: String, default: "" },
   anchorCell: { type: Object, default: null },
+  currentBg: { type: String, default: null },
+  currentFg: { type: String, default: null },
 });
 
 const emits = defineEmits([
@@ -17,6 +19,7 @@ const emits = defineEmits([
   "apply-fg",
   "toggle-bold",
   "toggle-italic",
+  "apply-format",
   "clear-format",
   "clear-values",
   "update:editorValue",
@@ -61,7 +64,11 @@ function onEditorKey(e) {
       :class="fondOpen ? 'ring-2 ring-primary' : ''"
       @click="fondOpen = !fondOpen; texteOpen = false"
     >
-      <span class="h-3.5 w-3.5 rounded-sm border border-border/60 bg-muted" />
+      <span
+        class="h-3.5 w-3.5 rounded-sm border border-border/60"
+        :class="currentBg ? '' : 'bg-muted'"
+        :style="currentBg ? { backgroundColor: currentBg } : undefined"
+      />
       Fond
     </button>
     <button
@@ -71,7 +78,12 @@ function onEditorKey(e) {
       :class="texteOpen ? 'ring-2 ring-primary' : ''"
       @click="texteOpen = !texteOpen; fondOpen = false"
     >
-      <span class="h-3.5 w-3.5 rounded-sm border border-border/60 bg-muted" />
+      <span
+        class="flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-border/60 bg-muted text-[10px] font-bold leading-none"
+        :style="currentFg ? { color: currentFg } : undefined"
+      >
+        A
+      </span>
       Texte
     </button>
 
@@ -112,6 +124,41 @@ function onEditorKey(e) {
 
     <div class="mx-1 h-5 w-px bg-border" />
 
+    <button
+      type="button"
+      class="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background/40 px-2 text-xs font-semibold text-foreground hover:bg-muted/60"
+      title="Format monétaire (€)"
+      @click="emits('apply-format', 'currency')"
+    >
+      €
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background/40 text-foreground hover:bg-muted/60"
+      title="Format pourcentage"
+      @click="emits('apply-format', 'percent')"
+    >
+      <Percent class="h-3.5 w-3.5" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background/40 text-foreground hover:bg-muted/60"
+      title="Séparateur de milliers"
+      @click="emits('apply-format', 'number')"
+    >
+      <Hash class="h-3.5 w-3.5" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background/40 px-2 text-[11px] text-muted-foreground hover:bg-muted/60"
+      title="Format automatique"
+      @click="emits('apply-format', null)"
+    >
+      Auto
+    </button>
+
+    <div class="mx-1 h-5 w-px bg-border" />
+
     <span
       class="inline-flex h-7 min-w-[40px] items-center justify-center rounded-md bg-foreground/90 px-2 font-mono text-[11px] font-medium text-background"
     >
@@ -135,6 +182,7 @@ function onEditorKey(e) {
       v-model:open="fondOpen"
       title="Fond"
       :trigger-ref="fondBtn"
+      :model-value="currentBg"
       @apply="(c) => emits('apply-bg', c)"
       @clear="emits('apply-bg', null)"
     />
@@ -142,6 +190,7 @@ function onEditorKey(e) {
       v-model:open="texteOpen"
       title="Texte"
       :trigger-ref="texteBtn"
+      :model-value="currentFg"
       @apply="(c) => emits('apply-fg', c)"
       @clear="emits('apply-fg', null)"
     />

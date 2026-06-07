@@ -14,6 +14,7 @@ import {
   Calendar,
 } from "lucide-vue-next";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import VoiceChannelsPanel from "@/Components/Call/VoiceChannelsPanel.vue";
 import { Avatar } from "@/Components/ui/avatar";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -58,6 +59,7 @@ const props = defineProps({
   events: { type: Array, default: () => [] },
   notes: { type: Array, default: () => [] },
   sheets: { type: Array, default: () => [] },
+  voiceChannels: { type: Array, default: () => [] },
   fileNodes: { type: Array, default: () => [] },
   members: { type: Array, default: () => [] },
   teamMembers: { type: Array, default: () => [] },
@@ -438,6 +440,7 @@ const kanbanBugLinkTasks = computed(() =>
             :active="activeSpace === rank.key"
             @click="activeSpace = rank.key"
           />
+
         </div>
       </header>
 
@@ -446,6 +449,14 @@ const kanbanBugLinkTasks = computed(() =>
       <p class="text-xs text-muted-foreground">
         Espace actif : <span class="font-medium text-foreground">{{ spaceLabel }}</span>
       </p>
+
+      <VoiceChannelsPanel
+        :project-slug="project.slug"
+        :project-id="project.id"
+        :voice-channels="voiceChannels"
+        :ranks="ranks"
+        :can-manage="canManageTeam"
+      />
 
       <aside
         v-if="pinnedChatMessages.length || chatUnreadSummary.length"

@@ -56,6 +56,7 @@ class SheetController extends Controller
             'rows' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:1000'],
             'cols' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:200'],
             'data' => ['sometimes', 'nullable', 'array'],
+            'meta' => ['sometimes', 'nullable', 'array'],
         ]);
 
         $update = [];
@@ -70,6 +71,9 @@ class SheetController extends Controller
         }
         if (array_key_exists('data', $validated)) {
             $update['data'] = $validated['data'] ?? [];
+        }
+        if (array_key_exists('meta', $validated)) {
+            $update['meta'] = $validated['meta'] ?? [];
         }
 
         if (! empty($update)) {
@@ -145,6 +149,7 @@ class SheetController extends Controller
             'rows' => (int) $sheet->rows,
             'cols' => (int) $sheet->cols,
             'data' => $sheet->data ?: new \stdClass,
+            'meta' => $sheet->meta ?: new \stdClass,
             'rank_id' => $sheet->rank_id,
         ];
     }

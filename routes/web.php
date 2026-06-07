@@ -11,7 +11,11 @@ use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\MyTasksController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\CallController;
+use App\Http\Controllers\VoiceController;
+use App\Http\Controllers\VoiceChannelController;
 use App\Http\Controllers\NotificationPreferenceController;
+use App\Http\Controllers\ProfileAvatarController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProfileTwoFactorController;
 use App\Http\Controllers\ProjectController;
@@ -181,7 +185,26 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/ranks/{rank}/bugs', [RankController::class, 'toggleBugs'])->name('ranks.bugs');
     });
 
+    Route::post('/calls', [CallController::class, 'store'])->name('calls.store');
+    Route::post('/calls/{call}/signal', [CallController::class, 'signal'])->name('calls.signal');
+    Route::post('/calls/{call}/accept', [CallController::class, 'accept'])->name('calls.accept');
+    Route::post('/calls/{call}/decline', [CallController::class, 'decline'])->name('calls.decline');
+    Route::post('/calls/{call}/hangup', [CallController::class, 'hangup'])->name('calls.hangup');
+
+    Route::post('/projects/{project}/voice-channels', [VoiceChannelController::class, 'store'])
+        ->name('projects.voice-channels.store');
+    Route::delete('/projects/{project}/voice-channels/{voiceChannel}', [VoiceChannelController::class, 'destroy'])
+        ->name('projects.voice-channels.destroy');
+    Route::post('/projects/{project}/voice-channels/{voiceChannel}/token', [VoiceController::class, 'token'])
+        ->name('projects.voice.token');
+    Route::post('/projects/{project}/voice-channels/{voiceChannel}/leave', [VoiceController::class, 'leave'])
+        ->name('projects.voice.leave');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::post('/profile/avatar', [ProfileAvatarController::class, 'update'])
+        ->name('profile.avatar.update');
+    Route::delete('/profile/avatar', [ProfileAvatarController::class, 'destroy'])
+        ->name('profile.avatar.destroy');
     Route::put('/profile/notifications', [NotificationPreferenceController::class, 'update'])
         ->name('profile.notifications.update');
     Route::put('/profile/theme', [ProfileThemeController::class, 'update'])

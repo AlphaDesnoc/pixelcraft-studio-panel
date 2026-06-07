@@ -26,6 +26,7 @@
         "clsx": "^2.1.1",
         "emoji-picker-element": "^1.29.1",
         "laravel-echo": "^2.3.4",
+        "livekit-client": "^2.19.1",
         "lucide-react": "^1.16.0",
         "lucide-vue-next": "^1.0.0",
         "pusher-js": "^8.5.0",

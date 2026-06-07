@@ -21,6 +21,7 @@ class NotificationPreferences
             UserNotification::TYPE_OVERDUE => 'Tâche en retard',
             UserNotification::TYPE_CALENDAR_REMINDER => 'Rappels calendrier',
             UserNotification::TYPE_BUG_SLA_BREACH => 'Alertes SLA bugs',
+            UserNotification::TYPE_CALL_INCOMING => 'Appels entrants',
         ];
     }
 

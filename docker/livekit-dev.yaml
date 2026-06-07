@@ -1,0 +1,14 @@
+# Config LiveKit pour le dev local sous Docker (Windows).
+# Force l'annonce de 127.0.0.1 et un port UDP unique (mux) publié sur l'hôte,
+# sinon le navigateur reçoit l'IP interne Docker / l'IP publique STUN et le
+# média ICE échoue ("Connexion au salon impossible").
+port: 7880
+rtc:
+  tcp_port: 7881
+  udp_port: 7882          # port UDP unique (mux) -> publié -p 7882:7882/udp
+  use_external_ip: false  # pas de STUN/srflx : on reste en LAN/loopback
+  node_ip: 127.0.0.1      # défaut local ; mettre l'IP LAN (ex: 192.168.1.x) pour tester depuis d'autres machines
+keys:
+  devkey: pixelcraft_livekit_dev_secret_0123456789   # >= 32 car. (exigé hors --dev), doit matcher .env
+logging:
+  level: info

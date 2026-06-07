@@ -49,13 +49,13 @@ class ProjectController extends Controller
         $featureScope = fn ($q) => $space->applyScope($q, 'rank_id');
 
         $project->load([
-            'members:id,name,email',
-            'owner:id,name,email',
+            'members:id,name,email,avatar_path',
+            'owner:id,name,email,avatar_path',
             'lists' => fn ($q) => $listScope($q)->orderBy('position'),
             'lists.tasks' => fn ($q) => $q->orderBy('position'),
             'lists.tasks.checklists' => fn ($q) => $q->orderBy('position'),
             'lists.tasks.checklists.items' => fn ($q) => $q->orderBy('position'),
-            'lists.tasks.comments' => fn ($q) => $q->with('user:id,name')->latest(),
+            'lists.tasks.comments' => fn ($q) => $q->with('user:id,name,avatar_path')->latest(),
             'lists.tasks.attachments',
             'lists.tasks.tags',
             'lists.tasks.linkedBug',
@@ -67,9 +67,9 @@ class ProjectController extends Controller
             'fileNodes' => fn ($q) => $featureScope($q)->orderByRaw("CASE WHEN type = 'folder' THEN 0 ELSE 1 END")->orderBy('name'),
             'fileNodes.uploader:id,name',
             'chatMessages' => fn ($q) => $q->where('space_key', $space->key)->orderByDesc('pinned_at')->orderBy('created_at'),
-            'chatMessages.user:id,name',
+            'chatMessages.user:id,name,avatar_path',
             'chatMessages.attachments',
-            'chatMessages.replyTo.user:id,name',
+            'chatMessages.replyTo.user:id,name,avatar_path',
             'chatMessages.reactions',
             'ranks' => fn ($q) => $q->orderBy('position'),
             'ranks.members:id',
@@ -145,6 +145,13 @@ class ProjectController extends Controller
         $chatMessages = $space->isFull
             ? collect()
             : $project->chatMessages->map(fn ($m) => $m->toPayload())->values();
+
+        $voiceChannels = $project->voiceChannels()
+            ->with(['rank:id,name,slug,color', 'participants.user:id,name,avatar_path'])
+            ->orderBy('position')
+            ->get()
+            ->map(fn ($c) => $c->toPayload())
+            ->values();
 
         $lists = $space->isFull
             ? $this->buildMergedKanbanLists($project)
@@ -259,7 +266,7 @@ class ProjectController extends Controller
         };
 
         $bugsQuery = BugVisibility::queryForSpace(
-            $project->bugs()->with(['reporter:id,name', 'assignee:id,name', 'assignedRank:id,name']),
+            $project->bugs()->with(['reporter:id,name,avatar_path', 'assignee:id,name', 'assignedRank:id,name']),
             $user,
             $project,
             $space,
@@ -269,7 +276,7 @@ class ProjectController extends Controller
 
         $bugActivities = ActivityLog::query()
             ->whereIn('bug_id', $bugsCollection->pluck('id'))
-            ->with('user:id,name')
+            ->with('user:id,name,avatar_path')
             ->orderByDesc('created_at')
             ->get()
             ->groupBy('bug_id');
@@ -313,6 +320,7 @@ class ProjectController extends Controller
             'id' => $m->id,
             'name' => $m->name,
             'email' => $m->email,
+            'avatar_url' => $m->avatar_url,
         ])->values();
 
         $teamMembers = $project->members->map(function ($m) use ($project) {
@@ -328,6 +336,7 @@ class ProjectController extends Controller
                 'id' => $m->id,
                 'name' => $m->name,
                 'email' => $m->email,
+                'avatar_url' => $m->avatar_url,
                 'role' => $m->pivot->role ?? ProjectAccess::ROLE_MEMBER,
                 'joined_at' => optional($m->pivot->joined_at)?->toIso8601String(),
                 'is_owner' => (int) $project->owner_id === (int) $m->id
@@ -397,6 +406,7 @@ class ProjectController extends Controller
             'events' => $events,
             'notes' => $notes,
             'sheets' => $sheets,
+            'voiceChannels' => $voiceChannels,
             'fileNodes' => $fileNodes,
             'chatMessages' => $chatMessages,
             'chatMembers' => $space->isFull
@@ -415,7 +425,7 @@ class ProjectController extends Controller
                 : [],
             'activityLogs' => ActivityLog::query()
                 ->where('project_id', $project->id)
-                ->with('user:id,name')
+                ->with('user:id,name,avatar_path')
                 ->latest()
                 ->limit(30)
                 ->get()
@@ -436,7 +446,7 @@ class ProjectController extends Controller
             'pinnedChatMessages' => ChatMessage::query()
                 ->where('project_id', $project->id)
                 ->whereNotNull('pinned_at')
-                ->with('user:id,name')
+                ->with('user:id,name,avatar_path')
                 ->orderByDesc('pinned_at')
                 ->limit(15)
                 ->get()
@@ -492,7 +502,7 @@ class ProjectController extends Controller
                 'list',
                 'checklists' => fn ($q) => $q->orderBy('position'),
                 'checklists.items' => fn ($q) => $q->orderBy('position'),
-                'comments' => fn ($q) => $q->with('user:id,name')->latest(),
+                'comments' => fn ($q) => $q->with('user:id,name,avatar_path')->latest(),
                 'attachments',
                 'dependencies:id,status,title',
             ])

@@ -290,6 +290,33 @@ function flatten(args, ctx) {
   return out;
 }
 
+// Lit un nœud "range" sous forme de grille 2D (pour RECHERCHEV).
+function rangeGrid(node, ctx) {
+  if (!node || node.type !== "range") throw new FormulaError("#REF!");
+  const r1 = Math.min(node.from.row, node.to.row);
+  const r2 = Math.max(node.from.row, node.to.row);
+  const c1 = Math.min(node.from.col, node.to.col);
+  const c2 = Math.max(node.from.col, node.to.col);
+  const grid = [];
+  for (let r = r1; r <= r2; r++) {
+    const row = [];
+    for (let c = c1; c <= c2; c++) row.push(getCellValue(c, r, ctx));
+    grid.push(row);
+  }
+  return grid;
+}
+
+function parseDateValue(v) {
+  if (v instanceof Date) return v;
+  const s = String(v).trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1]);
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function numericValues(args, ctx) {
   return flatten(args, ctx)
     .map((v) => {
@@ -399,6 +426,45 @@ const FUNCS = {
   PI() {
     return Math.PI;
   },
+  VLOOKUP(args, ctx) {
+    if (args.length < 3) throw new FormulaError("#ERREUR!");
+    const key = evaluate(args[0], ctx);
+    const grid = rangeGrid(args[1], ctx);
+    const index = Math.trunc(toNumber(evaluate(args[2], ctx)));
+    if (index < 1) throw new FormulaError("#VALEUR!");
+    for (const row of grid) {
+      const first = row[0];
+      const same =
+        first === key ||
+        String(first).toLowerCase() === String(key).toLowerCase();
+      if (same) {
+        if (index > row.length) throw new FormulaError("#REF!");
+        return row[index - 1] ?? "";
+      }
+    }
+    throw new FormulaError("#N/A");
+  },
+  YEAR(args, ctx) {
+    const d = parseDateValue(evaluate(args[0], ctx));
+    if (!d) throw new FormulaError("#VALEUR!");
+    return d.getFullYear();
+  },
+  MONTH(args, ctx) {
+    const d = parseDateValue(evaluate(args[0], ctx));
+    if (!d) throw new FormulaError("#VALEUR!");
+    return d.getMonth() + 1;
+  },
+  DAY(args, ctx) {
+    const d = parseDateValue(evaluate(args[0], ctx));
+    if (!d) throw new FormulaError("#VALEUR!");
+    return d.getDate();
+  },
+  DATE(args, ctx) {
+    const y = Math.trunc(toNumber(evaluate(args[0], ctx)));
+    const m = Math.trunc(toNumber(evaluate(args[1], ctx)));
+    const d = Math.trunc(toNumber(evaluate(args[2], ctx)));
+    return new Date(y, m - 1, d).toLocaleDateString("fr-FR");
+  },
 };
 
 const ALIASES = {
@@ -423,6 +489,10 @@ const ALIASES = {
   SUPPRESPACE: "TRIM",
   MAINTENANT: "NOW",
   AUJOURDHUI: "TODAY",
+  RECHERCHEV: "VLOOKUP",
+  ANNEE: "YEAR",
+  MOIS: "MONTH",
+  JOUR: "DAY",
 };
 
 function evaluate(node, ctx) {
@@ -520,6 +590,31 @@ export function formatValue(v) {
     return String(parseFloat(v.toFixed(10)));
   }
   return String(v);
+}
+
+// Applique un format de nombre (€, %, séparateur de milliers) à une valeur
+// numérique. Pour les autres valeurs, retombe sur formatValue.
+export function formatCell(value, fmt) {
+  if (fmt && typeof value === "number" && isFinite(value)) {
+    if (fmt === "currency") {
+      return new Intl.NumberFormat("fr-FR", {
+        style: "currency",
+        currency: "EUR",
+      }).format(value);
+    }
+    if (fmt === "percent") {
+      return new Intl.NumberFormat("fr-FR", {
+        style: "percent",
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+    if (fmt === "number") {
+      return new Intl.NumberFormat("fr-FR", {
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+  }
+  return formatValue(value);
 }
 
 export { indexToColLetters };

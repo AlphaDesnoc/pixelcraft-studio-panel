@@ -7,6 +7,7 @@ defineProps({
   showSenderName: { type: Boolean, default: false },
   showAvatar: { type: Boolean, default: false },
   avatarInitials: { type: String, default: "?" },
+  avatarUrl: { type: String, default: "" },
   highlight: { type: Boolean, default: false },
   pinned: { type: Boolean, default: false },
 });
@@ -29,7 +30,13 @@ defineProps({
         :title="senderName"
         :aria-label="senderName"
       >
-        {{ avatarInitials }}
+        <img
+          v-if="avatarUrl"
+          :src="avatarUrl"
+          alt=""
+          class="h-full w-full rounded-full object-cover"
+        />
+        <template v-else>{{ avatarInitials }}</template>
       </div>
       <div v-else class="wa-chat-avatar-spacer" aria-hidden="true" />
     </template>

@@ -438,6 +438,7 @@ async function onFileSelected(event) {
               :show-sender-name="!projectMessageCluster(message).isMine && projectMessageCluster(message).clusterStart"
               :show-avatar="!projectMessageCluster(message).isMine && projectMessageCluster(message).clusterEnd"
               :avatar-initials="initials(message.user?.name)"
+              :avatar-url="message.user?.avatar_url ?? ''"
             >
               <div class="chat-message-body text-sm" v-html="renderMessageBody(message)" />
               <template #meta>
