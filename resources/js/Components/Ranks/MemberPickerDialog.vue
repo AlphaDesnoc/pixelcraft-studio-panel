@@ -17,11 +17,6 @@ const props = defineProps({
   projectSlug: { type: String, required: true },
   rank: { type: Object, default: null },
   candidates: { type: Array, default: () => [] },
-  mode: {
-    type: String,
-    default: "add-member",
-    validator: (v) => ["add-member", "set-responsible"].includes(v),
-  },
 });
 
 const emits = defineEmits(["update:open"]);
@@ -44,38 +39,21 @@ function close() {
 
 function submit() {
   if (!props.rank) return;
-  processing.value = true;
   const userId = selected.value === "" ? null : Number(selected.value);
+  if (!userId) return;
 
-  if (props.mode === "add-member") {
-    if (!userId) {
-      processing.value = false;
-      return;
-    }
-    router.post(
-      route("projects.ranks.members.add", [props.projectSlug, props.rank.id]),
-      { user_id: userId },
-      {
-        preserveScroll: true,
-        preserveState: true,
-        only: ["ranks", "members"],
-        onSuccess: close,
-        onFinish: () => (processing.value = false),
-      },
-    );
-  } else {
-    router.post(
-      route("projects.ranks.responsible", [props.projectSlug, props.rank.id]),
-      { user_id: userId },
-      {
-        preserveScroll: true,
-        preserveState: true,
-        only: ["ranks", "members"],
-        onSuccess: close,
-        onFinish: () => (processing.value = false),
-      },
-    );
-  }
+  processing.value = true;
+  router.post(
+    route("projects.ranks.members.add", [props.projectSlug, props.rank.id]),
+    { user_id: userId },
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["ranks", "members"],
+      onSuccess: close,
+      onFinish: () => (processing.value = false),
+    },
+  );
 }
 </script>
 
@@ -92,7 +70,6 @@ function submit() {
           class="h-10 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="" disabled>{{ emptyLabel }}</option>
-          <option v-if="mode === 'set-responsible'" :value="''">— Aucun responsable —</option>
           <option v-for="c in candidates" :key="c.id" :value="c.id">
             {{ c.name }}
           </option>
@@ -101,7 +78,7 @@ function submit() {
         <Button
           type="submit"
           class="h-10 w-full"
-          :disabled="processing || (mode === 'add-member' && !selected)"
+          :disabled="processing || !selected"
         >
           {{ processing ? "…" : submitLabel }}
         </Button>

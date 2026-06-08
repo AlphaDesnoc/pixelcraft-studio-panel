@@ -56,7 +56,7 @@ class ProjectAccess
             return true;
         }
 
-        return $rank !== null && (int) $rank->responsible_id === (int) $user->id;
+        return $rank !== null && $rank->responsibles()->whereKey($user->id)->exists();
     }
 
     public static function memberRole(User $user, Project $project): ?string

@@ -543,6 +543,14 @@ export function useDirectMessages({
           scroll: true,
         });
       }
+      if (data.conversation) {
+        upsertConversation({
+          id: data.conversation.id,
+          last_message_at: data.conversation.last_message_at,
+          last_message: data.conversation.last_message,
+          participant: data.conversation.participant,
+        });
+      }
       return data;
     } finally {
       uploading.value = false;

@@ -1,8 +1,19 @@
 <script setup>
 import { computed } from "vue";
 import { Link, router, usePage } from "@inertiajs/vue3";
-import { Bug, Crown, Star, Trash2, UserPlus } from "lucide-vue-next";
-import { Button } from "@/Components/ui/button";
+import {
+  ArrowRight,
+  Bug,
+  Crown,
+  ListTodo,
+  StickyNote,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-vue-next";
+import { Avatar } from "@/Components/ui/avatar";
+import { Switch } from "@/Components/ui/switch";
 import { confirmDialog } from "@/composables/useConfirm.js";
 
 const page = usePage();
@@ -19,23 +30,61 @@ const canManageMembers = computed(
 
 const currentUserId = computed(() => page.props.auth?.user?.id ?? null);
 
-function canRemoveMember(memberId) {
+function canRemoveMember(member) {
   if (!canManageMembers.value) return false;
+  // Un responsable non-admin ne peut pas se retirer lui-même du rank.
   if (
     !props.canEdit &&
-    props.rank.responsible?.id === memberId &&
-    memberId === currentUserId.value
+    member.is_responsible &&
+    member.id === currentUserId.value
   ) {
     return false;
   }
   return true;
 }
 
-const emits = defineEmits(["add-member", "set-responsible", "rename"]);
+const emits = defineEmits(["add-member", "rename"]);
 
-const memberCount = computed(() => props.rank.counts?.members ?? props.rank.members?.length ?? 0);
+const responsibles = computed(() => props.rank.responsibles ?? []);
+
+function toggleResponsible(userId) {
+  if (!props.canEdit) return;
+  router.post(
+    route("projects.ranks.responsible", [props.projectSlug, props.rank.id]),
+    { user_id: userId },
+    { preserveScroll: true, preserveState: true, only: ["ranks", "members"] },
+  );
+}
+
+const color = computed(() => props.rank.color || "#6366f1");
+const memberCount = computed(
+  () => props.rank.counts?.members ?? props.rank.members?.length ?? 0,
+);
 const taskCount = computed(() => props.rank.counts?.tasks ?? 0);
 const noteCount = computed(() => props.rank.counts?.notes ?? 0);
+
+const stats = computed(() => [
+  { key: "members", label: "Membres", value: memberCount.value, icon: Users },
+  { key: "tasks", label: "Tâches", value: taskCount.value, icon: ListTodo },
+  { key: "notes", label: "Notes", value: noteCount.value, icon: StickyNote },
+]);
+
+function tint(hex, alpha) {
+  const h = (hex || "#6366f1").replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function initials(name) {
+  return (name ?? "?")
+    .split(" ")
+    .map((p) => p.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 async function destroy() {
   if (!props.canEdit) return;
@@ -83,101 +132,177 @@ async function removeMember(userId) {
 </script>
 
 <template>
-  <article class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-    <header class="flex items-start justify-between gap-2">
-      <div class="flex items-center gap-2">
+  <article
+    class="group/card relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all hover:border-border/80 hover:shadow-md"
+  >
+    <!-- Bandeau d'accent à la couleur du rank -->
+    <span class="h-1 w-full shrink-0" :style="{ backgroundColor: color }" />
+
+    <div class="flex flex-1 flex-col gap-4 p-4">
+      <!-- En-tête -->
+      <header class="flex items-start gap-3">
         <span
-          class="inline-block h-2.5 w-2.5 rounded-full"
-          :style="{ backgroundColor: rank.color }"
-        />
-        <h3 class="text-sm font-semibold text-foreground">{{ rank.name }}</h3>
-      </div>
-      <button
-        v-if="canEdit"
-        type="button"
-        class="inline-flex h-6 w-6 items-center justify-center rounded-md text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
-        title="Supprimer"
-        @click="destroy"
-      >
-        <Trash2 class="h-3.5 w-3.5" />
-      </button>
-    </header>
-
-    <div class="flex flex-col gap-1.5">
-      <div class="flex items-center gap-1.5 text-xs">
-        <Crown class="h-3.5 w-3.5 text-amber-400" />
-        <span v-if="rank.responsible" class="text-foreground">
-          Responsable : <span class="font-medium">{{ rank.responsible.name }}</span>
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-bold"
+          :style="{ backgroundColor: tint(color, 0.16), color }"
+        >
+          {{ initials(rank.name) }}
         </span>
-        <span v-else class="italic text-muted-foreground">Aucun responsable</span>
+        <div class="min-w-0 flex-1">
+          <h3 class="truncate text-sm font-semibold leading-tight text-foreground">
+            {{ rank.name }}
+          </h3>
+          <p
+            v-if="rank.description"
+            class="mt-0.5 line-clamp-2 text-xs text-muted-foreground"
+          >
+            {{ rank.description }}
+          </p>
+          <p v-else class="mt-0.5 text-xs text-muted-foreground/60">
+            /{{ rank.slug }}
+          </p>
+        </div>
+        <button
+          v-if="canEdit"
+          type="button"
+          class="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 opacity-0 transition-all hover:bg-rose-500/10 hover:text-rose-400 focus-visible:opacity-100 group-hover/card:opacity-100"
+          title="Supprimer le rank"
+          @click="destroy"
+        >
+          <Trash2 class="h-4 w-4" />
+        </button>
+      </header>
+
+      <!-- Responsable(s) -->
+      <div class="rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
+        <p class="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-500">
+          <Crown class="h-3 w-3" />
+          {{ responsibles.length > 1 ? "Responsables" : "Responsable" }}
+        </p>
+        <ul v-if="responsibles.length" class="flex flex-wrap gap-1.5">
+          <li
+            v-for="resp in responsibles"
+            :key="resp.id"
+            class="inline-flex items-center gap-1.5 rounded-full bg-background/60 py-0.5 pl-0.5 pr-2 text-[11px] text-foreground"
+          >
+            <Avatar
+              :src="resp.avatar_url ?? ''"
+              :fallback="initials(resp.name)"
+              size="xs"
+              class="!h-5 !w-5 !text-[8px]"
+            />
+            <span class="max-w-[7rem] truncate">{{ resp.name }}</span>
+          </li>
+        </ul>
+        <p v-else class="text-xs italic text-muted-foreground">
+          Aucun responsable désigné<span v-if="canEdit"> · cliquez sur la couronne d'un membre</span>
+        </p>
       </div>
 
-      <div class="flex items-center gap-3 text-[11px] text-muted-foreground">
-        <span>{{ memberCount }} membres</span>
-        <span>{{ taskCount }} tâches</span>
-        <span>{{ noteCount }} notes</span>
+      <!-- Statistiques -->
+      <div class="grid grid-cols-3 gap-2">
+        <div
+          v-for="stat in stats"
+          :key="stat.key"
+          class="flex flex-col items-center gap-1 rounded-xl border border-border/50 bg-background/40 py-2.5"
+        >
+          <component :is="stat.icon" class="h-3.5 w-3.5 text-muted-foreground" />
+          <span class="text-base font-semibold leading-none tabular-nums text-foreground">
+            {{ stat.value }}
+          </span>
+          <span class="text-[10px] text-muted-foreground">{{ stat.label }}</span>
+        </div>
       </div>
 
-      <label class="mt-1 inline-flex w-fit cursor-pointer items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          :checked="rank.manages_bugs"
+      <!-- Membres -->
+      <div v-if="rank.members && rank.members.length" class="flex flex-col gap-1.5">
+        <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Équipe
+        </p>
+        <ul class="flex flex-wrap gap-1.5">
+          <li
+            v-for="member in rank.members"
+            :key="member.id"
+            class="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/50 py-0.5 pl-0.5 pr-1 text-[11px] text-foreground"
+          >
+            <Avatar
+              :src="member.avatar_url ?? ''"
+              :fallback="initials(member.name)"
+              size="xs"
+              class="!h-5 !w-5 !text-[8px]"
+            />
+            <span class="max-w-[7rem] truncate">{{ member.name }}</span>
+            <button
+              v-if="canEdit"
+              type="button"
+              class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-amber-500/15"
+              :title="member.is_responsible ? 'Retirer des responsables' : 'Désigner responsable'"
+              @click="toggleResponsible(member.id)"
+            >
+              <Crown
+                class="h-3 w-3"
+                :class="member.is_responsible ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/50'"
+              />
+            </button>
+            <Crown
+              v-else-if="member.is_responsible"
+              class="h-3 w-3 shrink-0 fill-amber-400 text-amber-400"
+            />
+            <button
+              v-if="canRemoveMember(member)"
+              type="button"
+              class="ml-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-muted/60 text-muted-foreground transition-colors hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-400"
+              title="Retirer du rank"
+              @click="removeMember(member.id)"
+            >
+              <X class="h-3 w-3" />
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Gestion des bugs -->
+      <label
+        class="flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2"
+        :class="canEdit ? 'cursor-pointer' : 'cursor-default'"
+      >
+        <span
+          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+          :class="rank.manages_bugs ? 'bg-amber-500/15 text-amber-500' : 'bg-muted text-muted-foreground'"
+        >
+          <Bug class="h-3.5 w-3.5" />
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-medium text-foreground">Gestion des bugs</p>
+          <p class="text-[10px] text-muted-foreground">
+            Ce rank traite les rapports de bugs
+          </p>
+        </div>
+        <Switch
+          :model-value="rank.manages_bugs"
           :disabled="!canEdit"
-          class="h-3.5 w-3.5 rounded border-border bg-background accent-primary"
-          @change="toggleBugs"
+          @update:model-value="toggleBugs"
         />
-        <Bug class="h-3.5 w-3.5 text-amber-400" />
-        <span class="text-foreground">Gestion des bugs</span>
       </label>
 
-      <ul v-if="rank.members && rank.members.length > 0" class="mt-1 flex flex-wrap gap-1.5">
-        <li
-          v-for="member in rank.members"
-          :key="member.id"
-          class="group/member inline-flex items-center gap-1 rounded-full border border-border bg-background/40 px-2 py-0.5 text-[11px] text-foreground"
+      <!-- Actions -->
+      <div class="mt-auto flex flex-col gap-2 pt-1">
+        <Link
+          :href="`${route('projects.show', projectSlug)}?space=${rank.slug}`"
+          class="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          <span>{{ member.name }}</span>
-          <Star
-            v-if="rank.responsible && rank.responsible.id === member.id"
-            class="h-2.5 w-2.5 fill-amber-400 text-amber-400"
-          />
-          <button
-            v-if="canRemoveMember(member.id)"
-            type="button"
-            class="ml-0.5 hidden text-muted-foreground hover:text-rose-400 group-hover/member:inline-flex"
-            title="Retirer du rank"
-            @click="removeMember(member.id)"
-          >
-            ×
-          </button>
-        </li>
-      </ul>
-    </div>
-
-    <div class="mt-auto flex items-center gap-1.5">
-      <Button as-child class="h-9 flex-1">
-        <Link :href="`${route('projects.show', projectSlug)}?space=${rank.slug}`">
           Ouvrir l'espace
+          <ArrowRight class="h-4 w-4" />
         </Link>
-      </Button>
-      <button
-        v-if="canManageMembers"
-        type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background/40 text-foreground transition-colors hover:bg-muted/60"
-        title="Ajouter un membre"
-        @click="emits('add-member', rank)"
-      >
-        <UserPlus class="h-3.5 w-3.5" />
-      </button>
-      <button
-        v-if="canEdit"
-        type="button"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background/40 text-amber-400 transition-colors hover:bg-amber-500/10"
-        title="Définir le responsable"
-        @click="emits('set-responsible', rank)"
-      >
-        <Crown class="h-3.5 w-3.5" />
-      </button>
+        <button
+          v-if="canManageMembers"
+          type="button"
+          class="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-input bg-background/40 text-sm font-medium text-foreground transition-colors hover:bg-muted/60"
+          @click="emits('add-member', rank)"
+        >
+          <UserPlus class="h-3.5 w-3.5" />
+          Ajouter un membre
+        </button>
+      </div>
     </div>
   </article>
 </template>

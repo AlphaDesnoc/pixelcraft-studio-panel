@@ -181,7 +181,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/ranks/{rank}', [RankController::class, 'destroy'])->name('ranks.destroy');
         Route::post('/ranks/{rank}/members', [RankController::class, 'addMember'])->name('ranks.members.add');
         Route::delete('/ranks/{rank}/members/{user}', [RankController::class, 'removeMember'])->name('ranks.members.remove');
-        Route::post('/ranks/{rank}/responsible', [RankController::class, 'setResponsible'])->name('ranks.responsible');
+        Route::post('/ranks/{rank}/responsible', [RankController::class, 'toggleResponsible'])->name('ranks.responsible');
         Route::post('/ranks/{rank}/bugs', [RankController::class, 'toggleBugs'])->name('ranks.bugs');
     });
 

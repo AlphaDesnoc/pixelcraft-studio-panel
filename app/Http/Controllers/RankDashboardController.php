@@ -75,7 +75,7 @@ class RankDashboardController extends Controller
         $since = now()->subDays(14);
 
         $ranks = $project->ranks()
-            ->with(['responsible:id,name', 'members:id,name'])
+            ->with(['members:id,name'])
             ->orderBy('position')
             ->get()
             ->map(function ($rank) use ($project, $since) {
@@ -168,10 +168,10 @@ class RankDashboardController extends Controller
                     'slug' => $rank->slug,
                     'color' => $rank->color,
                     'manages_bugs' => (bool) $rank->manages_bugs,
-                    'responsible' => $rank->responsible ? [
-                        'id' => $rank->responsible->id,
-                        'name' => $rank->responsible->name,
-                    ] : null,
+                    'responsibles' => $rank->members
+                        ->filter(fn ($m) => (bool) $m->pivot->is_responsible)
+                        ->map(fn ($m) => ['id' => $m->id, 'name' => $m->name])
+                        ->values(),
                     'members_count' => $rank->members->count(),
                     'member_workload' => $memberWorkload,
                     'burndown' => $this->burndownForRank($project, $rank->id),

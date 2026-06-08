@@ -40,16 +40,16 @@ class RankController extends Controller
         $this->ensureDefaultRanks($project);
 
         $project->load([
-            'members:id,name,email',
+            'members:id,name,email,avatar_path',
             'ranks' => fn ($q) => $q->orderBy('position'),
-            'ranks.responsible:id,name,email',
-            'ranks.members:id,name,email',
+            'ranks.members:id,name,email,avatar_path',
         ]);
 
         $members = $project->members->map(fn ($m) => [
             'id' => $m->id,
             'name' => $m->name,
             'email' => $m->email,
+            'avatar_url' => $m->avatar_url,
         ])->values();
 
         $ranks = $project->ranks
@@ -91,7 +91,7 @@ class RankController extends Controller
         ]);
 
         return $this->apiOrBack($request, [
-            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+            'rank' => $this->serializeRank($rank->fresh(['members:id,name,email,avatar_path']), $request->user()),
         ]);
     }
 
@@ -135,7 +135,7 @@ class RankController extends Controller
         }
 
         return $this->apiOrBack($request, [
-            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+            'rank' => $this->serializeRank($rank->fresh(['members:id,name,email,avatar_path']), $request->user()),
         ]);
     }
 
@@ -173,7 +173,7 @@ class RankController extends Controller
         $rank->members()->syncWithoutDetaching([$validated['user_id']]);
 
         return $this->apiOrBack($request, [
-            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+            'rank' => $this->serializeRank($rank->fresh(['members:id,name,email,avatar_path']), $request->user()),
         ]);
     }
 
@@ -182,43 +182,56 @@ class RankController extends Controller
         $this->ensureCanManageRankMembers($request, $project, $rank);
         abort_unless($rank->project_id === $project->id, 404);
 
-        if ($rank->responsible_id === $userId && ! $request->user()->is_admin) {
-            abort(403, 'Le responsable ne peut pas se retirer lui-même du rank.');
+        $isResponsible = $rank->members()
+            ->whereKey($userId)
+            ->wherePivot('is_responsible', true)
+            ->exists();
+
+        if ($isResponsible && ! $request->user()->is_admin) {
+            abort(403, 'Un responsable ne peut être retiré du rank que par un administrateur.');
         }
 
         $rank->members()->detach($userId);
-        if ($rank->responsible_id === $userId) {
-            $rank->update(['responsible_id' => null]);
-        }
 
         return $this->apiOrBack($request, [
-            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+            'rank' => $this->serializeRank($rank->fresh(['members:id,name,email,avatar_path']), $request->user()),
         ]);
     }
 
-    public function setResponsible(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
+    /**
+     * Ajoute ou retire le statut de responsable pour un membre du rang. Un rang
+     * peut avoir plusieurs responsables ; le membre est attaché au rang si besoin.
+     */
+    public function toggleResponsible(Request $request, Project $project, Rank $rank): JsonResponse|RedirectResponse
     {
         $this->ensureCanEdit($request, $project);
         abort_unless($rank->project_id === $project->id, 404);
 
         $validated = $request->validate([
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'user_id' => ['required', 'integer', 'exists:users,id'],
         ]);
 
-        $userId = $validated['user_id'] ?? null;
-        if ($userId !== null) {
-            abort_unless(
-                $project->members()->whereKey($userId)->exists(),
-                422,
-                'Cet utilisateur n\'est pas membre du projet.',
-            );
-            $rank->members()->syncWithoutDetaching([$userId]);
-        }
+        $userId = (int) $validated['user_id'];
+        abort_unless(
+            $project->members()->whereKey($userId)->exists(),
+            422,
+            'Cet utilisateur n\'est pas membre du projet.',
+        );
 
-        $rank->update(['responsible_id' => $userId]);
+        // On s'assure que le membre fait partie du rang, puis on bascule le flag.
+        $rank->members()->syncWithoutDetaching([$userId]);
+
+        $isResponsible = $rank->members()
+            ->whereKey($userId)
+            ->wherePivot('is_responsible', true)
+            ->exists();
+
+        $rank->members()->updateExistingPivot($userId, [
+            'is_responsible' => ! $isResponsible,
+        ]);
 
         return $this->apiOrBack($request, [
-            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+            'rank' => $this->serializeRank($rank->fresh(['members:id,name,email,avatar_path']), $request->user()),
         ]);
     }
 
@@ -230,7 +243,7 @@ class RankController extends Controller
         $rank->update(['manages_bugs' => ! $rank->manages_bugs]);
 
         return $this->apiOrBack($request, [
-            'rank' => $this->serializeRank($rank->fresh(['responsible:id,name,email', 'members:id,name,email']), $request->user()),
+            'rank' => $this->serializeRank($rank->fresh(['members:id,name,email,avatar_path']), $request->user()),
         ]);
     }
 
@@ -261,7 +274,10 @@ class RankController extends Controller
 
     private function userManagesRank(User $user, Rank $rank): bool
     {
-        return $rank->responsible_id === $user->id;
+        return $rank->members()
+            ->whereKey($user->id)
+            ->wherePivot('is_responsible', true)
+            ->exists();
     }
 
     private function serializeRank(Rank $rank, User $user): array
@@ -274,13 +290,19 @@ class RankController extends Controller
             'description' => $rank->description,
             'manages_bugs' => (bool) $rank->manages_bugs,
             'position' => (int) $rank->position,
-            'responsible' => $rank->responsible ? [
-                'id' => $rank->responsible->id,
-                'name' => $rank->responsible->name,
-            ] : null,
+            'responsibles' => $rank->members
+                ->filter(fn ($m) => (bool) $m->pivot->is_responsible)
+                ->map(fn ($m) => [
+                    'id' => $m->id,
+                    'name' => $m->name,
+                    'avatar_url' => $m->avatar_url,
+                ])
+                ->values(),
             'members' => $rank->members->map(fn ($m) => [
                 'id' => $m->id,
                 'name' => $m->name,
+                'avatar_url' => $m->avatar_url,
+                'is_responsible' => (bool) $m->pivot->is_responsible,
             ])->values(),
             'counts' => [
                 'members' => $rank->members->count(),

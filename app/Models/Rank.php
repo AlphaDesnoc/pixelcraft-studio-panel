@@ -11,7 +11,6 @@ use Illuminate\Support\Str;
 
 #[Fillable([
     'project_id',
-    'responsible_id',
     'name',
     'slug',
     'color',
@@ -62,14 +61,17 @@ class Rank extends Model
         return $this->belongsTo(Project::class);
     }
 
-    public function responsible(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'responsible_id');
-    }
-
     public function members(): BelongsToMany
     {
-        return $this->belongsToMany(User::class)->withTimestamps();
+        return $this->belongsToMany(User::class)
+            ->withPivot('is_responsible')
+            ->withTimestamps();
+    }
+
+    /** Membres marqués comme responsables du rang (peut y en avoir plusieurs). */
+    public function responsibles(): BelongsToMany
+    {
+        return $this->members()->wherePivot('is_responsible', true);
     }
 
     public function lists(): HasMany

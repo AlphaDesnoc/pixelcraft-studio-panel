@@ -10,7 +10,16 @@ class DirectConversationPayload
     public static function serialize(DirectConversation $conv, User $viewer): array
     {
         $other = $conv->otherParticipant($viewer);
-        $latest = $conv->relationLoaded('messages') ? $conv->messages->first() : null;
+
+        // Dernier message : on privilégie la relation dédiée `latestMessage`. En
+        // repli, `messages` est trié par created_at ASC → le plus récent est le
+        // dernier élément (et non le premier).
+        $latest = null;
+        if ($conv->relationLoaded('latestMessage')) {
+            $latest = $conv->latestMessage->first();
+        } elseif ($conv->relationLoaded('messages')) {
+            $latest = $conv->messages->last();
+        }
 
         return [
             'id' => $conv->id,
