@@ -32,18 +32,28 @@ const props = defineProps({
   canManage: { type: Boolean, default: false },
   // Rangs dont l'utilisateur est responsable : [{ id, name, color }].
   manageRanks: { type: Array, default: () => [] },
+  // Espace actif : les salons affichés et créés sont ceux de cet espace.
+  activeSpace: { type: String, default: "global" },
+  activeRankId: { type: Number, default: null },
+  spaceLabel: { type: String, default: "" },
 });
 
 const channels = ref([]);
 
 // ---- Droits de gestion ----
-const allowGlobal = computed(() => props.canManage);
+// Espace global ou vue d'ensemble admin → salons « tout le projet ».
+const isGlobalSpace = computed(
+  () => props.activeSpace === "global" || props.activeSpace === "full",
+);
 const manageableRankIds = computed(
   () => new Set(props.manageRanks.map((r) => r.id)),
 );
-const canCreate = computed(
-  () => props.canManage || props.manageRanks.length > 0,
-);
+// On crée un salon dans l'espace courant : le global est réservé aux admins,
+// l'espace d'un rang est ouvert à l'admin et au responsable de ce rang.
+const canCreate = computed(() => {
+  if (isGlobalSpace.value) return props.canManage;
+  return props.canManage || manageableRankIds.value.has(props.activeRankId);
+});
 
 function canManageChannel(channel) {
   return props.canManage || manageableRankIds.value.has(channel.rank_id);
@@ -142,34 +152,29 @@ function initials(name) {
 // ---- Création / suppression ----
 const creating = ref(false);
 const newName = ref("");
-const newRankId = ref("");
 const newType = ref("voice"); // "voice" | "meeting"
 
 function openCreate() {
   creating.value = true;
   newName.value = "";
   newType.value = "voice";
-  // Un responsable de rang ne peut pas créer de salon global : on présélectionne
-  // son rang.
-  newRankId.value = allowGlobal.value ? "" : (props.manageRanks[0]?.id ?? "");
 }
 
 function resetCreate() {
   creating.value = false;
   newName.value = "";
-  newRankId.value = "";
   newType.value = "voice";
 }
 
 function submitCreate() {
   const name = newName.value.trim();
   if (!name) return;
-  if (!allowGlobal.value && !newRankId.value) return;
   router.post(
     route("projects.voice-channels.store", props.projectSlug),
     {
+      // Le salon est rattaché à l'espace courant.
       name,
-      rank_id: newRankId.value ? Number(newRankId.value) : null,
+      rank_id: isGlobalSpace.value ? null : props.activeRankId,
       with_video: newType.value === "meeting",
     },
     {
@@ -271,6 +276,12 @@ onBeforeUnmount(() => {
           <Volume2 class="h-3.5 w-3.5 text-emerald-400" />
         </span>
         Salons vocaux
+        <span
+          v-if="spaceLabel"
+          class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+        >
+          {{ spaceLabel }}
+        </span>
       </h3>
       <button
         v-if="canCreate"
@@ -328,20 +339,20 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <div class="flex items-center gap-2">
-          <select
-            v-model="newRankId"
-            class="h-9 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none focus:border-emerald-500/50"
-          >
-            <option v-if="allowGlobal" value="">Accès : tout le projet</option>
-            <option v-for="r in manageRanks" :key="r.id" :value="r.id">
-              Accès : {{ r.name }}
-            </option>
-          </select>
+        <div class="flex items-center justify-between gap-2">
+          <p class="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
+            <Lock v-if="!isGlobalSpace" class="h-3 w-3 shrink-0" />
+            <span class="truncate">
+              Accès :
+              <span class="font-medium text-foreground">
+                {{ isGlobalSpace ? "tout le projet" : spaceLabel }}
+              </span>
+            </span>
+          </p>
           <button
             type="button"
-            class="inline-flex h-9 items-center gap-1 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-            :disabled="!newName.trim() || (!allowGlobal && !newRankId)"
+            class="inline-flex h-9 shrink-0 items-center gap-1 rounded-md bg-primary px-4 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            :disabled="!newName.trim()"
             @click="submitCreate"
           >
             Créer
@@ -355,7 +366,7 @@ onBeforeUnmount(() => {
         v-if="!channels.length"
         class="px-1 py-3 text-center text-xs text-muted-foreground"
       >
-        Aucun salon vocal.
+        Aucun salon vocal dans cet espace.
         <span v-if="canCreate">Créez-en un pour commencer.</span>
       </p>
 

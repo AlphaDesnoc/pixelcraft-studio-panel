@@ -434,6 +434,9 @@ const kanbanBugLinkTasks = computed(() =>
         :ranks="ranks"
         :can-manage="canManageTeam"
         :manage-ranks="voiceManageRanks"
+        :active-space="activeSpace"
+        :active-rank-id="activeRankId"
+        :space-label="spaceLabel"
       />
 
       <aside

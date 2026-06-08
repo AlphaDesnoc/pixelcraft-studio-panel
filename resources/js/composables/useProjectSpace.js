@@ -12,6 +12,7 @@ export function spaceOnlyProps() {
     "notes",
     "sheets",
     "fileNodes",
+    "voiceChannels",
     "stats",
     "progress",
     "byStatus",
