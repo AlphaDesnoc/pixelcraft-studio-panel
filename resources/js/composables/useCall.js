@@ -114,10 +114,27 @@ async function createPeer(withVideo) {
 }
 
 function subscribeCallChannel(callId) {
-  callChannel = window.Echo.private(`call.${callId}`);
-  callChannel
-    .listen(".CallSignal", onCallSignal)
-    .listen(".CallStateChanged", onCallStateChanged);
+  // On attend la confirmation d'abonnement avant de poursuivre. Sinon l'appelé
+  // peut poster "accept" puis recevoir l'offre WebRTC AVANT que Reverb n'ait
+  // validé son abonnement au canal d'appel : l'offre est alors perdue et la
+  // connexion ne s'établit jamais ("impossible de rejoindre l'appel").
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+
+    callChannel = window.Echo.private(`call.${callId}`);
+    callChannel
+      .listen(".CallSignal", onCallSignal)
+      .listen(".CallStateChanged", onCallStateChanged)
+      .subscribed(finish);
+
+    // Filet de sécurité si l'événement "subscribed" n'arrive pas (timeout court).
+    setTimeout(finish, 2000);
+  });
 }
 
 async function onCallSignal(event) {
@@ -215,7 +232,7 @@ export async function startCall(callee, { withVideo = false, projectId = null } 
     });
     currentCall.value = data.call;
     await createPeer(withVideo);
-    subscribeCallChannel(data.call.id);
+    await subscribeCallChannel(data.call.id);
   } catch (e) {
     log("startCall error", e);
     endLocally();
@@ -233,7 +250,7 @@ export async function acceptCall() {
     callStatus.value = "connecting";
     const withVideo = Boolean(currentCall.value.with_video);
     await createPeer(withVideo);
-    subscribeCallChannel(currentCall.value.id);
+    await subscribeCallChannel(currentCall.value.id);
     await axios.post(route("calls.accept", currentCall.value.id));
   } catch (e) {
     log("acceptCall error", e);
