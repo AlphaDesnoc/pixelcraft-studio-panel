@@ -413,10 +413,11 @@ function readReceiptTitle(message) {
 }
 
 function previewText(conv) {
-  const body = conv.last_message?.body;
-  if (!body) return "Aucun message";
-  const prefix =
-    conv.last_message.user_id === currentUserId.value ? "Vous : " : "";
+  const lm = conv.last_message;
+  if (!lm) return "Aucun message";
+  const prefix = lm.user_id === currentUserId.value ? "Vous : " : "";
+  const body = lm.body?.trim();
+  if (!body) return `${prefix}📎 Pièce jointe`;
   return `${prefix}${body}`;
 }
 

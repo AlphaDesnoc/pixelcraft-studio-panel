@@ -102,8 +102,9 @@ function formatHours(value) {
               </Badge>
             </div>
             <CardDescription class="text-xs">
-              <template v-if="rank.responsible">
-                Responsable : {{ rank.responsible.name }}
+              <template v-if="rank.responsibles && rank.responsibles.length">
+                {{ rank.responsibles.length > 1 ? "Responsables" : "Responsable" }} :
+                {{ rank.responsibles.map((r) => r.name).join(", ") }}
               </template>
               <template v-else>Aucun responsable désigné</template>
               <template v-if="rank.manages_bugs">

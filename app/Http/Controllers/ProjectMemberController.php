@@ -172,10 +172,8 @@ class ProjectMemberController extends Controller
         $project->members()->detach($user->id);
 
         foreach ($project->ranks as $rank) {
+            // Le détachement retire aussi le statut de responsable (ligne pivot).
             $rank->members()->detach($user->id);
-            if ((int) $rank->responsible_id === (int) $user->id) {
-                $rank->update(['responsible_id' => null]);
-            }
         }
 
         AuditLogger::log(

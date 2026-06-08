@@ -21,7 +21,6 @@ const formOpen = ref(false);
 const editingRank = ref(null);
 
 const memberPickerOpen = ref(false);
-const memberPickerMode = ref("add-member");
 const memberPickerRank = ref(null);
 
 const initials = computed(() =>
@@ -56,22 +55,12 @@ function openCreate() {
 }
 
 function openAddMember(rank) {
-  memberPickerMode.value = "add-member";
-  memberPickerRank.value = rank;
-  memberPickerOpen.value = true;
-}
-
-function openSetResponsible(rank) {
-  memberPickerMode.value = "set-responsible";
   memberPickerRank.value = rank;
   memberPickerOpen.value = true;
 }
 
 const memberCandidates = computed(() => {
   if (!memberPickerRank.value) return [];
-  if (memberPickerMode.value === "set-responsible") {
-    return memberPickerRank.value.members ?? [];
-  }
   const existingIds = new Set(
     (memberPickerRank.value.members ?? []).map((m) => m.id),
   );
@@ -149,7 +138,6 @@ const memberCandidates = computed(() => {
             :rank="rank"
             :can-edit="canEdit"
             @add-member="openAddMember"
-            @set-responsible="openSetResponsible"
           />
         </div>
       </section>
@@ -165,20 +153,10 @@ const memberCandidates = computed(() => {
         :project-slug="project.slug"
         :rank="memberPickerRank"
         :candidates="memberCandidates"
-        :mode="memberPickerMode"
-        :title="
-          memberPickerMode === 'add-member'
-            ? 'Ajouter un membre au rank'
-            : 'Définir le responsable'
-        "
-        :submit-label="
-          memberPickerMode === 'add-member' ? 'Ajouter' : 'Définir comme responsable'
-        "
-        :empty-label="
-          memberPickerMode === 'add-member'
-            ? 'Choisir un membre du projet'
-            : 'Choisir parmi les membres du rank'
-        "
+        mode="add-member"
+        title="Ajouter un membre au rank"
+        submit-label="Ajouter"
+        empty-label="Choisir un membre du projet"
       />
     </div>
   </AuthenticatedLayout>

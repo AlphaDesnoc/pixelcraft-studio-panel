@@ -163,7 +163,7 @@ class ProjectController extends Controller
         // « admin » (admin/proprio/gestionnaire), sinon ceux dont il est responsable.
         $voiceManageRanks = ($canManageTeam
             ? $project->ranks
-            : $project->ranks->where('responsible_id', $user->id))
+            : $project->ranks()->whereHas('responsibles', fn ($q) => $q->whereKey($user->id))->get())
             ->sortBy('position')
             ->map(fn ($r) => [
                 'id' => $r->id,

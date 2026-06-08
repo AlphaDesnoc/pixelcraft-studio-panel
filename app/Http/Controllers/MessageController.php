@@ -32,7 +32,7 @@ class MessageController extends Controller
             ->with([
                 'userOne:id,name,email',
                 'userTwo:id,name,email',
-                'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name'),
+                'latestMessage' => fn ($q) => $q->with('user:id,name'),
             ])
             ->orderByDesc('last_message_at')
             ->orderByDesc('updated_at')
@@ -90,7 +90,7 @@ class MessageController extends Controller
             ->with([
                 'userOne:id,name,email',
                 'userTwo:id,name,email',
-                'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name'),
+                'latestMessage' => fn ($q) => $q->with('user:id,name'),
             ])
             ->orderByDesc('last_message_at')
             ->orderByDesc('updated_at')
@@ -204,7 +204,7 @@ class MessageController extends Controller
         return response()->json([
             'message' => $message->toPayload($user),
             'conversation' => DirectConversationPayload::serialize(
-                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
+                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'latestMessage' => fn ($q) => $q->with('user:id,name')]),
                 $user,
             ),
         ]);
@@ -283,7 +283,7 @@ class MessageController extends Controller
         return response()->json([
             'message' => $message->toPayload($user),
             'conversation' => DirectConversationPayload::serialize(
-                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'messages' => fn ($q) => $q->latest()->limit(1)->with('user:id,name')]),
+                $conversation->load(['userOne:id,name,email', 'userTwo:id,name,email', 'latestMessage' => fn ($q) => $q->with('user:id,name')]),
                 $user,
             ),
         ]);
