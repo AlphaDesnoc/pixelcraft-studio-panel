@@ -25,7 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/Components/ui/card";
-import EspaceBadge from "@/Components/Projects/EspaceBadge.vue";
+import SpaceSwitcher from "@/Components/Projects/SpaceSwitcher.vue";
 import ProjectTabs from "@/Components/Projects/ProjectTabs.vue";
 import StatChip from "@/Components/Projects/StatChip.vue";
 import DonutChart from "@/Components/Projects/DonutChart.vue";
@@ -418,38 +418,14 @@ const kanbanBugLinkTasks = computed(() =>
           </Button>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <span
-            class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-          >
-            Espace
-          </span>
-          <EspaceBadge
-            v-for="space in spaces"
-            :key="space.key"
-            :label="space.label"
-            :icon="space.icon"
-            :active="activeSpace === space.key"
-            @click="activeSpace = space.key"
-          />
-          <span class="mx-1 h-4 w-px bg-border" />
-          <EspaceBadge
-            v-for="rank in ranks"
-            :key="rank.key"
-            :label="rank.label"
-            :color="rank.color"
-            :active="activeSpace === rank.key"
-            @click="activeSpace = rank.key"
-          />
-
-        </div>
+        <SpaceSwitcher
+          v-model="activeSpace"
+          :spaces="spaces"
+          :ranks="ranks"
+        />
       </header>
 
       <ProjectTabs :tabs="tabs" :active="activeTab" @update:active="activeTab = $event" />
-
-      <p class="text-xs text-muted-foreground">
-        Espace actif : <span class="font-medium text-foreground">{{ spaceLabel }}</span>
-      </p>
 
       <VoiceChannelsPanel
         :project-slug="project.slug"
