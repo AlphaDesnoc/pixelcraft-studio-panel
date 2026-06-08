@@ -2,6 +2,21 @@ import { computed, ref } from "vue";
 import axios from "axios";
 import { Room, RoomEvent, Track } from "livekit-client";
 
+// Qualité du partage d'écran : 1080p @ 60fps. Pas de preset 60fps fourni par
+// LiveKit, donc on définit l'encodage manuellement (bitrate élevé pour rester
+// net en mouvement). dynacast/adaptiveStream réduiront automatiquement la
+// qualité pour les viewers qui n'affichent le flux qu'en petit.
+const SCREEN_SHARE_ENCODING = {
+  maxBitrate: 8_000_000, // 8 Mbps
+  maxFramerate: 60,
+  priority: "high",
+};
+const SCREEN_SHARE_CAPTURE = {
+  audio: true,
+  resolution: { width: 1920, height: 1080, frameRate: 60 },
+  contentHint: "motion", // fluidité (vidéo/jeu) ; "detail" pour texte/code net
+};
+
 // Salon vocal / visio via LiveKit (SFU) : supporte un grand nombre de
 // participants (100+) sans saturer les clients, contrairement au mesh.
 // Laravel délivre un access token ; le média transite par le serveur LiveKit.
@@ -234,7 +249,11 @@ export async function joinRoom(projectSlug, channelId, label, { withVideo = fals
       route("projects.voice.token", [projectSlug, channelId]),
     );
 
-    room = new Room({ adaptiveStream: true, dynacast: true });
+    room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      publishDefaults: { screenShareEncoding: SCREEN_SHARE_ENCODING },
+    });
     bindEvents();
 
     await room.connect(data.url, data.token);
@@ -320,7 +339,10 @@ export async function toggleScreenShare() {
   if (!room || !canPublishLocal.value) return;
   const next = !screenSharing.value;
   try {
-    await room.localParticipant.setScreenShareEnabled(next, { audio: true });
+    await room.localParticipant.setScreenShareEnabled(
+      next,
+      SCREEN_SHARE_CAPTURE,
+    );
     screenSharing.value = next;
     if (next) meetingOpen.value = true;
   } catch (e) {
