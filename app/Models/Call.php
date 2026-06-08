@@ -51,6 +51,12 @@ class Call extends Model
         return (int) $this->caller_id === $userId || (int) $this->callee_id === $userId;
     }
 
+    /** Nom de la room LiveKit dédiée à cet appel 1:1. */
+    public function roomName(): string
+    {
+        return 'call-'.$this->id;
+    }
+
     public function isActive(): bool
     {
         return in_array($this->status, [self::STATUS_RINGING, self::STATUS_ACCEPTED], true);
