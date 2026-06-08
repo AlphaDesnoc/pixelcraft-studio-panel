@@ -1,9 +1,10 @@
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   Hand,
   Headphones,
   HeadphoneOff,
+  Maximize2,
   Mic,
   MicOff,
   Minimize2,
@@ -114,6 +115,24 @@ watch(sources, (list) => {
   }
 });
 
+// ---- Plein écran (agrandir le partage / spotlight) ----
+const spotlightEl = ref(null);
+const isFullscreen = ref(false);
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.();
+  } else {
+    spotlightEl.value?.requestFullscreen?.();
+  }
+}
+function onFullscreenChange() {
+  isFullscreen.value = document.fullscreenElement === spotlightEl.value;
+}
+onMounted(() => document.addEventListener("fullscreenchange", onFullscreenChange));
+onBeforeUnmount(() =>
+  document.removeEventListener("fullscreenchange", onFullscreenChange),
+);
+
 const gridCols = computed(() => {
   const n = stageParticipants.value.length;
   if (n <= 1) return "grid-cols-1";
@@ -206,20 +225,38 @@ function demote(p) {
 
           <!-- Scène : spotlight (partage / épinglé) -->
           <template v-if="stageSource">
-            <div class="group relative min-h-0 flex-1">
+            <div
+              ref="spotlightEl"
+              class="group relative min-h-0 flex-1 bg-black"
+              :class="isFullscreen ? 'rounded-none' : ''"
+            >
               <ParticipantTile
                 :participant="stageSource.participant"
                 :screen="stageSource.screen"
-                class="!aspect-auto h-full w-full !rounded-2xl"
+                class="!aspect-auto h-full w-full"
+                :class="isFullscreen ? '!rounded-none !border-0' : '!rounded-2xl'"
+                @dblclick="toggleFullscreen"
               />
-              <button
-                type="button"
-                class="absolute right-3 top-3 hidden h-8 items-center gap-1.5 rounded-md bg-black/60 px-3 text-xs text-white backdrop-blur transition group-hover:flex"
-                @click="toggleStage(stageSource)"
-              >
-                <PinOff class="h-3.5 w-3.5" />
-                Détacher
-              </button>
+              <div class="absolute right-3 top-3 hidden items-center gap-2 group-hover:flex">
+                <button
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-md bg-black/60 px-3 text-xs text-white backdrop-blur transition hover:bg-black/80"
+                  :title="isFullscreen ? 'Quitter le plein écran' : 'Agrandir en plein écran'"
+                  @click="toggleFullscreen"
+                >
+                  <component :is="isFullscreen ? Minimize2 : Maximize2" class="h-3.5 w-3.5" />
+                  {{ isFullscreen ? "Réduire" : "Plein écran" }}
+                </button>
+                <button
+                  v-if="!isFullscreen"
+                  type="button"
+                  class="flex h-8 items-center gap-1.5 rounded-md bg-black/60 px-3 text-xs text-white backdrop-blur transition hover:bg-black/80"
+                  @click="toggleStage(stageSource)"
+                >
+                  <PinOff class="h-3.5 w-3.5" />
+                  Détacher
+                </button>
+              </div>
             </div>
 
             <!-- Filmstrip intervenants -->
