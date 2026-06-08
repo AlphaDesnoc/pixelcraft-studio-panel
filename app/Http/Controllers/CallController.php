@@ -2,17 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\CallSignal;
 use App\Events\CallStateChanged;
 use App\Events\IncomingCall;
 use App\Models\Call;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Support\CallAccess;
+use App\Support\LiveKitToken;
 use App\Support\PanelNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class CallController extends Controller
 {
@@ -62,19 +61,29 @@ class CallController extends Controller
         return response()->json(['call' => $call->toPayload()]);
     }
 
-    public function signal(Request $request, Call $call): JsonResponse
+    /**
+     * Délivre un access token LiveKit pour la room dédiée à l'appel. Le média
+     * 1:1 transite par le SFU LiveKit (gère le NAT/TURN), plus de P2P/SDP.
+     */
+    public function token(Request $request, Call $call): JsonResponse
     {
         $user = $request->user();
         abort_unless($call->isParticipant($user->id), 403);
+        abort_unless($call->isActive(), 410, "Cet appel n'est plus actif.");
 
-        $validated = $request->validate([
-            'kind' => ['required', Rule::in(['offer', 'answer', 'ice', 'hangup'])],
-            'data' => ['nullable', 'array'],
+        $token = LiveKitToken::create(
+            (string) $user->id,
+            $user->name,
+            $call->roomName(),
+            ['avatar_url' => $user->avatar_url],
+            canPublish: true,
+        );
+
+        return response()->json([
+            'token' => $token,
+            'url' => config('livekit.url'),
+            'room' => $call->roomName(),
         ]);
-
-        CallSignal::dispatch($call->id, $user->id, $validated['kind'], $validated['data'] ?? []);
-
-        return response()->json(['ok' => true]);
     }
 
     public function accept(Request $request, Call $call): JsonResponse

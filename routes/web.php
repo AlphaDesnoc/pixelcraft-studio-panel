@@ -186,7 +186,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     });
 
     Route::post('/calls', [CallController::class, 'store'])->name('calls.store');
-    Route::post('/calls/{call}/signal', [CallController::class, 'signal'])->name('calls.signal');
+    Route::post('/calls/{call}/token', [CallController::class, 'token'])->name('calls.token');
     Route::post('/calls/{call}/accept', [CallController::class, 'accept'])->name('calls.accept');
     Route::post('/calls/{call}/decline', [CallController::class, 'decline'])->name('calls.decline');
     Route::post('/calls/{call}/hangup', [CallController::class, 'hangup'])->name('calls.hangup');

@@ -1,10 +1,11 @@
 import { computed, ref } from "vue";
 import axios from "axios";
+import { Room, RoomEvent, Track } from "livekit-client";
 
-// État global partagé (singleton) du système d'appel 1:1 WebRTC.
-// Signalisation via Reverb (canaux privés) + endpoints /calls/*.
-
-const STUN = [{ urls: "stun:stun.l.google.com:19302" }];
+// Système d'appel 1:1 via LiveKit (SFU). La couche "sonnerie" (appel entrant /
+// accept / decline / hangup) passe par Reverb + les endpoints /calls/*, mais le
+// média transite par une room LiveKit dédiée (`call-{id}`). LiveKit gère le
+// NAT/TURN : plus de P2P/SDP/ICE à signaler à la main.
 
 export const callStatus = ref("idle"); // idle|outgoing|incoming|connecting|active|ended
 export const currentCall = ref(null);
@@ -19,11 +20,8 @@ export const inCall = computed(() =>
 );
 
 let myId = null;
-let pc = null;
-let callChannel = null;
-let pendingIce = [];
+let room = null;
 let userChannelBound = false;
-let offerStarted = false;
 
 function iso() {
   return new Date().toISOString();
@@ -34,29 +32,64 @@ function log(...args) {
   console.debug("[call]", iso(), ...args);
 }
 
+// Reconstruit le MediaStream local (caméra + micro) à partir des tracks publiées
+// par LiveKit, pour l'aperçu local affiché dans CallOverlay.
+function rebuildLocalStream() {
+  if (!room) return;
+  const stream = new MediaStream();
+  const lp = room.localParticipant;
+  const cam = lp.getTrackPublication?.(Track.Source.Camera)?.track?.mediaStreamTrack;
+  const mic = lp.getTrackPublication?.(Track.Source.Microphone)?.track?.mediaStreamTrack;
+  if (cam) stream.addTrack(cam);
+  if (mic) stream.addTrack(mic);
+  localStream.value = stream;
+}
+
+async function connectRoom(withVideo) {
+  const { data } = await axios.post(route("calls.token", currentCall.value.id));
+
+  room = new Room({ adaptiveStream: true, dynacast: true });
+  remoteStream.value = new MediaStream();
+
+  room
+    .on(RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === "video" || track.kind === "audio") {
+        remoteStream.value.addTrack(track.mediaStreamTrack);
+        callStatus.value = "active";
+      }
+    })
+    .on(RoomEvent.TrackUnsubscribed, (track) => {
+      try {
+        remoteStream.value.removeTrack(track.mediaStreamTrack);
+      } catch (e) {
+        /* noop */
+      }
+    })
+    .on(RoomEvent.ParticipantDisconnected, () => {
+      // L'autre participant a quitté la room → on raccroche de notre côté.
+      hangup();
+    });
+
+  await room.connect(data.url, data.token);
+  await room.localParticipant.setMicrophoneEnabled(true);
+  if (withVideo) {
+    await room.localParticipant.setCameraEnabled(true);
+  }
+  rebuildLocalStream();
+}
+
 function resetMedia() {
-  if (pc) {
+  if (room) {
     try {
-      pc.ontrack = null;
-      pc.onicecandidate = null;
-      pc.onconnectionstatechange = null;
-      pc.close();
+      room.removeAllListeners();
+      room.disconnect();
     } catch (e) {
       /* noop */
     }
-    pc = null;
-  }
-  if (localStream.value) {
-    localStream.value.getTracks().forEach((t) => t.stop());
+    room = null;
   }
   localStream.value = null;
   remoteStream.value = null;
-  pendingIce = [];
-  offerStarted = false;
-  if (callChannel && currentCall.value) {
-    window.Echo?.leave(`call.${currentCall.value.id}`);
-  }
-  callChannel = null;
 }
 
 function endLocally(status = "ended") {
@@ -74,106 +107,13 @@ function endLocally(status = "ended") {
   }, 1500);
 }
 
-async function sendSignal(kind, data) {
-  if (!currentCall.value) return;
-  try {
-    await axios.post(route("calls.signal", currentCall.value.id), { kind, data });
-  } catch (e) {
-    log("signal error", kind, e);
-  }
-}
-
-async function createPeer(withVideo) {
-  pc = new RTCPeerConnection({ iceServers: STUN });
-
-  localStream.value = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: withVideo,
-  });
-  localStream.value.getTracks().forEach((track) => {
-    pc.addTrack(track, localStream.value);
-  });
-
-  remoteStream.value = new MediaStream();
-  pc.ontrack = (event) => {
-    event.streams[0]?.getTracks().forEach((t) => remoteStream.value.addTrack(t));
-    callStatus.value = "active";
-  };
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) sendSignal("ice", { candidate: event.candidate });
-  };
-
-  pc.onconnectionstatechange = () => {
-    log("pc state", pc?.connectionState);
-    if (pc?.connectionState === "connected") callStatus.value = "active";
-    if (["failed", "disconnected", "closed"].includes(pc?.connectionState)) {
-      // laisse l'autre côté gérer via CallStateChanged ; sinon coupe.
-    }
-  };
-}
-
-function subscribeCallChannel(callId) {
-  callChannel = window.Echo.private(`call.${callId}`);
-  callChannel
-    .listen(".CallSignal", onCallSignal)
-    .listen(".CallStateChanged", onCallStateChanged);
-}
-
-async function onCallSignal(event) {
-  if (!event || event.from_id === myId || !pc) return;
-  const { kind, data } = event;
-
-  if (kind === "offer") {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    await flushIce();
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    sendSignal("answer", { sdp: answer });
-  } else if (kind === "answer") {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    await flushIce();
-  } else if (kind === "ice" && data.candidate) {
-    try {
-      if (pc.remoteDescription && pc.remoteDescription.type) {
-        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-      } else {
-        pendingIce.push(data.candidate);
-      }
-    } catch (e) {
-      log("addIceCandidate error", e);
-    }
-  }
-}
-
-async function flushIce() {
-  while (pendingIce.length) {
-    const cand = pendingIce.shift();
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(cand));
-    } catch (e) {
-      log("flushIce error", e);
-    }
-  }
-}
-
 async function onCallStateChanged(event) {
   const call = event?.call;
   if (!call || !currentCall.value || call.id !== currentCall.value.id) return;
   currentCall.value = call;
 
-  if (call.status === "accepted") {
-    // Côté appelant : l'appelé a accepté → on crée l'offre (une seule fois,
-    // l'événement pouvant arriver sur le canal perso ET le canal d'appel).
-    if (callRole.value === "caller" && pc && !offerStarted) {
-      offerStarted = true;
-      callStatus.value = "connecting";
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      sendSignal("offer", { sdp: offer });
-    }
-  } else if (["declined", "ended", "missed"].includes(call.status)) {
-    endLocally(call.status === "declined" ? "ended" : "ended");
+  if (["declined", "ended", "missed"].includes(call.status)) {
+    endLocally("ended");
   }
 }
 
@@ -214,8 +154,9 @@ export async function startCall(callee, { withVideo = false, projectId = null } 
       project_id: projectId,
     });
     currentCall.value = data.call;
-    await createPeer(withVideo);
-    subscribeCallChannel(data.call.id);
+    // L'appelant rejoint la room et attend l'appelé ; passage à "active" dès
+    // qu'une track distante est reçue (TrackSubscribed).
+    await connectRoom(withVideo);
   } catch (e) {
     log("startCall error", e);
     endLocally();
@@ -232,9 +173,8 @@ export async function acceptCall() {
   try {
     callStatus.value = "connecting";
     const withVideo = Boolean(currentCall.value.with_video);
-    await createPeer(withVideo);
-    subscribeCallChannel(currentCall.value.id);
     await axios.post(route("calls.accept", currentCall.value.id));
+    await connectRoom(withVideo);
   } catch (e) {
     log("acceptCall error", e);
     if (e?.name === "NotAllowedError") {
@@ -266,18 +206,23 @@ export async function hangup() {
   }
 }
 
-export function toggleMute() {
-  if (!localStream.value) return;
+export async function toggleMute() {
+  if (!room) return;
   isMuted.value = !isMuted.value;
-  localStream.value.getAudioTracks().forEach((t) => {
-    t.enabled = !isMuted.value;
-  });
+  try {
+    await room.localParticipant.setMicrophoneEnabled(!isMuted.value);
+  } catch (e) {
+    log("toggleMute error", e);
+  }
 }
 
-export function toggleCamera() {
-  if (!localStream.value) return;
+export async function toggleCamera() {
+  if (!room) return;
   cameraOff.value = !cameraOff.value;
-  localStream.value.getVideoTracks().forEach((t) => {
-    t.enabled = !cameraOff.value;
-  });
+  try {
+    await room.localParticipant.setCameraEnabled(!cameraOff.value);
+    rebuildLocalStream();
+  } catch (e) {
+    log("toggleCamera error", e);
+  }
 }
