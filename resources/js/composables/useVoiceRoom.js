@@ -7,13 +7,13 @@ import { Room, RoomEvent, Track } from "livekit-client";
 // net en mouvement). dynacast/adaptiveStream réduiront automatiquement la
 // qualité pour les viewers qui n'affichent le flux qu'en petit.
 const SCREEN_SHARE_ENCODING = {
-  maxBitrate: 8_000_000, // 8 Mbps
-  maxFramerate: 60,
+  maxBitrate: 5_000_000, // 5 Mbps
+  maxFramerate: 30,
   priority: "high",
 };
 const SCREEN_SHARE_CAPTURE = {
   audio: true,
-  resolution: { width: 1920, height: 1080, frameRate: 60 },
+  resolution: { width: 1920, height: 1080, frameRate: 30 },
   contentHint: "motion", // fluidité (vidéo/jeu) ; "detail" pour texte/code net
 };
 
