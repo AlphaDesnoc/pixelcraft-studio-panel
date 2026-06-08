@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref, toRef, watch } from "vue";
 import { Head, router, usePage } from "@inertiajs/vue3";
-import { Mail, MessageSquare, Paperclip, Plus, Reply, Search, Send, Smile, SmilePlus, X, Check, CheckCheck } from "lucide-vue-next";
+import { Mail, MessageSquare, Paperclip, Phone, Plus, Reply, Search, Send, Smile, SmilePlus, Video, X, Check, CheckCheck } from "lucide-vue-next";
+import { startCall, inCall } from "@/composables/useCall.js";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
@@ -506,6 +507,27 @@ const composeTargetName = computed(() => {
   }
   return null;
 });
+
+// Destinataire d'un éventuel appel 1:1 (l'autre participant de la conversation
+// active, ou le contact d'une nouvelle conversation en cours de rédaction).
+const callTarget = computed(() => {
+  const p = activeConversation.value?.participant;
+  if (p?.id) {
+    return { id: p.id, name: p.name, avatar_url: p.avatar_url ?? null };
+  }
+  if (pendingRecipientId.value) {
+    const contact = props.contacts.find((c) => c.id === pendingRecipientId.value);
+    if (contact) {
+      return { id: contact.id, name: contact.name, avatar_url: contact.avatar_url ?? null };
+    }
+  }
+  return null;
+});
+
+function callTargetUser(withVideo) {
+  if (!callTarget.value || inCall.value) return;
+  startCall(callTarget.value, { withVideo });
+}
 </script>
 
 <template>
@@ -691,6 +713,28 @@ const composeTargetName = computed(() => {
                   <template v-else-if="pendingRecipientId">Nouvelle conversation</template>
                   <template v-else>Hors ligne</template>
                 </p>
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  :disabled="!callTarget || inCall"
+                  title="Appel audio"
+                  aria-label="Appel audio"
+                  @click="callTargetUser(false)"
+                >
+                  <Phone class="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  :disabled="!callTarget || inCall"
+                  title="Appel vidéo"
+                  aria-label="Appel vidéo"
+                  @click="callTargetUser(true)"
+                >
+                  <Video class="h-4 w-4" />
+                </Button>
               </div>
             </header>
 

@@ -10,11 +10,14 @@ import {
   MessageSquare,
   Minus,
   Paperclip,
+  Phone,
   Plus,
   Reply,
   Send,
+  Video,
   X,
 } from "lucide-vue-next";
+import { startCall, inCall } from "@/composables/useCall.js";
 import { Badge } from "@/Components/ui/badge";
 import { Button } from "@/Components/ui/button";
 import { Textarea } from "@/Components/ui/textarea";
@@ -175,6 +178,26 @@ const composeTargetName = computed(() => {
   }
   return activeConversation.value?.participant?.name ?? "Messages";
 });
+
+// Destinataire d'un éventuel appel 1:1 (autre participant ou contact en cours).
+const callTarget = computed(() => {
+  const p = activeConversation.value?.participant;
+  if (p?.id) {
+    return { id: p.id, name: p.name, avatar_url: p.avatar_url ?? null };
+  }
+  if (pendingRecipientId.value) {
+    const contact = contacts.value.find((c) => c.id === pendingRecipientId.value);
+    if (contact) {
+      return { id: contact.id, name: contact.name, avatar_url: contact.avatar_url ?? null };
+    }
+  }
+  return null;
+});
+
+function callTargetUser(withVideo) {
+  if (!callTarget.value || inCall.value) return;
+  startCall(callTarget.value, { withVideo });
+}
 
 const typingLabel = computed(() => {
   const names = typingUsers.value.map((user) => user.name).filter(Boolean);
@@ -386,6 +409,28 @@ async function onFileSelected(event) {
               <span v-else>Hors ligne</span>
             </p>
           </div>
+          <template v-if="view === 'thread' && messengerMode === 'dm' && callTarget">
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+              :disabled="inCall"
+              title="Appel audio"
+              aria-label="Appel audio"
+              @click="callTargetUser(false)"
+            >
+              <Phone class="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+              :disabled="inCall"
+              title="Appel vidéo"
+              aria-label="Appel vidéo"
+              @click="callTargetUser(true)"
+            >
+              <Video class="h-4 w-4" />
+            </button>
+          </template>
           <div v-if="view === 'list' && hasProjectChat" class="flex shrink-0 gap-0.5 rounded-md border border-border/60 p-0.5">
             <button
               type="button"
