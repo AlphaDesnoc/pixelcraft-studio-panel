@@ -146,9 +146,15 @@ class ProjectController extends Controller
             ? collect()
             : $project->chatMessages->map(fn ($m) => $m->toPayload())->values();
 
-        $voiceChannels = $project->voiceChannels()
-            ->with(['rank:id,name,slug,color', 'participants.user:id,name,avatar_path'])
-            ->orderBy('position')
+        // Les salons vocaux sont cloisonnés par espace : on n'expose que ceux de
+        // l'espace actif (global = salons sans rang, rang = salons du rang, full =
+        // tous, pour la vue d'ensemble admin).
+        $voiceChannels = $space->applyScope(
+            $project->voiceChannels()
+                ->with(['rank:id,name,slug,color', 'participants.user:id,name,avatar_path'])
+                ->orderBy('position'),
+            'rank_id',
+        )
             ->get()
             ->map(fn ($c) => $c->toPayload())
             ->values();
