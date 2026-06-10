@@ -170,8 +170,17 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/files/upload', [FileNodeController::class, 'upload']);
             Route::put('/files/{node}', [FileNodeController::class, 'update']);
             Route::post('/files/{node}/move', [FileNodeController::class, 'move']);
+            Route::post('/files-bulk-move', [FileNodeController::class, 'bulkMove']);
+            Route::delete('/files-bulk', [FileNodeController::class, 'bulkDestroy']);
             Route::delete('/files/{node}', [FileNodeController::class, 'destroy']);
             Route::get('/files/{node}/download', [FileNodeController::class, 'download']);
+            Route::get('/files/{node}/preview', [FileNodeController::class, 'preview']);
+            Route::get('/files-download-zip', [FileNodeController::class, 'downloadZip']);
+            Route::post('/files/{node}/duplicate', [FileNodeController::class, 'duplicate']);
+            Route::post('/files/{node}/share', [FileNodeController::class, 'share']);
+            Route::post('/files/{node}/restore', [FileNodeController::class, 'restore']);
+            Route::delete('/files/{node}/force', [FileNodeController::class, 'forceDestroy']);
+            Route::delete('/files-trash', [FileNodeController::class, 'emptyTrash']);
 
             Route::post('/bugs', [BugController::class, 'store']);
             Route::put('/bugs/{bug}', [BugController::class, 'update']);

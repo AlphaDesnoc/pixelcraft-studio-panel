@@ -62,6 +62,9 @@ const props = defineProps({
   voiceChannels: { type: Array, default: () => [] },
   voiceManageRanks: { type: Array, default: () => [] },
   fileNodes: { type: Array, default: () => [] },
+  trashedFileNodes: { type: Array, default: () => [] },
+  storageUsed: { type: Number, default: 0 },
+  storageQuota: { type: Number, default: 0 },
   members: { type: Array, default: () => [] },
   teamMembers: { type: Array, default: () => [] },
   teamCandidates: { type: Array, default: () => [] },
@@ -651,6 +654,9 @@ const kanbanBugLinkTasks = computed(() =>
         <FilesView
           :project-slug="project.slug"
           :nodes="fileNodes"
+          :trashed-nodes="trashedFileNodes"
+          :storage-used="storageUsed"
+          :storage-quota="storageQuota"
           :rank-id="activeRankId"
         />
       </section>

@@ -16,7 +16,10 @@ const props = defineProps({
   projectSlug: { type: String, required: true },
   nodes: { type: Array, required: true },
   node: { type: Object, default: null },
+  nodeIds: { type: Array, default: null },
 });
+
+const isBulk = computed(() => Array.isArray(props.nodeIds) && props.nodeIds.length > 0);
 
 const emits = defineEmits(["update:open"]);
 
@@ -37,7 +40,7 @@ watch(
 const folders = computed(() => props.nodes.filter((n) => n.type === "folder"));
 
 const excludeId = computed(() =>
-  props.node && props.node.type === "folder" ? props.node.id : null,
+  !isBulk.value && props.node && props.node.type === "folder" ? props.node.id : null,
 );
 
 const rootChildren = computed(() =>
@@ -62,6 +65,24 @@ function close() {
 }
 
 function submit() {
+  const options = {
+    preserveScroll: true,
+    preserveState: true,
+    only: ["fileNodes"],
+    onSuccess: close,
+    onFinish: () => (processing.value = false),
+  };
+
+  if (isBulk.value) {
+    processing.value = true;
+    router.post(
+      route("projects.files.bulk-move", props.projectSlug),
+      { ids: props.nodeIds, parent_id: selected.value },
+      options,
+    );
+    return;
+  }
+
   if (!props.node) return;
   if (selected.value === (props.node.parent_id ?? null)) {
     close();
@@ -71,13 +92,7 @@ function submit() {
   router.post(
     route("projects.files.move", [props.projectSlug, props.node.id]),
     { parent_id: selected.value },
-    {
-      preserveScroll: true,
-      preserveState: true,
-      only: ["fileNodes"],
-      onSuccess: close,
-      onFinish: () => (processing.value = false),
-    },
+    options,
   );
 }
 </script>
@@ -88,7 +103,8 @@ function submit() {
       <DialogHeader>
         <DialogTitle>
           Déplacer
-          <span v-if="node" class="text-muted-foreground">— {{ node.name }}</span>
+          <span v-if="isBulk" class="text-muted-foreground">— {{ nodeIds.length }} éléments</span>
+          <span v-else-if="node" class="text-muted-foreground">— {{ node.name }}</span>
         </DialogTitle>
       </DialogHeader>
 

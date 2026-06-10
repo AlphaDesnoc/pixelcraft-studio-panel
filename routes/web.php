@@ -156,8 +156,18 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/files/upload', [FileNodeController::class, 'upload'])->name('files.upload');
         Route::put('/files/{node}', [FileNodeController::class, 'update'])->name('files.update');
         Route::post('/files/{node}/move', [FileNodeController::class, 'move'])->name('files.move');
+        Route::post('/files-bulk-move', [FileNodeController::class, 'bulkMove'])->name('files.bulk-move');
+        Route::delete('/files-bulk', [FileNodeController::class, 'bulkDestroy'])->name('files.bulk-destroy');
         Route::delete('/files/{node}', [FileNodeController::class, 'destroy'])->name('files.destroy');
         Route::get('/files/{node}/download', [FileNodeController::class, 'download'])->name('files.download');
+        Route::get('/files/{node}/preview', [FileNodeController::class, 'preview'])->name('files.preview');
+        Route::get('/files-download-zip', [FileNodeController::class, 'downloadZip'])->name('files.download-zip');
+        Route::post('/files/{node}/duplicate', [FileNodeController::class, 'duplicate'])->name('files.duplicate');
+        Route::post('/files/{node}/share', [FileNodeController::class, 'share'])->name('files.share');
+        Route::get('/files/{node}/shared', [FileNodeController::class, 'shared'])->middleware('signed')->name('files.shared');
+        Route::post('/files/{node}/restore', [FileNodeController::class, 'restore'])->name('files.restore');
+        Route::delete('/files/{node}/force', [FileNodeController::class, 'forceDestroy'])->name('files.force-destroy');
+        Route::delete('/files-trash', [FileNodeController::class, 'emptyTrash'])->name('files.empty-trash');
 
         Route::post('/bugs', [BugController::class, 'store'])->name('bugs.store');
         Route::put('/bugs/{bug}', [BugController::class, 'update'])->name('bugs.update');
