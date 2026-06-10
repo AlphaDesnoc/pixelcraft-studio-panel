@@ -37,7 +37,7 @@ watch(
     <Transition name="confirm-fade">
       <div
         v-if="confirmState.open"
-        class="fixed inset-0 z-[200] flex items-center justify-center p-4"
+        class="pointer-events-auto fixed inset-0 z-[200] flex items-center justify-center p-4"
         @keydown="onKeydown"
       >
         <!-- Fond -->
