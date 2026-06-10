@@ -107,7 +107,7 @@ class ProjectController extends Controller
             'type' => $n->type,
             'name' => $n->name,
             'path' => $n->path,
-            'url' => $n->path ? '/storage/'.ltrim($n->path, '/') : null,
+            'url' => $n->path ? route('projects.files.preview', [$project->slug, $n->id]) : null,
             'mime' => $n->mime,
             'size' => $n->size ? (int) $n->size : null,
             'rank_id' => $n->rank_id,
@@ -115,6 +115,29 @@ class ProjectController extends Controller
             'updated_at' => optional($n->updated_at)?->toIso8601String(),
             'uploader' => $n->uploader ? ['id' => $n->uploader->id, 'name' => $n->uploader->name] : null,
         ])->values();
+
+        $trashedFileNodes = $project->fileNodes()
+            ->onlyTrashed()
+            ->with(['uploader:id,name', 'deletedBy:id,name'])
+            ->get()
+            ->map(fn ($n) => [
+                'id' => $n->id,
+                'parent_id' => $n->parent_id,
+                'type' => $n->type,
+                'name' => $n->name,
+                'mime' => $n->mime,
+                'size' => $n->size ? (int) $n->size : null,
+                'deleted_at' => optional($n->deleted_at)?->toIso8601String(),
+                'uploader' => $n->uploader ? ['id' => $n->uploader->id, 'name' => $n->uploader->name] : null,
+                'deleted_by' => $n->deletedBy ? ['id' => $n->deletedBy->id, 'name' => $n->deletedBy->name] : null,
+            ])
+            ->values();
+
+        $storageUsed = (int) $project->fileNodes()
+            ->withTrashed()
+            ->whereNotNull('path')
+            ->sum('size');
+        $storageQuota = (int) ($project->storage_quota ?? config('files.default_quota'));
 
         $sheets = $project->sheets->map(fn ($s) => [
             'id' => $s->id,
@@ -428,6 +451,9 @@ class ProjectController extends Controller
             'voiceChannels' => $voiceChannels,
             'voiceManageRanks' => $voiceManageRanks,
             'fileNodes' => $fileNodes,
+            'trashedFileNodes' => $trashedFileNodes,
+            'storageUsed' => $storageUsed,
+            'storageQuota' => $storageQuota,
             'chatMessages' => $chatMessages,
             'chatMembers' => $space->isFull
                 ? []

@@ -6,12 +6,14 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'project_id',
     'rank_id',
     'parent_id',
     'uploader_id',
+    'deleted_by',
     'type',
     'name',
     'path',
@@ -20,6 +22,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class FileNode extends Model
 {
+    use SoftDeletes;
+
     public const TYPE_FOLDER = 'folder';
 
     public const TYPE_FILE = 'file';
@@ -47,6 +51,11 @@ class FileNode extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploader_id');
+    }
+
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 
     public function isFolder(): bool

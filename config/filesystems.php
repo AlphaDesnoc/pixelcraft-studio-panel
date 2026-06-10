@@ -47,6 +47,16 @@ return [
             'report' => false,
         ],
 
+        // Disque privé dédié aux fichiers de projet : aucune route de service
+        // ni URL publique. Les fichiers ne sont accessibles que via les routes
+        // authentifiées de FileNodeController.
+        'files' => [
+            'driver' => 'local',
+            'root' => storage_path('app/files'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

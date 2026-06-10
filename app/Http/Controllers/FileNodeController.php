@@ -5,15 +5,23 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\FileNode;
 use App\Models\Project;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FileNodeController extends Controller
 {
     use EnsuresProjectFeature;
+
+    // Disque privé dédié : les fichiers ne sont jamais servis directement,
+    // uniquement via les routes authentifiées de ce contrôleur.
+    private const DISK = 'files';
 
     public function storeFolder(Request $request, Project $project): RedirectResponse
     {
@@ -52,9 +60,13 @@ class FileNodeController extends Controller
     {
         $this->ensureFeatureWrite($request, $project, 'files');
 
+        $maxKb = (int) config('files.max_upload_kb', 51200);
+
         $request->validate([
             'files' => ['required', 'array'],
-            'files.*' => ['required', 'file', 'max:51200'],
+            'files.*' => ['required', 'file', 'max:'.$maxKb],
+            'relative_paths' => ['nullable', 'array'],
+            'relative_paths.*' => ['nullable', 'string', 'max:1024'],
             'parent_id' => ['nullable', 'integer'],
             'rank_id' => [
                 'nullable',
@@ -75,13 +87,55 @@ class FileNodeController extends Controller
 
         if ($parentId !== null) {
             $parent = $this->validateParent($project, (int) $parentId);
+            $parentId = (int) $parentId;
             $rankId = $parent->rank_id;
         }
 
-        foreach ($request->file('files') as $file) {
-            $path = $file->store("projects/{$project->id}/files", 'public');
+        $files = $request->file('files');
+        $relativePaths = $request->input('relative_paths', []);
+        $blocked = (array) config('files.blocked_extensions', []);
+
+        // Validation des extensions interdites.
+        foreach ($files as $file) {
+            $ext = strtolower($file->getClientOriginalExtension());
+            abort_if(in_array($ext, $blocked, true), 422, "Type de fichier interdit : .{$ext}");
+        }
+
+        // Vérification du quota.
+        $incoming = collect($files)->sum(fn ($f) => $f->getSize());
+        $quota = $this->projectQuota($project);
+        $used = $this->projectUsedBytes($project);
+        abort_if(
+            $used + $incoming > $quota,
+            422,
+            'Quota de stockage du projet dépassé.',
+        );
+
+        $folderCache = [];
+
+        foreach ($files as $i => $file) {
+            $targetParentId = $parentId;
+
+            // Recrée l'arborescence si un chemin relatif (upload de dossier) est fourni.
+            $relative = $relativePaths[$i] ?? null;
+            if (is_string($relative) && str_contains($relative, '/')) {
+                $segments = array_values(array_filter(explode('/', str_replace('\\', '/', $relative))));
+                array_pop($segments); // retire le nom du fichier
+                if (! empty($segments)) {
+                    $targetParentId = $this->findOrCreateFolderPath(
+                        $project,
+                        $parentId,
+                        $rankId,
+                        $segments,
+                        $request->user()->id,
+                        $folderCache,
+                    );
+                }
+            }
+
+            $path = $file->store("projects/{$project->id}/files", self::DISK);
             $project->fileNodes()->create([
-                'parent_id' => $parentId !== null ? (int) $parentId : null,
+                'parent_id' => $targetParentId,
                 'uploader_id' => $request->user()->id,
                 'type' => FileNode::TYPE_FILE,
                 'name' => $file->getClientOriginalName(),
@@ -147,13 +201,127 @@ class FileNodeController extends Controller
         $this->ensureFeatureWrite($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
 
-        $paths = [];
-        $this->collectPaths($node, $paths);
+        // Suppression douce : déplace vers la corbeille.
+        $this->softDeleteTree($node, $request->user()->id);
 
-        $node->delete();
+        return back();
+    }
 
-        foreach ($paths as $p) {
-            Storage::disk('public')->delete($p);
+    public function bulkDestroy(Request $request, Project $project): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $nodes = FileNode::query()
+            ->where('project_id', $project->id)
+            ->whereIn('id', $validated['ids'])
+            ->get();
+
+        foreach ($nodes as $node) {
+            $this->softDeleteTree($node, $request->user()->id);
+        }
+
+        return back();
+    }
+
+    public function restore(Request $request, Project $project, int $node): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+
+        $target = FileNode::withTrashed()
+            ->where('project_id', $project->id)
+            ->findOrFail($node);
+
+        $this->restoreTree($target);
+
+        // Si le parent est lui-même en corbeille, on remonte l'élément à la racine.
+        if ($target->parent_id !== null) {
+            $parent = FileNode::withTrashed()->find($target->parent_id);
+            if (! $parent || $parent->trashed()) {
+                $target->update(['parent_id' => null]);
+            }
+        }
+
+        return back();
+    }
+
+    public function forceDestroy(Request $request, Project $project, int $node): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+
+        $target = FileNode::withTrashed()
+            ->where('project_id', $project->id)
+            ->findOrFail($node);
+
+        $this->forceDeleteTree($target);
+
+        return back();
+    }
+
+    public function emptyTrash(Request $request, Project $project): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+
+        $trashed = FileNode::onlyTrashed()
+            ->where('project_id', $project->id)
+            ->get();
+
+        foreach ($trashed as $node) {
+            if ($node->path) {
+                Storage::disk(self::DISK)->delete($node->path);
+            }
+            $node->forceDelete();
+        }
+
+        return back();
+    }
+
+    public function bulkMove(Request $request, Project $project): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'parent_id' => ['nullable', 'integer'],
+        ]);
+
+        $newParentId = $validated['parent_id'] ?? null;
+        $target = $newParentId !== null ? $this->validateParent($project, $newParentId) : null;
+
+        $nodes = FileNode::query()
+            ->where('project_id', $project->id)
+            ->whereIn('id', $validated['ids'])
+            ->get();
+
+        foreach ($nodes as $node) {
+            if ($newParentId !== null) {
+                if ($newParentId === $node->id) {
+                    continue;
+                }
+                if ($target->rank_id !== $node->rank_id) {
+                    abort(422, 'Impossible de déplacer entre espaces.');
+                }
+
+                $walker = $target;
+                $isDescendant = false;
+                while ($walker) {
+                    if ($walker->id === $node->id) {
+                        $isDescendant = true;
+                        break;
+                    }
+                    $walker = $walker->parent;
+                }
+                if ($isDescendant) {
+                    continue;
+                }
+            }
+
+            $node->update(['parent_id' => $newParentId]);
         }
 
         return back();
@@ -161,15 +329,149 @@ class FileNodeController extends Controller
 
     public function download(Request $request, Project $project, FileNode $node): BinaryFileResponse
     {
-        $this->ensureFeatureWrite($request, $project, 'files');
+        $this->ensureFeature($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
         abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
-        abort_unless(Storage::disk('public')->exists($node->path), 404);
+        abort_unless(Storage::disk(self::DISK)->exists($node->path), 404);
 
         return response()->download(
-            Storage::disk('public')->path($node->path),
+            Storage::disk(self::DISK)->path($node->path),
             $node->name,
         );
+    }
+
+    public function downloadZip(Request $request, Project $project): StreamedResponse
+    {
+        $this->ensureFeature($request, $project, 'files');
+
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ]);
+
+        $nodes = FileNode::query()
+            ->where('project_id', $project->id)
+            ->whereIn('id', $validated['ids'])
+            ->get();
+
+        abort_if($nodes->isEmpty(), 404);
+
+        $files = [];
+        foreach ($nodes as $node) {
+            $this->collectZipEntries($node, '', $files);
+        }
+        abort_if(empty($files), 404);
+
+        $disk = Storage::disk(self::DISK);
+        $fileName = 'fichiers-'.$project->slug.'-'.now()->format('Ymd-His').'.zip';
+
+        return response()->streamDownload(function () use ($files, $disk) {
+            $zip = new \ZipArchive;
+            $tmp = tempnam(sys_get_temp_dir(), 'zip');
+            $zip->open($tmp, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+            foreach ($files as $entry) {
+                if ($disk->exists($entry['path'])) {
+                    $zip->addFile($disk->path($entry['path']), $entry['name']);
+                }
+            }
+            $zip->close();
+            readfile($tmp);
+            @unlink($tmp);
+        }, $fileName, ['Content-Type' => 'application/zip']);
+    }
+
+    public function preview(Request $request, Project $project, FileNode $node): BinaryFileResponse
+    {
+        $this->ensureFeature($request, $project, 'files');
+        abort_unless($node->project_id === $project->id, 404);
+        abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
+        abort_unless(Storage::disk(self::DISK)->exists($node->path), 404);
+
+        return response()->file(
+            Storage::disk(self::DISK)->path($node->path),
+            [
+                'Content-Type' => $node->mime ?: 'application/octet-stream',
+                'Content-Disposition' => 'inline; filename="'.addslashes($node->name).'"',
+            ],
+        );
+    }
+
+    public function duplicate(Request $request, Project $project, FileNode $node): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+        abort_unless($node->project_id === $project->id, 404);
+
+        $size = $this->subtreeSize($node);
+        abort_if(
+            $this->projectUsedBytes($project) + $size > $this->projectQuota($project),
+            422,
+            'Quota de stockage du projet dépassé.',
+        );
+
+        $this->duplicateTree($project, $node, $node->parent_id, $request->user()->id, true);
+
+        return back();
+    }
+
+    public function share(Request $request, Project $project, FileNode $node): JsonResponse
+    {
+        $this->ensureFeature($request, $project, 'files');
+        abort_unless($node->project_id === $project->id, 404);
+        abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
+
+        $validated = $request->validate([
+            // Durée de validité en minutes (max 30 jours). Vide = lien permanent.
+            'expires_in' => ['nullable', 'integer', 'min:1', 'max:43200'],
+        ]);
+
+        $params = ['project' => $project->slug, 'node' => $node->id];
+        $minutes = $validated['expires_in'] ?? null;
+
+        $url = $minutes
+            ? URL::temporarySignedRoute('projects.files.shared', now()->addMinutes($minutes), $params)
+            : URL::signedRoute('projects.files.shared', $params);
+
+        return response()->json([
+            'url' => $url,
+            'expires_in' => $minutes,
+        ]);
+    }
+
+    public function shared(Request $request, Project $project, FileNode $node): BinaryFileResponse
+    {
+        // Accès réservé aux membres connectés ayant le droit de lecture (en plus
+        // de la signature validée par le middleware 'signed').
+        $this->ensureFeature($request, $project, 'files');
+        abort_unless($node->project_id === $project->id, 404);
+        abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
+        abort_unless(Storage::disk(self::DISK)->exists($node->path), 404);
+
+        return response()->file(
+            Storage::disk(self::DISK)->path($node->path),
+            [
+                'Content-Type' => $node->mime ?: 'application/octet-stream',
+                'Content-Disposition' => 'inline; filename="'.addslashes($node->name).'"',
+            ],
+        );
+    }
+
+    private function collectZipEntries(FileNode $node, string $prefix, array &$files): void
+    {
+        if ($node->isFile() && $node->path) {
+            $files[] = [
+                'path' => $node->path,
+                'name' => $prefix.$node->name,
+            ];
+
+            return;
+        }
+
+        if ($node->isFolder()) {
+            $folderPrefix = $prefix.$node->name.'/';
+            foreach ($node->children as $child) {
+                $this->collectZipEntries($child, $folderPrefix, $files);
+            }
+        }
     }
 
     private function collectPaths(FileNode $node, array &$paths): void
@@ -180,6 +482,149 @@ class FileNodeController extends Controller
         foreach ($node->children as $child) {
             $this->collectPaths($child, $paths);
         }
+    }
+
+    private function softDeleteTree(FileNode $node, int $userId): void
+    {
+        foreach ($node->children as $child) {
+            $this->softDeleteTree($child, $userId);
+        }
+        $node->update(['deleted_by' => $userId]);
+        $node->delete();
+    }
+
+    private function restoreTree(FileNode $node): void
+    {
+        $node->restore();
+        $node->update(['deleted_by' => null]);
+
+        $children = FileNode::onlyTrashed()
+            ->where('parent_id', $node->id)
+            ->get();
+        foreach ($children as $child) {
+            $this->restoreTree($child);
+        }
+    }
+
+    private function forceDeleteTree(FileNode $node): void
+    {
+        $children = FileNode::withTrashed()
+            ->where('parent_id', $node->id)
+            ->get();
+        foreach ($children as $child) {
+            $this->forceDeleteTree($child);
+        }
+        if ($node->path) {
+            Storage::disk(self::DISK)->delete($node->path);
+        }
+        $node->forceDelete();
+    }
+
+    private function duplicateTree(Project $project, FileNode $node, ?int $parentId, int $userId, bool $isRoot): FileNode
+    {
+        $name = $isRoot ? $this->copyName($node->name) : $node->name;
+
+        if ($node->isFolder()) {
+            $copy = $project->fileNodes()->create([
+                'parent_id' => $parentId,
+                'uploader_id' => $userId,
+                'type' => FileNode::TYPE_FOLDER,
+                'name' => $name,
+                'rank_id' => $node->rank_id,
+            ]);
+            foreach ($node->children as $child) {
+                $this->duplicateTree($project, $child, $copy->id, $userId, false);
+            }
+
+            return $copy;
+        }
+
+        $newPath = null;
+        if ($node->path && Storage::disk(self::DISK)->exists($node->path)) {
+            $ext = pathinfo($node->path, PATHINFO_EXTENSION);
+            $newPath = "projects/{$node->project_id}/files/".Str::random(40).($ext ? '.'.$ext : '');
+            Storage::disk(self::DISK)->copy($node->path, $newPath);
+        }
+
+        return $project->fileNodes()->create([
+            'parent_id' => $parentId,
+            'uploader_id' => $userId,
+            'type' => FileNode::TYPE_FILE,
+            'name' => $name,
+            'path' => $newPath,
+            'mime' => $node->mime,
+            'size' => $node->size,
+            'rank_id' => $node->rank_id,
+        ]);
+    }
+
+    private function copyName(string $name): string
+    {
+        $dot = strrpos($name, '.');
+        if ($dot === false || $dot === 0) {
+            return $name.' (copie)';
+        }
+
+        return substr($name, 0, $dot).' (copie)'.substr($name, $dot);
+    }
+
+    private function findOrCreateFolderPath(Project $project, ?int $parentId, ?int $rankId, array $segments, int $userId, array &$cache): int
+    {
+        $currentParent = $parentId;
+        $key = (string) ($parentId ?? 'root');
+
+        foreach ($segments as $name) {
+            $key .= '/'.$name;
+            if (isset($cache[$key])) {
+                $currentParent = $cache[$key];
+
+                continue;
+            }
+
+            $existing = FileNode::where('project_id', $project->id)
+                ->where('parent_id', $currentParent)
+                ->where('type', FileNode::TYPE_FOLDER)
+                ->where('name', $name)
+                ->first();
+
+            if (! $existing) {
+                $existing = $project->fileNodes()->create([
+                    'parent_id' => $currentParent,
+                    'uploader_id' => $userId,
+                    'type' => FileNode::TYPE_FOLDER,
+                    'name' => $name,
+                    'rank_id' => $rankId,
+                ]);
+            }
+
+            $cache[$key] = $existing->id;
+            $currentParent = $existing->id;
+        }
+
+        return (int) $currentParent;
+    }
+
+    private function subtreeSize(FileNode $node): int
+    {
+        $sum = $node->isFile() ? (int) $node->size : 0;
+        foreach ($node->children as $child) {
+            $sum += $this->subtreeSize($child);
+        }
+
+        return $sum;
+    }
+
+    private function projectQuota(Project $project): int
+    {
+        return (int) ($project->storage_quota ?? config('files.default_quota'));
+    }
+
+    private function projectUsedBytes(Project $project): int
+    {
+        return (int) FileNode::withTrashed()
+            ->where('project_id', $project->id)
+            ->whereNotNull('path')
+            ->sum('size');
     }
 
     private function validateParent(Project $project, int $parentId): FileNode
