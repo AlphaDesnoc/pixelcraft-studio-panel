@@ -22,6 +22,7 @@ class NotificationPreferences
             UserNotification::TYPE_CALENDAR_REMINDER => 'Rappels calendrier',
             UserNotification::TYPE_BUG_SLA_BREACH => 'Alertes SLA bugs',
             UserNotification::TYPE_CALL_INCOMING => 'Appels entrants',
+            UserNotification::TYPE_ANNOUNCEMENT => 'Annonces',
         ];
     }
 

@@ -169,6 +169,19 @@ class ProjectController extends Controller
             ? collect()
             : $project->chatMessages->map(fn ($m) => $m->toPayload())->values();
 
+        // Annonces : réservées à l'espace global, visibles par tous les membres,
+        // postables uniquement par les « admins » (admin/proprio/gestionnaire).
+        $announcements = $space->isGlobal
+            ? $project->announcements()
+                ->where('space_key', ProjectSpace::GLOBAL)
+                ->with(['user:id,name,avatar_path', 'attachments'])
+                ->orderByDesc('created_at')
+                ->limit(100)
+                ->get()
+                ->map(fn ($a) => $a->toPayload())
+                ->values()
+            : collect();
+
         // Les salons vocaux sont cloisonnés par espace : on n'expose que ceux de
         // l'espace actif (global = salons sans rang, rang = salons du rang, full =
         // tous, pour la vue d'ensemble admin).
@@ -455,6 +468,8 @@ class ProjectController extends Controller
             'storageUsed' => $storageUsed,
             'storageQuota' => $storageQuota,
             'chatMessages' => $chatMessages,
+            'announcements' => $announcements,
+            'canPostAnnouncements' => $space->isGlobal && $isAdmin,
             'chatMembers' => $space->isFull
                 ? []
                 : SpaceChatAccess::membersWithPresence($project, $space->key, $user),

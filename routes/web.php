@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\ProjectController as AdminProjectController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExportController;
@@ -137,6 +138,12 @@ Route::middleware(['auth', 'active'])->group(function () {
             ->name('chat.attachments.store');
         Route::get('/attachments/{attachment}', [AttachmentController::class, 'show'])->name('attachments.show');
         Route::delete('/attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
+
+        Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+        Route::post('/announcements', [AnnouncementController::class, 'store'])
+            ->middleware('throttle:panel-uploads')
+            ->name('announcements.store');
+        Route::delete('/announcements/{announcement}', [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
 
         Route::post('/events', [CalendarEventController::class, 'store'])->name('events.store');
         Route::put('/events/{event}', [CalendarEventController::class, 'update'])->name('events.update');

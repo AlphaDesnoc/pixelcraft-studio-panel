@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Announcement;
 use App\Models\Attachment;
 use App\Models\ChatMessage;
 use App\Models\Project;
@@ -115,6 +116,7 @@ class AttachmentController extends Controller
         return match (true) {
             $attachment->attachable instanceof ChatMessage => (int) $attachment->attachable->project_id === (int) $project->id,
             $attachment->attachable instanceof Task => (int) $attachment->attachable->project_id === (int) $project->id,
+            $attachment->attachable instanceof Announcement => (int) $attachment->attachable->project_id === (int) $project->id,
             default => false,
         };
     }

@@ -134,6 +134,11 @@ class Project extends Model
         return $this->hasMany(ChatMessage::class)->orderBy('created_at');
     }
 
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class)->orderByDesc('created_at');
+    }
+
     public function taskTemplates(): HasMany
     {
         return $this->hasMany(TaskTemplate::class);

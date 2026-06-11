@@ -6,6 +6,7 @@ use App\Models\DirectConversation;
 use App\Models\Project;
 use App\Support\BugChatAccess;
 use App\Support\DirectMessageAccess;
+use App\Support\ProjectAccess;
 use App\Support\PresenceUser;
 use App\Support\SpaceChatAccess;
 use App\Support\ProjectPermissions;
@@ -52,6 +53,16 @@ Broadcast::channel('direct.{conversationId}', function ($user, $conversationId) 
     return DirectMessageAccess::canAccess($user, $conversation)
         ? PresenceUser::payload($user)
         : false;
+});
+
+Broadcast::channel('project-announcements.{projectId}', function ($user, $projectId) {
+    $project = Project::query()->find($projectId);
+
+    if (! $project) {
+        return false;
+    }
+
+    return ProjectAccess::canAccess($user, $project);
 });
 
 Broadcast::channel('site-presence', function ($user) {
