@@ -55,6 +55,10 @@ class Attachment extends Model
             return $this->attachable->project()->first();
         }
 
+        if ($this->attachable instanceof Announcement) {
+            return $this->attachable->project()->first();
+        }
+
         return null;
     }
 

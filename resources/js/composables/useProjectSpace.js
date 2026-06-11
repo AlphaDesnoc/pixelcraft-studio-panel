@@ -29,6 +29,8 @@ export function spaceOnlyProps() {
     "chatMessages",
     "chatMembers",
     "chatRankMentions",
+    "announcements",
+    "canPostAnnouncements",
     "teamMembers",
     "teamCandidates",
     "canManageTeam",

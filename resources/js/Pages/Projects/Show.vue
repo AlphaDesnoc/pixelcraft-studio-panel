@@ -38,6 +38,7 @@ import SpreadsheetView from "@/Components/Spreadsheet/SpreadsheetView.vue";
 import FilesView from "@/Components/Files/FilesView.vue";
 import BugsView from "@/Components/Bugs/BugsView.vue";
 import ChatView from "@/Components/Chat/ChatView.vue";
+import AnnouncementsView from "@/Components/Announcements/AnnouncementsView.vue";
 import TeamView from "@/Components/Team/TeamView.vue";
 import ProjectHistoryPanel from "@/Components/Projects/ProjectHistoryPanel.vue";
 import TaskActivityByRank from "@/Components/Projects/TaskActivityByRank.vue";
@@ -81,6 +82,8 @@ const props = defineProps({
   chatMessages: { type: Array, default: () => [] },
   chatMembers: { type: Array, default: () => [] },
   chatRankMentions: { type: Array, default: () => [] },
+  announcements: { type: Array, default: () => [] },
+  canPostAnnouncements: { type: Boolean, default: false },
   activityLogs: { type: Array, default: () => [] },
   taskActivityByRank: { type: Array, default: () => [] },
   tags: { type: Array, default: () => [] },
@@ -113,6 +116,9 @@ watch(activeSpace, (space) => {
     activeTab.value = "overview";
   }
   if (activeTab.value === "team" && space !== "global") {
+    activeTab.value = "overview";
+  }
+  if (activeTab.value === "announcements" && space !== "global") {
     activeTab.value = "overview";
   }
   if (space === props.activeSpace) return;
@@ -149,6 +155,7 @@ const bugsAccess = computed(() => {
 
 const baseTabs = [
   { key: "overview", label: "Vue d'ensemble" },
+  { key: "announcements", label: "Annonces" },
   { key: "kanban", label: "Kanban" },
   { key: "calendar", label: "Calendrier" },
   { key: "gantt", label: "Gantt" },
@@ -162,6 +169,7 @@ const baseTabs = [
 
 const tabPermissionKey = {
   overview: null,
+  announcements: null,
   kanban: "kanban",
   calendar: "calendar",
   gantt: "gantt",
@@ -188,7 +196,7 @@ const tabs = computed(() => {
     result = result.filter((t) => t.key !== "chat");
   }
   if (activeSpace.value !== "global") {
-    result = result.filter((t) => t.key !== "team");
+    result = result.filter((t) => t.key !== "team" && t.key !== "announcements");
   }
   result = result.filter((t) => tabAllowed(t.key));
   if (bugsAccess.value.show && tabAllowed("bugs")) {
@@ -593,6 +601,15 @@ const kanbanBugLinkTasks = computed(() =>
         <TaskActivityByRank
           :groups="taskActivityByRank"
           :export-url="route('projects.export.activity', project.slug)"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'announcements'">
+        <AnnouncementsView
+          :project-slug="project.slug"
+          :project-id="project.id"
+          :announcements="announcements"
+          :can-post="canPostAnnouncements"
         />
       </section>
 

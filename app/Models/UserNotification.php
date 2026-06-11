@@ -29,6 +29,8 @@ class UserNotification extends Model
 
     public const TYPE_CALL_INCOMING = 'call_incoming';
 
+    public const TYPE_ANNOUNCEMENT = 'announcement';
+
     protected $fillable = [
         'user_id',
         'type',
