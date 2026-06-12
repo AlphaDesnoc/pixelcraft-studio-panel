@@ -91,6 +91,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/members/{user}', [ProjectMemberController::class, 'destroy'])->name('members.destroy');
 
         Route::put('/members/{user}/permissions', [ProjectMemberController::class, 'permissions'])->name('members.permissions');
+        Route::put('/members/{user}/clearance', [ProjectMemberController::class, 'clearance'])->name('members.clearance');
 
         Route::post('/lists', [TaskListController::class, 'store'])->name('lists.store');
         Route::put('/lists/{list}', [TaskListController::class, 'update'])->name('lists.update');
@@ -162,6 +163,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/files/folder', [FileNodeController::class, 'storeFolder'])->name('files.folder.store');
         Route::post('/files/upload', [FileNodeController::class, 'upload'])->name('files.upload');
         Route::put('/files/{node}', [FileNodeController::class, 'update'])->name('files.update');
+        Route::put('/files/{node}/access-level', [FileNodeController::class, 'setAccessLevel'])->name('files.access-level');
         Route::post('/files/{node}/move', [FileNodeController::class, 'move'])->name('files.move');
         Route::post('/files-bulk-move', [FileNodeController::class, 'bulkMove'])->name('files.bulk-move');
         Route::delete('/files-bulk', [FileNodeController::class, 'bulkDestroy'])->name('files.bulk-destroy');

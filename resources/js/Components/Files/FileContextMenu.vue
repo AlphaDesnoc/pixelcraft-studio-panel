@@ -6,6 +6,7 @@ import {
   FolderInput,
   Info,
   Link2,
+  Lock,
   Pencil,
   Trash2,
 } from "lucide-vue-next";
@@ -17,6 +18,7 @@ const props = defineProps({
   y: { type: Number, default: 0 },
   node: { type: Object, default: null },
   selectionCount: { type: Number, default: 0 },
+  canSetAccessLevel: { type: Boolean, default: false },
 });
 
 const emits = defineEmits(["update:open", "action"]);
@@ -50,6 +52,9 @@ const items = computed(() => {
   }
   if (!multiple.value) {
     list.push({ key: "details", label: "Détails", icon: Info });
+  }
+  if (props.canSetAccessLevel && !multiple.value) {
+    list.push({ key: "access-level", label: "Niveau d'accès", icon: Lock });
   }
   list.push({ key: "sep" });
   list.push({ key: "delete", label: "Supprimer", icon: Trash2, danger: true });

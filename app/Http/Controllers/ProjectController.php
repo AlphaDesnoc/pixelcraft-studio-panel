@@ -12,6 +12,7 @@ use App\Models\TaskList;
 use App\Models\TaskTag;
 use App\Models\TaskTemplate;
 use App\Models\User;
+use App\Support\AccessLevels;
 use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
 use App\Support\ProjectSpace;
@@ -45,8 +46,13 @@ class ProjectController extends Controller
         $space = ProjectSpace::resolve($request, $project, $user);
         $space->ensureResources($project);
 
+        // Clairance (niveau d'accréditation) de l'utilisateur : filtre les
+        // fichiers/dossiers verrouillés au-dessus de son niveau.
+        $clearance = ProjectAccess::clearanceLevel($user, $project);
+
         $listScope = fn ($q) => $space->applyScope($q, 'rank_id');
         $featureScope = fn ($q) => $space->applyScope($q, 'rank_id');
+        $fileScope = fn ($q) => $featureScope($q)->where('access_level', '<=', $clearance);
 
         $project->load([
             'members:id,name,email,avatar_path',
@@ -64,7 +70,7 @@ class ProjectController extends Controller
             'notes' => fn ($q) => $featureScope($q)->orderByDesc('pinned')->orderByDesc('pinned_at')->orderByDesc('created_at'),
             'notes.creator:id,name,email',
             'sheets' => fn ($q) => $featureScope($q)->orderBy('position'),
-            'fileNodes' => fn ($q) => $featureScope($q)->orderByRaw("CASE WHEN type = 'folder' THEN 0 ELSE 1 END")->orderBy('name'),
+            'fileNodes' => fn ($q) => $fileScope($q)->orderByRaw("CASE WHEN type = 'folder' THEN 0 ELSE 1 END")->orderBy('name'),
             'fileNodes.uploader:id,name',
             'chatMessages' => fn ($q) => $q->where('space_key', $space->key)->orderByDesc('pinned_at')->orderBy('created_at'),
             'chatMessages.user:id,name,avatar_path',
@@ -111,6 +117,7 @@ class ProjectController extends Controller
             'mime' => $n->mime,
             'size' => $n->size ? (int) $n->size : null,
             'rank_id' => $n->rank_id,
+            'access_level' => (int) $n->access_level,
             'created_at' => optional($n->created_at)?->toIso8601String(),
             'updated_at' => optional($n->updated_at)?->toIso8601String(),
             'uploader' => $n->uploader ? ['id' => $n->uploader->id, 'name' => $n->uploader->name] : null,
@@ -118,6 +125,7 @@ class ProjectController extends Controller
 
         $trashedFileNodes = $project->fileNodes()
             ->onlyTrashed()
+            ->where('access_level', '<=', $clearance)
             ->with(['uploader:id,name', 'deletedBy:id,name'])
             ->get()
             ->map(fn ($n) => [
@@ -393,6 +401,7 @@ class ProjectController extends Controller
                 'email' => $m->email,
                 'avatar_url' => $m->avatar_url,
                 'role' => $m->pivot->role ?? ProjectAccess::ROLE_MEMBER,
+                'access_level' => (int) ($m->pivot->access_level ?? 0),
                 'joined_at' => optional($m->pivot->joined_at)?->toIso8601String(),
                 'is_owner' => (int) $project->owner_id === (int) $m->id
                     || ($m->pivot->role ?? null) === ProjectAccess::ROLE_OWNER,
@@ -467,6 +476,9 @@ class ProjectController extends Controller
             'trashedFileNodes' => $trashedFileNodes,
             'storageUsed' => $storageUsed,
             'storageQuota' => $storageQuota,
+            'accessLevels' => AccessLevels::forProject($project),
+            'userClearance' => $clearance,
+            'canSetAccessLevels' => $canManageTeam,
             'chatMessages' => $chatMessages,
             'announcements' => $announcements,
             'canPostAnnouncements' => $space->isGlobal && $isAdmin,

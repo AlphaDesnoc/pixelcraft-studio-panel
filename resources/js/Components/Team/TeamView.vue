@@ -28,6 +28,7 @@ const props = defineProps({
   canManageTeam: { type: Boolean, default: false },
   canManageRanks: { type: Boolean, default: false },
   memberRoles: { type: Object, default: () => ({}) },
+  accessLevels: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -148,6 +149,19 @@ function updateRole(member, role) {
   router.put(
     route("projects.members.update", [props.projectSlug, member.id]),
     { role },
+    {
+      preserveScroll: true,
+      preserveState: true,
+      only: ["teamMembers", "members"],
+    },
+  );
+}
+
+function updateClearance(member, level) {
+  if (!props.canManageTeam) return;
+  router.put(
+    route("projects.members.clearance", [props.projectSlug, member.id]),
+    { access_level: Number(level) },
     {
       preserveScroll: true,
       preserveState: true,
@@ -291,6 +305,17 @@ async function removeMember(member) {
                 :disabled="key === 'owner' && !isAdmin"
               >
                 {{ label }}
+              </option>
+            </Select>
+            <Select
+              v-if="accessLevels.length"
+              :model-value="String(member.access_level ?? 0)"
+              class="h-9 w-[10rem] text-xs"
+              title="Niveau d'accréditation"
+              @update:model-value="updateClearance(member, $event)"
+            >
+              <option v-for="lvl in accessLevels" :key="lvl.value" :value="String(lvl.value)">
+                {{ lvl.value }} — {{ lvl.name }}
               </option>
             </Select>
             <button

@@ -9,6 +9,7 @@ import {
   FileText,
   FileVideo,
   Folder,
+  Lock,
   Move,
   Pencil,
   Trash2,
@@ -20,6 +21,8 @@ const props = defineProps({
   view: { type: String, default: "grid" },
   selected: { type: Boolean, default: false },
   selectionActive: { type: Boolean, default: false },
+  // Palier d'accréditation requis ({value,name,color}) si le nœud est verrouillé.
+  accessLevelInfo: { type: Object, default: null },
 });
 
 const emits = defineEmits([
@@ -216,7 +219,7 @@ function onDrop(e) {
     :draggable="!editing"
     @click="onClick"
     @dblclick.stop="onDblClick"
-    @contextmenu.prevent="onContextMenu"
+    @contextmenu.prevent.stop="onContextMenu"
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
     @dragstart="onDragStart"
@@ -239,6 +242,16 @@ function onDrop(e) {
     >
       <Check class="h-3.5 w-3.5" />
     </button>
+
+    <!-- Badge de verrouillage (niveau d'accréditation) -->
+    <div
+      v-if="accessLevelInfo"
+      class="absolute right-1 top-1 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold group-hover:opacity-0"
+      :style="{ backgroundColor: accessLevelInfo.color + '22', color: accessLevelInfo.color }"
+      :title="`Accès : ${accessLevelInfo.name}`"
+    >
+      <Lock class="h-2.5 w-2.5" />
+    </div>
 
     <img
       v-if="showThumbnail"
@@ -314,7 +327,7 @@ function onDrop(e) {
     :draggable="!editing"
     @click="onClick"
     @dblclick.stop="onDblClick"
-    @contextmenu.prevent="onContextMenu"
+    @contextmenu.prevent.stop="onContextMenu"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
     @dragover="onDragOver"
@@ -372,6 +385,16 @@ function onDrop(e) {
         {{ node.name }}
       </span>
     </div>
+
+    <span
+      v-if="accessLevelInfo"
+      class="hidden shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold sm:inline-flex"
+      :style="{ backgroundColor: accessLevelInfo.color + '22', color: accessLevelInfo.color }"
+      :title="`Accès : ${accessLevelInfo.name}`"
+    >
+      <Lock class="h-3 w-3" />
+      {{ accessLevelInfo.name }}
+    </span>
 
     <span class="hidden w-20 shrink-0 text-right text-xs text-muted-foreground sm:block">
       {{ isFolder ? "" : sizeLabel }}

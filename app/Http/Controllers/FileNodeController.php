@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Models\FileNode;
 use App\Models\Project;
+use App\Support\AccessLevels;
+use App\Support\ProjectAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,10 +41,12 @@ class FileNodeController extends Controller
 
         $parentId = $validated['parent_id'] ?? null;
         $rankId = $validated['rank_id'] ?? null;
+        $accessLevel = 0;
 
         if ($parentId !== null) {
             $parent = $this->validateParent($project, $parentId);
             $rankId = $parent->rank_id;
+            $accessLevel = (int) $parent->access_level;
         }
 
         $project->fileNodes()->create([
@@ -51,6 +55,7 @@ class FileNodeController extends Controller
             'type' => FileNode::TYPE_FOLDER,
             'name' => $validated['name'],
             'rank_id' => $rankId,
+            'access_level' => $accessLevel,
         ]);
 
         return back();
@@ -85,10 +90,13 @@ class FileNodeController extends Controller
             $rankId = null;
         }
 
+        $accessLevel = 0;
+
         if ($parentId !== null) {
             $parent = $this->validateParent($project, (int) $parentId);
             $parentId = (int) $parentId;
             $rankId = $parent->rank_id;
+            $accessLevel = (int) $parent->access_level;
         }
 
         $files = $request->file('files');
@@ -126,6 +134,7 @@ class FileNodeController extends Controller
                         $project,
                         $parentId,
                         $rankId,
+                        $accessLevel,
                         $segments,
                         $request->user()->id,
                         $folderCache,
@@ -143,6 +152,7 @@ class FileNodeController extends Controller
                 'mime' => $file->getMimeType(),
                 'size' => $file->getSize(),
                 'rank_id' => $rankId,
+                'access_level' => $accessLevel,
             ]);
         }
 
@@ -163,6 +173,42 @@ class FileNodeController extends Controller
         return back();
     }
 
+    /**
+     * Définit le niveau d'accréditation d'un dossier (ou fichier) et propage
+     * la restriction à toute sa descendance. Réservé aux gestionnaires d'équipe.
+     */
+    public function setAccessLevel(Request $request, Project $project, FileNode $node): RedirectResponse
+    {
+        $this->ensureFeatureWrite($request, $project, 'files');
+        abort_unless($node->project_id === $project->id, 404);
+        abort_unless(
+            ProjectAccess::canManageTeam($request->user(), $project),
+            403,
+            'Seuls les gestionnaires peuvent verrouiller un dossier.',
+        );
+
+        $validated = $request->validate([
+            'level' => ['required', 'integer', Rule::in(AccessLevels::values($project))],
+        ]);
+
+        $level = (int) $validated['level'];
+
+        // Héritage : on ne peut pas ouvrir un dossier en dessous de son parent.
+        $parentLevel = $node->parent_id
+            ? (int) (FileNode::where('id', $node->parent_id)->value('access_level') ?? 0)
+            : 0;
+        abort_if(
+            $level < $parentLevel,
+            422,
+            'Le niveau ne peut pas être inférieur à celui du dossier parent.',
+        );
+
+        $node->update(['access_level' => $level]);
+        $this->raiseSubtree($node, $level);
+
+        return back();
+    }
+
     public function move(Request $request, Project $project, FileNode $node): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'files');
@@ -178,6 +224,7 @@ class FileNodeController extends Controller
             abort(422, 'Déplacement invalide.');
         }
 
+        $target = null;
         if ($newParentId !== null) {
             $target = $this->validateParent($project, $newParentId);
             abort_unless($target->rank_id === $node->rank_id, 422, 'Impossible de déplacer entre espaces.');
@@ -192,6 +239,7 @@ class FileNodeController extends Controller
         }
 
         $node->update(['parent_id' => $newParentId]);
+        $this->enforceParentLevel($node, $target);
 
         return back();
     }
@@ -322,6 +370,7 @@ class FileNodeController extends Controller
             }
 
             $node->update(['parent_id' => $newParentId]);
+            $this->enforceParentLevel($node, $target);
         }
 
         return back();
@@ -331,6 +380,7 @@ class FileNodeController extends Controller
     {
         $this->ensureFeature($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
+        $this->ensureClearance($request, $project, $node);
         abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
         abort_unless(Storage::disk(self::DISK)->exists($node->path), 404);
 
@@ -349,16 +399,19 @@ class FileNodeController extends Controller
             'ids.*' => ['integer'],
         ]);
 
+        $clearance = ProjectAccess::clearanceLevel($request->user(), $project);
+
         $nodes = FileNode::query()
             ->where('project_id', $project->id)
             ->whereIn('id', $validated['ids'])
+            ->where('access_level', '<=', $clearance)
             ->get();
 
         abort_if($nodes->isEmpty(), 404);
 
         $files = [];
         foreach ($nodes as $node) {
-            $this->collectZipEntries($node, '', $files);
+            $this->collectZipEntries($node, '', $files, $clearance);
         }
         abort_if(empty($files), 404);
 
@@ -384,6 +437,7 @@ class FileNodeController extends Controller
     {
         $this->ensureFeature($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
+        $this->ensureClearance($request, $project, $node);
         abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
         abort_unless(Storage::disk(self::DISK)->exists($node->path), 404);
 
@@ -417,6 +471,7 @@ class FileNodeController extends Controller
     {
         $this->ensureFeature($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
+        $this->ensureClearance($request, $project, $node);
         abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
 
         $validated = $request->validate([
@@ -443,6 +498,7 @@ class FileNodeController extends Controller
         // de la signature validée par le middleware 'signed').
         $this->ensureFeature($request, $project, 'files');
         abort_unless($node->project_id === $project->id, 404);
+        $this->ensureClearance($request, $project, $node);
         abort_unless($node->type === FileNode::TYPE_FILE && $node->path, 404);
         abort_unless(Storage::disk(self::DISK)->exists($node->path), 404);
 
@@ -455,8 +511,13 @@ class FileNodeController extends Controller
         );
     }
 
-    private function collectZipEntries(FileNode $node, string $prefix, array &$files): void
+    private function collectZipEntries(FileNode $node, string $prefix, array &$files, int $clearance): void
     {
+        // Respecte l'accréditation même en téléchargement groupé / récursif.
+        if ((int) $node->access_level > $clearance) {
+            return;
+        }
+
         if ($node->isFile() && $node->path) {
             $files[] = [
                 'path' => $node->path,
@@ -469,7 +530,7 @@ class FileNodeController extends Controller
         if ($node->isFolder()) {
             $folderPrefix = $prefix.$node->name.'/';
             foreach ($node->children as $child) {
-                $this->collectZipEntries($child, $folderPrefix, $files);
+                $this->collectZipEntries($child, $folderPrefix, $files, $clearance);
             }
         }
     }
@@ -531,6 +592,7 @@ class FileNodeController extends Controller
                 'type' => FileNode::TYPE_FOLDER,
                 'name' => $name,
                 'rank_id' => $node->rank_id,
+                'access_level' => (int) $node->access_level,
             ]);
             foreach ($node->children as $child) {
                 $this->duplicateTree($project, $child, $copy->id, $userId, false);
@@ -555,6 +617,7 @@ class FileNodeController extends Controller
             'mime' => $node->mime,
             'size' => $node->size,
             'rank_id' => $node->rank_id,
+            'access_level' => (int) $node->access_level,
         ]);
     }
 
@@ -568,7 +631,7 @@ class FileNodeController extends Controller
         return substr($name, 0, $dot).' (copie)'.substr($name, $dot);
     }
 
-    private function findOrCreateFolderPath(Project $project, ?int $parentId, ?int $rankId, array $segments, int $userId, array &$cache): int
+    private function findOrCreateFolderPath(Project $project, ?int $parentId, ?int $rankId, int $accessLevel, array $segments, int $userId, array &$cache): int
     {
         $currentParent = $parentId;
         $key = (string) ($parentId ?? 'root');
@@ -594,6 +657,7 @@ class FileNodeController extends Controller
                     'type' => FileNode::TYPE_FOLDER,
                     'name' => $name,
                     'rank_id' => $rankId,
+                    'access_level' => $accessLevel,
                 ]);
             }
 
@@ -642,5 +706,41 @@ class FileNodeController extends Controller
         $isAdmin = $user->is_admin;
         $isMember = $project->members()->whereKey($user->id)->exists();
         abort_unless($isAdmin || $isMember, 403);
+    }
+
+    /**
+     * Garantit l'invariant « enfant >= parent » après un déplacement : si le
+     * nœud est moins restrictif que sa nouvelle destination, on l'aligne sur
+     * elle puis on propage à sa descendance.
+     */
+    private function enforceParentLevel(FileNode $node, ?FileNode $target): void
+    {
+        $parentLevel = $target ? (int) $target->access_level : 0;
+
+        if ((int) $node->access_level < $parentLevel) {
+            $node->update(['access_level' => $parentLevel]);
+            $this->raiseSubtree($node, $parentLevel);
+        }
+    }
+
+    /** Relève au niveau donné tous les descendants situés en dessous. */
+    private function raiseSubtree(FileNode $node, int $level): void
+    {
+        foreach ($node->children as $child) {
+            if ((int) $child->access_level < $level) {
+                $child->update(['access_level' => $level]);
+            }
+            $this->raiseSubtree($child, $level);
+        }
+    }
+
+    /**
+     * Bloque l'accès direct (download/preview/partage) à un nœud dont le niveau
+     * d'accréditation dépasse la clairance de l'utilisateur courant.
+     */
+    private function ensureClearance(Request $request, Project $project, FileNode $node): void
+    {
+        $clearance = ProjectAccess::clearanceLevel($request->user(), $project);
+        abort_if((int) $node->access_level > $clearance, 403, 'Accréditation insuffisante.');
     }
 }

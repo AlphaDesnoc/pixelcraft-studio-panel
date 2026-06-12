@@ -116,6 +116,17 @@ class GlobalSearchController extends Controller
             ->whereIn('project_id', $projectIds)
             ->where('type', FileNode::TYPE_FILE)
             ->where('name', 'like', $like)
+            // Masque les fichiers verrouillés au-dessus de la clairance du membre.
+            ->when(! $user->is_admin, fn ($query) => $query->where(function ($w) use ($user) {
+                $w->where('file_nodes.access_level', 0)
+                    ->orWhereExists(function ($sub) use ($user) {
+                        $sub->selectRaw('1')
+                            ->from('project_user')
+                            ->whereColumn('project_user.project_id', 'file_nodes.project_id')
+                            ->where('project_user.user_id', $user->id)
+                            ->whereColumn('project_user.access_level', '>=', 'file_nodes.access_level');
+                    });
+            }))
             ->with('project:id,slug,name')
             ->limit(6)
             ->get()
