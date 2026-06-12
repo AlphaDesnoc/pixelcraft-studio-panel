@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\EnsuresProjectFeature;
 use App\Http\Controllers\Concerns\RespondsForApi;
 use App\Models\Project;
 use App\Models\User;
+use App\Support\AccessLevels;
 use App\Support\AuditLogger;
 use App\Support\ProjectAccess;
 use App\Support\ProjectPermissions;
@@ -153,6 +154,28 @@ class ProjectMemberController extends Controller
 
         return $this->apiOrBack($request, [
             'permissions' => ProjectPermissions::sanitize($validated['permissions']),
+        ]);
+    }
+
+    public function clearance(Request $request, Project $project, User $user): JsonResponse|RedirectResponse
+    {
+        $this->ensureFeature($request, $project, 'team');
+        ProjectAccess::ensureCanManageTeam($request->user(), $project);
+        abort_unless($project->members()->whereKey($user->id)->exists(), 404);
+
+        $validated = $request->validate([
+            'access_level' => ['required', 'integer', Rule::in(AccessLevels::values($project))],
+        ]);
+
+        $project->members()->updateExistingPivot($user->id, [
+            'access_level' => (int) $validated['access_level'],
+        ]);
+
+        return $this->apiOrBack($request, [
+            'member' => [
+                'id' => $user->id,
+                'access_level' => (int) $validated['access_level'],
+            ],
         ]);
     }
 

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'project_id',
     'rank_id',
+    'access_level',
     'parent_id',
     'uploader_id',
     'deleted_by',
@@ -27,6 +28,13 @@ class FileNode extends Model
     public const TYPE_FOLDER = 'folder';
 
     public const TYPE_FILE = 'file';
+
+    protected function casts(): array
+    {
+        return [
+            'access_level' => 'integer',
+        ];
+    }
 
     public function project(): BelongsTo
     {

@@ -66,6 +66,9 @@ const props = defineProps({
   trashedFileNodes: { type: Array, default: () => [] },
   storageUsed: { type: Number, default: 0 },
   storageQuota: { type: Number, default: 0 },
+  accessLevels: { type: Array, default: () => [] },
+  userClearance: { type: Number, default: 0 },
+  canSetAccessLevels: { type: Boolean, default: false },
   members: { type: Array, default: () => [] },
   teamMembers: { type: Array, default: () => [] },
   teamCandidates: { type: Array, default: () => [] },
@@ -675,6 +678,9 @@ const kanbanBugLinkTasks = computed(() =>
           :storage-used="storageUsed"
           :storage-quota="storageQuota"
           :rank-id="activeRankId"
+          :access-levels="accessLevels"
+          :user-clearance="userClearance"
+          :can-set-access-levels="canSetAccessLevels"
         />
       </section>
 
@@ -712,6 +718,7 @@ const kanbanBugLinkTasks = computed(() =>
           :can-manage-team="canManageTeam"
           :can-manage-ranks="canManageRanks"
           :member-roles="memberRoles"
+          :access-levels="accessLevels"
         />
       </section>
 

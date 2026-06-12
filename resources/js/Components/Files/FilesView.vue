@@ -28,6 +28,7 @@ import FileContextMenu from "./FileContextMenu.vue";
 import FileDetailsPanel from "./FileDetailsPanel.vue";
 import TrashDialog from "./TrashDialog.vue";
 import ShareDialog from "./ShareDialog.vue";
+import AccessLevelDialog from "./AccessLevelDialog.vue";
 import { isViewable } from "./fileKind.js";
 
 const props = defineProps({
@@ -37,6 +38,16 @@ const props = defineProps({
   storageUsed: { type: Number, default: 0 },
   storageQuota: { type: Number, default: 0 },
   rankId: { type: Number, default: null },
+  accessLevels: { type: Array, default: () => [] },
+  userClearance: { type: Number, default: 0 },
+  canSetAccessLevels: { type: Boolean, default: false },
+});
+
+// Recherche rapide d'un palier d'accréditation par sa valeur.
+const accessLevelMap = computed(() => {
+  const map = {};
+  for (const lvl of props.accessLevels) map[lvl.value] = lvl;
+  return map;
 });
 
 const currentParentId = ref(null);
@@ -62,6 +73,9 @@ const trashOpen = ref(false);
 const shareOpen = ref(false);
 const shareNode = ref(null);
 const detailsOpen = ref(false);
+
+const accessLevelOpen = ref(false);
+const accessLevelNode = ref(null);
 
 const { uploadState, uploadEntries, uploadFileList, entriesFromDataTransfer, dismiss } =
   useFileUpload(props.projectSlug, () => props.rankId);
@@ -294,6 +308,11 @@ function openShare(node) {
   shareOpen.value = true;
 }
 
+function openAccessLevel(node) {
+  accessLevelNode.value = node;
+  accessLevelOpen.value = true;
+}
+
 async function deleteNode(node) {
   const message =
     node.type === "folder"
@@ -401,6 +420,9 @@ function onContextAction(key) {
     case "details":
       activeNodeId.value = node.id;
       detailsOpen.value = true;
+      break;
+    case "access-level":
+      openAccessLevel(node);
       break;
     case "delete":
       many ? bulkDelete() : deleteNode(node);
@@ -887,6 +909,7 @@ function onBreadcrumbDrop(e, parentId) {
             :selected="isSelected(node.id)"
             :selection-active="selectionActive"
             :is-drag-target="dragTargetId === node.id"
+            :access-level-info="node.access_level ? accessLevelMap[node.access_level] : null"
             @open="openNode"
             @rename="openRename"
             @rename-inline="renameInline"
@@ -917,6 +940,7 @@ function onBreadcrumbDrop(e, parentId) {
             :selected="isSelected(node.id)"
             :selection-active="selectionActive"
             :is-drag-target="dragTargetId === node.id"
+            :access-level-info="node.access_level ? accessLevelMap[node.access_level] : null"
             @open="openNode"
             @rename="openRename"
             @rename-inline="renameInline"
@@ -1036,6 +1060,7 @@ function onBreadcrumbDrop(e, parentId) {
       :y="contextMenu.y"
       :node="contextMenu.node"
       :selection-count="contextSelectionCount"
+      :can-set-access-level="canSetAccessLevels"
       @action="onContextAction"
     />
 
@@ -1049,6 +1074,13 @@ function onBreadcrumbDrop(e, parentId) {
       v-model:open="shareOpen"
       :project-slug="projectSlug"
       :node="shareNode"
+    />
+
+    <AccessLevelDialog
+      v-model:open="accessLevelOpen"
+      :project-slug="projectSlug"
+      :node="accessLevelNode"
+      :levels="accessLevels"
     />
   </div>
 </template>

@@ -107,6 +107,7 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/members/{user}', [ProjectMemberController::class, 'update']);
             Route::delete('/members/{user}', [ProjectMemberController::class, 'destroy']);
             Route::put('/members/{user}/permissions', [ProjectMemberController::class, 'permissions']);
+            Route::put('/members/{user}/clearance', [ProjectMemberController::class, 'clearance']);
 
             Route::post('/lists', [TaskListController::class, 'store']);
             Route::put('/lists/{list}', [TaskListController::class, 'update']);
@@ -169,6 +170,7 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/files/folder', [FileNodeController::class, 'storeFolder']);
             Route::post('/files/upload', [FileNodeController::class, 'upload']);
             Route::put('/files/{node}', [FileNodeController::class, 'update']);
+            Route::put('/files/{node}/access-level', [FileNodeController::class, 'setAccessLevel']);
             Route::post('/files/{node}/move', [FileNodeController::class, 'move']);
             Route::post('/files-bulk-move', [FileNodeController::class, 'bulkMove']);
             Route::delete('/files-bulk', [FileNodeController::class, 'bulkDestroy']);

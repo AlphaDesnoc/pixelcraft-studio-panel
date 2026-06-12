@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Storage;
     'description',
     'image',
     'color',
+    'access_levels',
     'status',
     'start_date',
     'owner_id',
@@ -40,6 +41,7 @@ class Project extends Model
     {
         return [
             'start_date' => 'date',
+            'access_levels' => 'array',
         ];
     }
 
@@ -75,7 +77,7 @@ class Project extends Model
     {
         return $this
             ->belongsToMany(User::class)
-            ->withPivot('role', 'joined_at', 'permissions')
+            ->withPivot('role', 'joined_at', 'permissions', 'access_level')
             ->withTimestamps();
     }
 

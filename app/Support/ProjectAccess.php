@@ -66,6 +66,22 @@ class ProjectAccess
         return $member?->pivot?->role;
     }
 
+    /**
+     * Clairance (niveau d'accréditation) de l'utilisateur dans le projet.
+     * Les gestionnaires d'équipe (propriétaire, gestionnaire, admin global)
+     * disposent de la clairance maximale afin d'administrer les verrous.
+     */
+    public static function clearanceLevel(User $user, Project $project): int
+    {
+        if (self::canManageTeam($user, $project)) {
+            return AccessLevels::max($project);
+        }
+
+        $member = $project->members()->whereKey($user->id)->first();
+
+        return (int) ($member?->pivot?->access_level ?? 0);
+    }
+
     public static function ensureAccess(User $user, Project $project): void
     {
         abort_unless(self::canAccess($user, $project), 403);
