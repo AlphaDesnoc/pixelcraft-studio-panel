@@ -115,6 +115,33 @@ class ChatMessageController extends Controller
         return response()->json(['message' => $message->toPayload()]);
     }
 
+    public function storeChapter(Request $request, Project $project): JsonResponse
+    {
+        $user = $request->user();
+        $space = ProjectSpace::resolve($request, $project, $user);
+        $this->authorizeSpaceWrite($user, $project, $space);
+        // Séparateur de chapitre : réservé aux modérateurs/hôtes du projet.
+        abort_unless(ProjectAccess::canManageTeam($user, $project), 403);
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:120'],
+        ]);
+
+        $message = $project->chatMessages()->create([
+            'user_id' => $user->id,
+            'rank_id' => $space->rankIdForCreate(),
+            'space_key' => $space->key,
+            'type' => 'chapter',
+            'body' => trim($validated['title']),
+            'mentions' => [],
+        ]);
+
+        $message->load(['user:id,name,avatar_path']);
+        ChatMessageSent::dispatch($message);
+
+        return response()->json(['message' => $message->toPayload()]);
+    }
+
     public function update(Request $request, Project $project, ChatMessage $message): JsonResponse
     {
         $user = $request->user();
@@ -151,7 +178,10 @@ class ChatMessageController extends Controller
         $space = ProjectSpace::resolve($request, $project, $user);
         $this->authorizeSpaceWrite($user, $project, $space);
         abort_unless($message->project_id === $project->id, 404);
-        abort_unless($message->canEditBy($user), 403);
+        // Un chapitre peut être retiré par n'importe quel modérateur/hôte.
+        $canDelete = $message->canEditBy($user)
+            || ($message->type === 'chapter' && ProjectAccess::canManageTeam($user, $project));
+        abort_unless($canDelete, 403);
 
         $messageId = $message->id;
         $spaceKey = $message->space_key;

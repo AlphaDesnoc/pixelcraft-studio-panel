@@ -29,6 +29,10 @@ class ChatMessageUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
-        return ['message' => $this->message->toPayload()];
+        $payload = $this->message->toPayload();
+        // Drapeaux par destinataire : recalculés côté client / au polling.
+        unset($payload['mentions_me'], $payload['can_edit']);
+
+        return ['message' => $payload];
     }
 }

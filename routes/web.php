@@ -130,6 +130,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/chat/messages', [ChatMessageController::class, 'store'])
             ->middleware('throttle:panel-chat')
             ->name('chat.messages.store');
+        Route::post('/chat/chapters', [ChatMessageController::class, 'storeChapter'])
+            ->middleware('throttle:panel-chat')
+            ->name('chat.chapters.store');
         Route::put('/chat/messages/{message}', [ChatMessageController::class, 'update'])->name('chat.messages.update');
         Route::delete('/chat/messages/{message}', [ChatMessageController::class, 'destroy'])->name('chat.messages.destroy');
         Route::post('/chat/messages/{message}/pin', [ChatMessageController::class, 'pin'])->name('chat.messages.pin');

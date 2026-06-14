@@ -23,6 +23,8 @@ const props = defineProps({
   selectionActive: { type: Boolean, default: false },
   // Palier d'accréditation requis ({value,name,color}) si le nœud est verrouillé.
   accessLevelInfo: { type: Object, default: null },
+  // Affiche le bouton de suppression (gestionnaires uniquement).
+  canDelete: { type: Boolean, default: false },
 });
 
 const emits = defineEmits([
@@ -305,6 +307,7 @@ function onDrop(e) {
         <Pencil class="h-3 w-3" />
       </button>
       <button
+        v-if="canDelete"
         type="button"
         class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-background/80 text-rose-400 backdrop-blur hover:bg-rose-500/15 hover:text-rose-300"
         title="Supprimer"
@@ -423,6 +426,7 @@ function onDrop(e) {
         <Pencil class="h-3.5 w-3.5" />
       </button>
       <button
+        v-if="canDelete"
         type="button"
         class="inline-flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-500/15 hover:text-rose-300"
         title="Supprimer"
