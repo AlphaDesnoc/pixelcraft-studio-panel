@@ -11,6 +11,10 @@ class CalendarRecurrenceExpander
 {
     private const MAX_OCCURRENCES = 500;
 
+    // Les événements sont des heures « murales » (flottantes) : on les sérialise
+    // sans fuseau pour que le navigateur n'y applique aucun décalage horaire.
+    private const NAIVE_FORMAT = 'Y-m-d\TH:i:s';
+
     /** @return array<int, array<string, mixed>> */
     public static function expandForRange(
         CalendarEvent $event,
@@ -64,8 +68,8 @@ class CalendarRecurrenceExpander
 
                 if ($occurrenceEnd >= $rangeStart && $occurrenceStart <= $rangeEnd->copy()->endOfDay()) {
                     $payload = self::basePayload($event, $exception);
-                    $payload['start_at'] = $occurrenceStart->toIso8601String();
-                    $payload['end_at'] = $occurrenceEnd->toIso8601String();
+                    $payload['start_at'] = $occurrenceStart->format(self::NAIVE_FORMAT);
+                    $payload['end_at'] = $occurrenceEnd->format(self::NAIVE_FORMAT);
                     $payload['series_id'] = $event->id;
                     $payload['occurrence_date'] = $dateKey;
                     $payload['id'] = $event->id.'-'.$dateKey;
@@ -113,8 +117,8 @@ class CalendarRecurrenceExpander
             'id' => $event->id,
             'title' => $exception?->title ?? $event->title,
             'description' => $exception?->description ?? $event->description,
-            'start_at' => optional($exception?->start_at ?? $event->start_at)?->toIso8601String(),
-            'end_at' => optional($exception?->end_at ?? $event->end_at)?->toIso8601String(),
+            'start_at' => optional($exception?->start_at ?? $event->start_at)?->format(self::NAIVE_FORMAT),
+            'end_at' => optional($exception?->end_at ?? $event->end_at)?->format(self::NAIVE_FORMAT),
             'all_day' => (bool) ($exception?->all_day ?? $event->all_day),
             'color' => $exception?->color ?? $event->color,
             'creator_id' => $event->creator_id,

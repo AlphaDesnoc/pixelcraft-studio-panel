@@ -241,7 +241,7 @@ function cleanup() {
   handStates.value = {};
 }
 
-export async function joinRoom(projectSlug, channelId, label, { withVideo = false, openMeetingView = false, projectId = null } = {}) {
+export async function joinRoom(projectSlug, channelId, label, { withVideo = false, openMeetingView = false, projectId = null, canManageChat = false } = {}) {
   if (inRoom.value || connecting.value) return;
   connecting.value = true;
   try {
@@ -262,6 +262,7 @@ export async function joinRoom(projectSlug, channelId, label, { withVideo = fals
       projectId,
       channelId,
       label,
+      canManageChat,
       isStage: Boolean(data.is_stage),
     };
     window.addEventListener("beforeunload", beaconLeave);

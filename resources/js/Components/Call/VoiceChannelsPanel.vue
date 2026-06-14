@@ -133,6 +133,7 @@ async function join(channel) {
     withVideo: false,
     openMeetingView: Boolean(channel.with_video),
     projectId: props.projectId,
+    canManageChat: props.canManage,
   });
 }
 

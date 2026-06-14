@@ -31,8 +31,13 @@ class ChatMessageSent implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
+        $payload = $this->message->toPayload();
+        // Drapeau par destinataire : calculé dans le contexte de l'émetteur ici,
+        // donc on le retire du temps réel (le client le recalcule par viewer).
+        unset($payload['mentions_me'], $payload['can_edit']);
+
         return [
-            'message' => $this->message->toPayload(),
+            'message' => $payload,
         ];
     }
 }

@@ -41,6 +41,8 @@ const props = defineProps({
   accessLevels: { type: Array, default: () => [] },
   userClearance: { type: Number, default: 0 },
   canSetAccessLevels: { type: Boolean, default: false },
+  // Suppression (corbeille, définitive, vidage, restauration) : gestionnaires.
+  canDelete: { type: Boolean, default: false },
 });
 
 // Recherche rapide d'un palier d'accréditation par sa valeur.
@@ -314,6 +316,7 @@ function openAccessLevel(node) {
 }
 
 async function deleteNode(node) {
+  if (!props.canDelete) return;
   const message =
     node.type === "folder"
       ? "Ce dossier et tout son contenu seront déplacés dans la corbeille."
@@ -340,6 +343,7 @@ function openBulkMove() {
 }
 
 async function bulkDelete() {
+  if (!props.canDelete) return;
   if (
     !(await confirmDialog({
       title: "Supprimer la sélection",
@@ -716,7 +720,7 @@ function onBreadcrumbDrop(e, parentId) {
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <Button variant="outline" size="sm" class="gap-1.5" @click="trashOpen = true">
+        <Button v-if="canDelete" variant="outline" size="sm" class="gap-1.5" @click="trashOpen = true">
           <Trash class="h-3.5 w-3.5" />
           Corbeille
           <span
@@ -872,6 +876,7 @@ function onBreadcrumbDrop(e, parentId) {
           Déplacer
         </Button>
         <Button
+          v-if="canDelete"
           variant="outline"
           size="sm"
           class="gap-1.5 text-rose-400 hover:text-rose-300"
@@ -910,6 +915,7 @@ function onBreadcrumbDrop(e, parentId) {
             :selection-active="selectionActive"
             :is-drag-target="dragTargetId === node.id"
             :access-level-info="node.access_level ? accessLevelMap[node.access_level] : null"
+            :can-delete="canDelete"
             @open="openNode"
             @rename="openRename"
             @rename-inline="renameInline"
@@ -941,6 +947,7 @@ function onBreadcrumbDrop(e, parentId) {
             :selection-active="selectionActive"
             :is-drag-target="dragTargetId === node.id"
             :access-level-info="node.access_level ? accessLevelMap[node.access_level] : null"
+            :can-delete="canDelete"
             @open="openNode"
             @rename="openRename"
             @rename-inline="renameInline"
@@ -1061,6 +1068,7 @@ function onBreadcrumbDrop(e, parentId) {
       :node="contextMenu.node"
       :selection-count="contextSelectionCount"
       :can-set-access-level="canSetAccessLevels"
+      :can-delete="canDelete"
       @action="onContextAction"
     />
 

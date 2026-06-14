@@ -9,13 +9,18 @@ export function buildMessageClusters(messages, currentUserId) {
     const previous = messages[index - 1];
     const next = messages[index + 1];
     const userId = message.user?.id ?? null;
-    const previousUserId = previous?.user?.id ?? null;
-    const nextUserId = next?.user?.id ?? null;
+
+    // Un chapitre (séparateur) coupe systématiquement les groupes : le message
+    // qui suit un chapitre réaffiche donc avatar + nom.
+    const prevBreaks =
+      !previous || previous.type === "chapter" || (previous.user?.id ?? null) !== userId;
+    const nextBreaks =
+      !next || next.type === "chapter" || (next.user?.id ?? null) !== userId;
 
     map.set(message.id, {
       isMine: userId != null && userId === currentUserId,
-      clusterStart: userId !== previousUserId,
-      clusterEnd: userId !== nextUserId,
+      clusterStart: prevBreaks,
+      clusterEnd: nextBreaks,
     });
   }
 

@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'user_id',
     'rank_id',
     'space_key',
+    'type',
     'body',
     'mentions',
     'reply_to_id',
@@ -68,6 +69,57 @@ class ChatMessage extends Model
         return $this->morphMany(Attachment::class, 'attachable');
     }
 
+    /**
+     * Le membre connecté est-il visé par ce message (mention directe ou via un
+     * de ses rangs) ? Calculé par viewer pour mettre le message en évidence
+     * uniquement chez la personne concernée.
+     */
+    public function mentionsCurrentUser(): bool
+    {
+        $user = auth()->user();
+        $mentions = $this->mentions ?? [];
+        if (! $user || empty($mentions)) {
+            return false;
+        }
+
+        foreach ($mentions as $mention) {
+            if (($mention['type'] ?? 'user') === 'user'
+                && (int) ($mention['id'] ?? 0) === $user->id) {
+                return true;
+            }
+        }
+
+        $myRankIds = self::currentUserRankIds((int) $this->project_id, (int) $user->id);
+        if ($myRankIds->isEmpty()) {
+            return false;
+        }
+
+        foreach ($mentions as $mention) {
+            if (($mention['type'] ?? '') === 'rank'
+                && $myRankIds->contains((int) ($mention['id'] ?? 0))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @var array<string, \Illuminate\Support\Collection<int, int>> */
+    protected static array $rankIdCache = [];
+
+    /** Rangs du membre dans le projet, mémoïsés par requête (évite le N+1). */
+    protected static function currentUserRankIds(int $projectId, int $userId): \Illuminate\Support\Collection
+    {
+        $cacheKey = $projectId.':'.$userId;
+
+        return self::$rankIdCache[$cacheKey] ??= \Illuminate\Support\Facades\DB::table('rank_user')
+            ->join('ranks', 'ranks.id', '=', 'rank_user.rank_id')
+            ->where('ranks.project_id', $projectId)
+            ->where('rank_user.user_id', $userId)
+            ->pluck('rank_user.rank_id')
+            ->map(fn ($id) => (int) $id);
+    }
+
     public function canEditBy(User $user): bool
     {
         if ($this->user_id !== $user->id) {
@@ -92,6 +144,7 @@ class ChatMessage extends Model
 
         return [
             'id' => $this->id,
+            'type' => $this->type ?? 'message',
             'body' => $this->body,
             'body_html' => ChatBodyFormatter::toHtml($this->body ?? '', $this->mentions ?? []),
             'space_key' => $this->space_key,
@@ -109,6 +162,7 @@ class ChatMessage extends Model
                 'avatar_url' => $this->user->avatar_url,
             ] : null,
             'attachments' => $this->attachments->map(fn (Attachment $a) => $a->toPayload())->values(),
+            'mentions_me' => $this->mentionsCurrentUser(),
             'can_edit' => auth()->user()?->id === $this->user_id
                 && $this->created_at?->gt(now()->subMinutes(self::EDIT_WINDOW_MINUTES)),
         ];

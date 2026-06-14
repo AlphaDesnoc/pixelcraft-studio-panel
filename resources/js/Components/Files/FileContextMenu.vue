@@ -19,6 +19,7 @@ const props = defineProps({
   node: { type: Object, default: null },
   selectionCount: { type: Number, default: 0 },
   canSetAccessLevel: { type: Boolean, default: false },
+  canDelete: { type: Boolean, default: false },
 });
 
 const emits = defineEmits(["update:open", "action"]);
@@ -56,8 +57,10 @@ const items = computed(() => {
   if (props.canSetAccessLevel && !multiple.value) {
     list.push({ key: "access-level", label: "Niveau d'accès", icon: Lock });
   }
-  list.push({ key: "sep" });
-  list.push({ key: "delete", label: "Supprimer", icon: Trash2, danger: true });
+  if (props.canDelete) {
+    list.push({ key: "sep" });
+    list.push({ key: "delete", label: "Supprimer", icon: Trash2, danger: true });
+  }
   return list;
 });
 

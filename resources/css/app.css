@@ -234,6 +234,12 @@
     @apply ring-1 ring-amber-500/35;
   }
 
+  /* Message qui mentionne le membre connecté (visible uniquement chez lui). */
+  .wa-chat-bubble.wa-chat-bubble--mention {
+    background-color: hsl(var(--primary) / 0.12);
+    box-shadow: inset 3px 0 0 0 hsl(var(--primary)), var(--wa-bubble-shadow);
+  }
+
   .wa-chat-bubble-toolbar {
     @apply absolute -top-1 z-10 flex items-center gap-0.5 rounded-full border border-border/60 bg-card/95 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100;
   }

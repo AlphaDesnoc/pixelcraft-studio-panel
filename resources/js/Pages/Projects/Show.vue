@@ -312,17 +312,41 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("keydown", onProjectKeydown);
   clearTimeout(gNavTimer);
+  if (activeTab.value === "chat") {
+    markChatSpaceRead(activeSpace.value);
+  }
 });
 
-const chatUnreadSummary = computed(() => {
-  const key = `chat-last-read:${props.project.slug}:${currentUserId.value}`;
-  let lastRead = {};
-  try {
-    lastRead = JSON.parse(localStorage.getItem(key) ?? "{}");
-  } catch {
-    lastRead = {};
-  }
+const chatLastReadKey = computed(
+  () => `chat-last-read:${props.project.slug}:${currentUserId.value}`,
+);
 
+function loadChatLastRead() {
+  try {
+    return JSON.parse(localStorage.getItem(chatLastReadKey.value) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+// Réactif : la modif déclenche le recalcul de chatUnreadSummary (corrige le
+// badge « Non lus » qui ne se vidait jamais, faute d'écriture du dernier accès).
+const chatLastRead = ref(loadChatLastRead());
+
+function markChatSpaceRead(space) {
+  if (!space || space === "full") {
+    return;
+  }
+  chatLastRead.value = { ...chatLastRead.value, [space]: new Date().toISOString() };
+  try {
+    localStorage.setItem(chatLastReadKey.value, JSON.stringify(chatLastRead.value));
+  } catch {
+    // localStorage indisponible (mode privé, quota) : on ignore.
+  }
+}
+
+const chatUnreadSummary = computed(() => {
+  const lastRead = chatLastRead.value;
   const counts = {};
   for (const message of props.chatMessages) {
     const space = message.space_key ?? props.activeSpace;
@@ -339,6 +363,18 @@ const chatUnreadSummary = computed(() => {
     count,
   }));
 });
+
+// Consulter le chat d'un espace le marque comme lu (à l'ouverture et à chaque
+// changement d'espace tant qu'on est sur l'onglet chat).
+watch(
+  () => [activeTab.value, activeSpace.value],
+  ([tab, space]) => {
+    if (tab === "chat") {
+      markChatSpaceRead(space);
+    }
+  },
+  { immediate: true },
+);
 
 const initials = computed(() =>
   props.project.name
@@ -681,6 +717,7 @@ const kanbanBugLinkTasks = computed(() =>
           :access-levels="accessLevels"
           :user-clearance="userClearance"
           :can-set-access-levels="canSetAccessLevels"
+          :can-delete="canManageTeam"
         />
       </section>
 
@@ -693,6 +730,7 @@ const kanbanBugLinkTasks = computed(() =>
           :active="activeTab === 'chat'"
           :initial-chat-members="chatMembers"
           :chat-rank-mentions="chatRankMentions"
+          :can-manage-chat="canManageTeam"
         />
       </section>
 

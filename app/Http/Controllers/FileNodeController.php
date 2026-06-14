@@ -247,6 +247,7 @@ class FileNodeController extends Controller
     public function destroy(Request $request, Project $project, FileNode $node): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'files');
+        $this->ensureCanDelete($request, $project);
         abort_unless($node->project_id === $project->id, 404);
 
         // Suppression douce : déplace vers la corbeille.
@@ -258,6 +259,7 @@ class FileNodeController extends Controller
     public function bulkDestroy(Request $request, Project $project): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'files');
+        $this->ensureCanDelete($request, $project);
 
         $validated = $request->validate([
             'ids' => ['required', 'array', 'min:1'],
@@ -279,6 +281,7 @@ class FileNodeController extends Controller
     public function restore(Request $request, Project $project, int $node): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'files');
+        $this->ensureCanDelete($request, $project);
 
         $target = FileNode::withTrashed()
             ->where('project_id', $project->id)
@@ -300,6 +303,7 @@ class FileNodeController extends Controller
     public function forceDestroy(Request $request, Project $project, int $node): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'files');
+        $this->ensureCanDelete($request, $project);
 
         $target = FileNode::withTrashed()
             ->where('project_id', $project->id)
@@ -313,6 +317,7 @@ class FileNodeController extends Controller
     public function emptyTrash(Request $request, Project $project): RedirectResponse
     {
         $this->ensureFeatureWrite($request, $project, 'files');
+        $this->ensureCanDelete($request, $project);
 
         $trashed = FileNode::onlyTrashed()
             ->where('project_id', $project->id)
@@ -706,6 +711,20 @@ class FileNodeController extends Controller
         $isAdmin = $user->is_admin;
         $isMember = $project->members()->whereKey($user->id)->exists();
         abort_unless($isAdmin || $isMember, 403);
+    }
+
+    /**
+     * Toute suppression (corbeille, définitive, vidage, restauration) est
+     * réservée aux gestionnaires du projet (admin/proprio/gestionnaire). Les
+     * membres peuvent créer, uploader, renommer et déplacer normalement.
+     */
+    private function ensureCanDelete(Request $request, Project $project): void
+    {
+        abort_unless(
+            ProjectAccess::canManageTeam($request->user(), $project),
+            403,
+            'Seuls les gestionnaires du projet peuvent supprimer des fichiers.',
+        );
     }
 
     /**

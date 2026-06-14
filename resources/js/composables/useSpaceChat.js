@@ -1,4 +1,4 @@
-import { nextTick, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import axios from "axios";
 import { sortPresenceUsers } from "@/lib/presence.js";
 
@@ -79,6 +79,9 @@ export function useSpaceChat(
   const uploading = ref(false);
   const typingUsers = ref([]);
   const listRef = ref(null);
+  const atBottom = ref(true);
+  const unreadCount = ref(0);
+  const NEAR_BOTTOM_PX = 120;
   let pollTimer = null;
   let presenceTimer = null;
   let channel = null;
@@ -91,6 +94,35 @@ export function useSpaceChat(
   function scrollToBottom() {
     if (listRef.value) {
       listRef.value.scrollTop = listRef.value.scrollHeight;
+    }
+  }
+
+  function isNearBottom() {
+    const el = listRef.value;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+  }
+
+  // À brancher sur l'événement @scroll de la liste : suit si l'utilisateur est
+  // « collé » en bas pour décider d'auto-scroller ou d'afficher le compteur.
+  function handleScroll() {
+    atBottom.value = isNearBottom();
+    if (atBottom.value) {
+      unreadCount.value = 0;
+    }
+  }
+
+  function jumpToPresent() {
+    scrollToBottom();
+    atBottom.value = true;
+    unreadCount.value = 0;
+  }
+
+  // Quand on revient sur l'onglet/la fenêtre : si on était en bas, on rattrape
+  // les messages arrivés pendant que le websocket était throttlé hors focus.
+  function handleVisibility() {
+    if (document.visibilityState === "visible" && atBottom.value) {
+      nextTick(scrollToBottom);
     }
   }
 
@@ -209,7 +241,17 @@ export function useSpaceChat(
       return false;
     }
     messages.value = sortMessages([...messages.value, message]);
-    nextTick(() => scrollToBottom());
+    const isMine =
+      currentUserIdRef?.value && message.user?.id === currentUserIdRef.value;
+    if (isMine || atBottom.value) {
+      nextTick(() => {
+        scrollToBottom();
+        atBottom.value = true;
+        unreadCount.value = 0;
+      });
+    } else {
+      unreadCount.value += 1;
+    }
     return true;
   }
 
@@ -220,9 +262,17 @@ export function useSpaceChat(
       appendMessage(message);
       return;
     }
-    messages.value = messages.value.map((m) =>
-      m.id === message.id ? message : m,
-    );
+    // Les payloads temps réel omettent les drapeaux par-viewer (mentions_me,
+    // can_edit) : on conserve la valeur déjà connue plutôt que de l'effacer.
+    const prev = messages.value[index];
+    const merged = { ...message };
+    if (merged.mentions_me === undefined && prev.mentions_me !== undefined) {
+      merged.mentions_me = prev.mentions_me;
+    }
+    if (merged.can_edit === undefined && prev.can_edit !== undefined) {
+      merged.can_edit = prev.can_edit;
+    }
+    messages.value = messages.value.map((m) => (m.id === message.id ? merged : m));
   }
 
   function removeMessage(messageId) {
@@ -261,14 +311,25 @@ export function useSpaceChat(
     });
     const incoming = data.messages ?? [];
     const searching = Boolean(params.q || params.author_id || params.from || params.to);
+    const prevLength = messages.value.length;
     const merged = searching || replace
       ? sortMessages(incoming)
       : mergeMessages(messages.value, incoming);
     if (merged !== messages.value) {
+      const added = merged.length - prevLength;
       messages.value = merged;
-      if (scroll) {
+      if (scroll || replace) {
         await nextTick();
         scrollToBottom();
+        atBottom.value = true;
+        unreadCount.value = 0;
+      } else if (added > 0) {
+        if (atBottom.value) {
+          await nextTick();
+          scrollToBottom();
+        } else {
+          unreadCount.value += added;
+        }
       }
     }
   }
@@ -363,6 +424,8 @@ export function useSpaceChat(
     activeSpace = spaceKey;
     loading.value = true;
     messages.value = [];
+    atBottom.value = true;
+    unreadCount.value = 0;
     setMembers(initialMembersRef?.value ?? []);
 
     try {
@@ -399,25 +462,22 @@ export function useSpaceChat(
     }
   }
 
-  async function toggleReaction(messageId, emoji) {
-    if (!activeSpace || !emoji || !messageId) {
+  async function createChapter(title) {
+    const trimmed = title?.trim();
+    if (!trimmed || !activeSpace || sending.value) {
       return;
     }
 
+    sending.value = true;
     try {
       const { data } = await axios.post(
-        route("projects.chat.reactions.toggle", [projectSlug, messageId]),
-        { emoji },
+        route("projects.chat.chapters.store", projectSlug),
+        { title: trimmed },
         { params: { space: activeSpace } },
       );
-      if (data?.reactions) {
-        const prev = messages.value.find((m) => m.id === messageId);
-        if (prev) {
-          replaceMessage({ ...prev, reactions: data.reactions });
-        }
-      }
-    } catch {
-      /* ignore */
+      appendMessage(data.message);
+    } finally {
+      sending.value = false;
     }
   }
 
@@ -550,7 +610,16 @@ export function useSpaceChat(
     { immediate: true },
   );
 
-  onUnmounted(unsubscribe);
+  onMounted(() => {
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleVisibility);
+  });
+
+  onUnmounted(() => {
+    document.removeEventListener("visibilitychange", handleVisibility);
+    window.removeEventListener("focus", handleVisibility);
+    unsubscribe();
+  });
 
   return {
     messages,
@@ -561,6 +630,7 @@ export function useSpaceChat(
     typingUsers,
     searchFilters,
     send,
+    createChapter,
     toggleReaction,
     pinMessage,
     updateMessage,
@@ -569,5 +639,9 @@ export function useSpaceChat(
     notifyTyping,
     applySearchFilters,
     listRef,
+    atBottom,
+    unreadCount,
+    handleScroll,
+    jumpToPresent,
   };
 }

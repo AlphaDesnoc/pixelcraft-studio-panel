@@ -1,7 +1,9 @@
 <script setup>
-import { computed, ref, toRef } from "vue";
+import { computed, nextTick, ref, toRef } from "vue";
 import { usePage } from "@inertiajs/vue3";
 import {
+  Bookmark,
+  ChevronDown,
   MessageSquare,
   Paperclip,
   Pencil,
@@ -43,6 +45,12 @@ const props = defineProps({
   active: { type: Boolean, default: false },
   initialChatMembers: { type: Array, default: () => [] },
   chatRankMentions: { type: Array, default: () => [] },
+  // Modérateur/hôte : peut insérer des chapitres (séparateurs).
+  canManageChat: { type: Boolean, default: false },
+  // Intégré dans un autre panneau (ex. réunion) : pleine hauteur, sans cadre.
+  embedded: { type: Boolean, default: false },
+  // Afficher la colonne des membres à droite.
+  showMembers: { type: Boolean, default: true },
 });
 
 const page = usePage();
@@ -69,6 +77,9 @@ const draftEmojiTriggerRef = ref(null);
 const reactionPickerOpen = ref(false);
 const reactionPickerMessageId = ref(null);
 const reactionTriggerRef = ref(null);
+const chapterDraftOpen = ref(false);
+const chapterTitle = ref("");
+const chapterInputRef = ref(null);
 
 const {
   messages,
@@ -84,6 +95,11 @@ const {
   notifyTyping,
   applySearchFilters,
   listRef,
+  atBottom,
+  unreadCount,
+  handleScroll,
+  jumpToPresent,
+  createChapter,
   toggleReaction,
   pinMessage,
 } = useSpaceChat(
@@ -231,6 +247,21 @@ function isEmojiOnly(body) {
   return !/[\p{L}\p{N}]/u.test(trimmed);
 }
 
+function messageMentionsMe(message) {
+  // Drapeau serveur (gère les rangs, fiable au chargement/polling) ou, pour le
+  // temps réel, repli sur une mention directe de l'utilisateur courant.
+  if (message.mentions_me) {
+    return true;
+  }
+  const uid = currentUserId.value;
+  if (!uid) {
+    return false;
+  }
+  return (message.mentions ?? []).some(
+    (m) => (m.type ?? "user") === "user" && Number(m.id) === uid,
+  );
+}
+
 function reactionActive(reaction) {
   if (reaction.me !== undefined) {
     return Boolean(reaction.me);
@@ -301,6 +332,34 @@ async function onDraftEmojiSelected(emoji) {
 
 function toggleDraftEmojiPicker() {
   draftEmojiOpen.value = !draftEmojiOpen.value;
+}
+
+function openChapterDraft() {
+  chapterDraftOpen.value = true;
+  nextTick(() => chapterInputRef.value?.focus());
+}
+
+function closeChapterDraft() {
+  chapterDraftOpen.value = false;
+  chapterTitle.value = "";
+}
+
+async function submitChapter() {
+  const title = chapterTitle.value.trim();
+  if (!title) return;
+  closeChapterDraft();
+  await createChapter(title);
+}
+
+async function deleteChapter(message) {
+  if (
+    !(await confirmDialog({
+      title: "Supprimer le chapitre",
+      message: "Ce séparateur sera retiré du fil.",
+    }))
+  )
+    return;
+  await deleteMessage(message.id);
 }
 
 async function submitMessage() {
@@ -382,7 +441,14 @@ async function onFileSelected(event) {
 </script>
 
 <template>
-  <div class="flex h-[min(620px,calc(100dvh-12rem))] min-h-[420px] flex-col overflow-hidden rounded-xl border border-border bg-card">
+  <div
+    class="flex flex-col overflow-hidden bg-card"
+    :class="
+      embedded
+        ? 'h-full'
+        : 'h-[min(620px,calc(100dvh-12rem))] min-h-[420px] rounded-xl border border-border'
+    "
+  >
     <header class="shrink-0 border-b border-border px-4 py-3">
       <div class="flex items-center gap-2">
         <MessageSquare class="h-4 w-4 text-primary" />
@@ -403,9 +469,11 @@ async function onFileSelected(event) {
           @search="onSearch"
         />
 
+        <div class="relative flex min-h-0 flex-1 flex-col">
         <div
           ref="listRef"
           class="wa-chat-messages min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-3"
+          @scroll.passive="handleScroll"
         >
           <div
             v-if="loading"
@@ -439,6 +507,7 @@ async function onFileSelected(event) {
               :show-avatar="!messageCluster(message, true).isMine && messageCluster(message, true).clusterEnd"
               :avatar-initials="initials(message.user?.name)"
               :avatar-url="message.user?.avatar_url ?? ''"
+              :mentions-me="messageMentionsMe(message)"
               pinned
             >
               <div
@@ -460,9 +529,29 @@ async function onFileSelected(event) {
             </WaChatBubbleShell>
           </section>
 
+          <template v-for="message in regularMessages" :key="message.id">
+          <div
+            v-if="message.type === 'chapter'"
+            class="chat-chapter group/chapter"
+          >
+            <span class="chat-chapter-line" />
+            <span class="chat-chapter-label">
+              <Bookmark class="h-3.5 w-3.5 shrink-0" />
+              {{ message.body }}
+            </span>
+            <button
+              v-if="canManageChat"
+              type="button"
+              class="chat-chapter-delete"
+              title="Supprimer le chapitre"
+              @click="deleteChapter(message)"
+            >
+              <X class="h-3 w-3" />
+            </button>
+            <span class="chat-chapter-line" />
+          </div>
           <WaChatBubbleShell
-            v-for="message in regularMessages"
-            :key="message.id"
+            v-else
             :is-mine="messageCluster(message).isMine"
             :cluster-start="messageCluster(message).clusterStart"
             :cluster-end="messageCluster(message).clusterEnd"
@@ -471,6 +560,7 @@ async function onFileSelected(event) {
             :show-avatar="!messageCluster(message).isMine && messageCluster(message).clusterEnd"
             :avatar-initials="initials(message.user?.name)"
               :avatar-url="message.user?.avatar_url ?? ''"
+            :mentions-me="messageMentionsMe(message)"
           >
             <template #toolbar>
               <button
@@ -633,6 +723,29 @@ async function onFileSelected(event) {
               </button>
             </template>
           </WaChatBubbleShell>
+          </template>
+        </div>
+
+        <Transition name="jump-fade">
+          <button
+            v-if="!atBottom"
+            type="button"
+            class="absolute bottom-3 right-4 z-10 inline-flex items-center gap-1.5 rounded-full border border-border bg-card/95 py-1.5 pl-2 pr-3 text-xs font-medium text-foreground shadow-lg backdrop-blur transition-colors hover:bg-muted"
+            title="Revenir aux messages récents"
+            @click="jumpToPresent"
+          >
+            <span class="relative flex h-5 w-5 items-center justify-center">
+              <ChevronDown class="h-4 w-4" />
+              <span
+                v-if="unreadCount"
+                class="absolute -right-1 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground"
+              >
+                {{ unreadCount > 99 ? "99+" : unreadCount }}
+              </span>
+            </span>
+            {{ unreadCount ? "Nouveaux messages" : "Revenir en bas" }}
+          </button>
+        </Transition>
         </div>
 
         <p
@@ -655,6 +768,40 @@ async function onFileSelected(event) {
             class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="Annuler la réponse"
             @click="clearReply"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+
+        <div
+          v-if="chapterDraftOpen"
+          class="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-4 py-2"
+        >
+          <Bookmark class="h-4 w-4 shrink-0 text-primary" />
+          <input
+            ref="chapterInputRef"
+            v-model="chapterTitle"
+            type="text"
+            maxlength="120"
+            placeholder="Titre du chapitre… (Entrée pour ajouter)"
+            class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus:border-primary"
+            @keydown.enter.prevent="submitChapter"
+            @keydown.esc.prevent="closeChapterDraft"
+          />
+          <Button
+            type="button"
+            size="sm"
+            class="h-8 shrink-0"
+            :disabled="sending || !chapterTitle.trim()"
+            @click="submitChapter"
+          >
+            Ajouter
+          </Button>
+          <button
+            type="button"
+            class="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Annuler le chapitre"
+            @click="closeChapterDraft"
           >
             <X class="h-4 w-4" />
           </button>
@@ -694,6 +841,19 @@ async function onFileSelected(event) {
               <Smile class="h-4 w-4" />
             </Button>
           </span>
+          <Button
+            v-if="canManageChat"
+            type="button"
+            size="icon"
+            variant="outline"
+            class="h-10 w-10 shrink-0"
+            :class="chapterDraftOpen ? 'bg-muted text-foreground' : ''"
+            aria-label="Insérer un chapitre"
+            title="Insérer un chapitre"
+            @click="chapterDraftOpen ? closeChapterDraft() : openChapterDraft()"
+          >
+            <Bookmark class="h-4 w-4" />
+          </Button>
           <div class="relative min-w-0 flex-1">
             <Textarea
               ref="draftTextareaRef"
@@ -732,6 +892,7 @@ async function onFileSelected(event) {
       </div>
 
       <ChatMembersPanel
+        v-if="showMembers"
         :members="chatMembers"
         :current-user-id="currentUserId"
         :loading="loading && chatMembers.length === 0"
@@ -774,5 +935,56 @@ async function onFileSelected(event) {
 
 .chat-draft-preview :deep(.twemoji) {
   margin: 0 0.05em;
+}
+
+.chat-chapter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem 1rem;
+}
+.chat-chapter-line {
+  height: 1px;
+  flex: 1;
+  background: hsl(var(--border));
+}
+.chat-chapter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.4);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  text-align: center;
+}
+.chat-chapter-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0.25rem;
+  color: hsl(var(--muted-foreground));
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.chat-chapter:hover .chat-chapter-delete {
+  opacity: 1;
+}
+.chat-chapter-delete:hover {
+  color: hsl(var(--destructive, 0 84% 60%));
+}
+
+.jump-fade-enter-active,
+.jump-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.jump-fade-enter-from,
+.jump-fade-leave-to {
+  opacity: 0;
+  transform: translateY(0.5rem);
 }
 </style>

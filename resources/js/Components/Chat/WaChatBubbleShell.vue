@@ -9,6 +9,7 @@ defineProps({
   avatarInitials: { type: String, default: "?" },
   avatarUrl: { type: String, default: "" },
   highlight: { type: Boolean, default: false },
+  mentionsMe: { type: Boolean, default: false },
   pinned: { type: Boolean, default: false },
 });
 </script>
@@ -53,6 +54,7 @@ defineProps({
           clusterStart ? 'wa-chat-bubble--cluster-start' : 'wa-chat-bubble--cluster-continued-top',
           clusterEnd ? 'wa-chat-bubble--cluster-end' : 'wa-chat-bubble--cluster-continued-bottom',
           pinned ? 'wa-chat-bubble--pinned' : '',
+          mentionsMe ? 'wa-chat-bubble--mention' : '',
         ]"
       >
         <div v-if="$slots.toolbar" class="wa-chat-bubble-toolbar">

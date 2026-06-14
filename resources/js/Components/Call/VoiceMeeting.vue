@@ -5,6 +5,7 @@ import {
   Headphones,
   HeadphoneOff,
   Maximize2,
+  MessageSquare,
   Mic,
   MicOff,
   Minimize2,
@@ -23,6 +24,7 @@ import {
   VolumeX,
 } from "lucide-vue-next";
 import { Avatar } from "@/Components/ui/avatar";
+import ChatView from "@/Components/Chat/ChatView.vue";
 import ParticipantTile from "./ParticipantTile.vue";
 import {
   amModerator,
@@ -54,6 +56,7 @@ import {
 
 const show = computed(() => inRoom.value && meetingOpen.value);
 const showParticipants = ref(false);
+const showChat = ref(false);
 
 // ---- Répartition intervenants / auditoire ----
 const speakers = computed(() =>
@@ -191,6 +194,16 @@ function demote(p) {
         </div>
 
         <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 px-3 text-xs transition-colors"
+            :class="showChat ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5 hover:text-white'"
+            title="Chat de l'équipe"
+            @click="showChat = !showChat"
+          >
+            <MessageSquare class="h-3.5 w-3.5" />
+            Chat
+          </button>
           <button
             type="button"
             class="inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 px-3 text-xs transition-colors"
@@ -454,6 +467,26 @@ function demote(p) {
                 </div>
               </li>
             </ul>
+          </aside>
+        </Transition>
+
+        <!-- Panneau chat (le chat global de l'équipe, en parallèle) -->
+        <Transition name="panel-slide">
+          <aside
+            v-if="showChat && currentRoom"
+            class="flex w-[22rem] shrink-0 flex-col border-l border-white/10 bg-black/20"
+          >
+            <ChatView
+              :project-slug="currentRoom.projectSlug"
+              :project-id="currentRoom.projectId"
+              space-key="global"
+              space-label="Global"
+              :active="showChat"
+              :can-manage-chat="Boolean(currentRoom.canManageChat)"
+              :show-members="false"
+              embedded
+              class="min-h-0 flex-1"
+            />
           </aside>
         </Transition>
       </div>
