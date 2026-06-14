@@ -236,8 +236,8 @@
 
   /* Message qui mentionne le membre connecté (visible uniquement chez lui). */
   .wa-chat-bubble.wa-chat-bubble--mention {
-    background-color: hsl(var(--primary) / 0.12);
-    box-shadow: inset 3px 0 0 0 hsl(var(--primary)), var(--wa-bubble-shadow);
+    background-color: rgb(25 19 8 / 0.12);
+    box-shadow: inset 3px 0 0 0 #191308, var(--wa-bubble-shadow);
   }
 
   .wa-chat-bubble-toolbar {
