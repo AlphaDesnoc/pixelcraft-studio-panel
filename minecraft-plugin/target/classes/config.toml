@@ -1,0 +1,17 @@
+# Configuration de PixelCraftLink (proxy Velocity).
+#
+# URL de base de l'API plugin du panel, par ex. :
+#   https://panel.exemple.com/api/v1/plugin
+# Vous pouvez aussi la renseigner à la volée :
+#   pixellink <url-panel> <identifiant>
+panel-url = ""
+
+# Token permanent. Laissé vide : il est rempli automatiquement après
+# « pixellink <identifiant> ». Ne pas modifier à la main.
+token = ""
+
+# Nom affiché du réseau dans le panel.
+server-name = "Proxy Velocity"
+
+# Intervalle (secondes) de la synchronisation complète des joueurs en ligne.
+sync-interval = 60

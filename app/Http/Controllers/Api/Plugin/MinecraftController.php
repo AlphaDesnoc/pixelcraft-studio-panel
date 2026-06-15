@@ -98,6 +98,7 @@ class MinecraftController extends Controller
             'players.*.uuid' => ['required', 'string', 'max:36'],
             'players.*.name' => ['required', 'string', 'max:32'],
             'players.*.ip' => ['nullable', 'string', 'max:45'],
+            'players.*.server' => ['nullable', 'string', 'max:60'],
         ]);
 
         $onlineUuids = [];
@@ -107,12 +108,13 @@ class MinecraftController extends Controller
             $onlineUuids[] = $payload['uuid'];
         }
 
-        // Tous les joueurs du projet absents de la liste passent hors-ligne.
+        // Tous les joueurs du projet absents de la liste passent hors-ligne
+        // (et on oublie le serveur sur lequel ils se trouvaient).
         MinecraftPlayer::query()
             ->where('project_id', $server->project_id)
             ->where('online', true)
             ->when($onlineUuids !== [], fn ($q) => $q->whereNotIn('uuid', $onlineUuids))
-            ->update(['online' => false]);
+            ->update(['online' => false, 'current_server' => null]);
 
         $server->forceFill([
             'last_synced_at' => now(),
@@ -136,6 +138,7 @@ class MinecraftController extends Controller
             'uuid' => ['required', 'string', 'max:36'],
             'name' => ['required', 'string', 'max:32'],
             'ip' => ['nullable', 'string', 'max:45'],
+            'server' => ['nullable', 'string', 'max:60'],
         ]);
 
         $player = $this->upsertPlayer($server, $payload, online: true, incrementJoin: true);
@@ -144,7 +147,27 @@ class MinecraftController extends Controller
     }
 
     /**
-     * Déconnexion d'un joueur.
+     * Changement de serveur backend : le proxy Velocity signale sur quel
+     * serveur le joueur vient d'arriver. Mise à jour en temps réel.
+     */
+    public function serverChange(Request $request): JsonResponse
+    {
+        $server = $this->server($request);
+
+        $payload = $request->validate([
+            'uuid' => ['required', 'string', 'max:36'],
+            'name' => ['required', 'string', 'max:32'],
+            'ip' => ['nullable', 'string', 'max:45'],
+            'server' => ['required', 'string', 'max:60'],
+        ]);
+
+        $player = $this->upsertPlayer($server, $payload, online: true);
+
+        return response()->json(['ok' => true, 'player' => $player->toPayload()]);
+    }
+
+    /**
+     * Déconnexion d'un joueur (quitte le proxy).
      */
     public function quit(Request $request): JsonResponse
     {
@@ -157,7 +180,7 @@ class MinecraftController extends Controller
         MinecraftPlayer::query()
             ->where('project_id', $server->project_id)
             ->where('uuid', $payload['uuid'])
-            ->update(['online' => false, 'last_seen_at' => now()]);
+            ->update(['online' => false, 'current_server' => null, 'last_seen_at' => now()]);
 
         return response()->json(['ok' => true]);
     }
@@ -178,6 +201,10 @@ class MinecraftController extends Controller
 
         if (! empty($payload['ip'])) {
             $player->ip = $payload['ip'];
+        }
+
+        if (array_key_exists('server', $payload) && $payload['server'] !== null) {
+            $player->current_server = $payload['server'] ?: null;
         }
 
         $player->online = $online;

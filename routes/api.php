@@ -54,6 +54,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/link', [PluginMinecraftController::class, 'link']);
         Route::post('/players/sync', [PluginMinecraftController::class, 'sync']);
         Route::post('/players/join', [PluginMinecraftController::class, 'join']);
+        Route::post('/players/server', [PluginMinecraftController::class, 'serverChange']);
         Route::post('/players/quit', [PluginMinecraftController::class, 'quit']);
     });
 
