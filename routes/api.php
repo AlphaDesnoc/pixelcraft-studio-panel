@@ -47,7 +47,7 @@ Route::prefix('v1')->group(function (): void {
     Route::post('/two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->middleware('throttle:10,1');
 
     // Liaison du plugin via l'identifiant court (pas encore de token).
-    Route::post('/plugin/claim', [PluginMinecraftController::class, 'claim'])->middleware('throttle:20,1');
+    Route::post('/plugin/claim', [PluginMinecraftController::class, 'claim'])->middleware('throttle:60,1');
 
     // Endpoints appelés par le plugin Minecraft (authentification par token serveur).
     Route::prefix('plugin')->middleware(['mc.server', 'throttle:120,1'])->group(function (): void {
