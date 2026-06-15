@@ -1,5 +1,6 @@
-studio\pixelcraft\link\PixelCraftLink.class
-studio\pixelcraft\link\PluginConfig.class
 studio\pixelcraft\link\LinkCommand.class
 studio\pixelcraft\link\PanelClient$Result.class
 studio\pixelcraft\link\PanelClient.class
+studio\pixelcraft\link\PixelCraftLink.class
+studio\pixelcraft\link\PluginConfig.class
+velocity-plugin.json

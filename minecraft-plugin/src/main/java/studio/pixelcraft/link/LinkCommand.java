@@ -24,6 +24,22 @@ public final class LinkCommand implements SimpleCommand {
             return;
         }
 
+        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+            boolean ok = plugin.reloadConfig();
+            if (ok) {
+                boolean configured = plugin.client() != null && plugin.client().isConfigured();
+                source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
+                    "Configuration rechargée.", NamedTextColor.GREEN)));
+                source.sendMessage(PixelCraftLink.PREFIX.append(configured
+                    ? Component.text("Proxy relié au panel.", NamedTextColor.GRAY)
+                    : Component.text("Aucune liaison configurée (panel-url/token vides).", NamedTextColor.YELLOW)));
+            } else {
+                source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
+                    "Échec du rechargement (voir la console).", NamedTextColor.RED)));
+            }
+            return;
+        }
+
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             boolean configured = plugin.client() != null && plugin.client().isConfigured();
             source.sendMessage(PixelCraftLink.PREFIX.append(configured
@@ -62,7 +78,7 @@ public final class LinkCommand implements SimpleCommand {
         source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
             "1re fois : pixellink <url-panel> <identifiant>", NamedTextColor.GRAY)));
         source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
-            "Autres : pixellink status · pixellink sync", NamedTextColor.GRAY)));
+            "Autres : pixellink status · pixellink sync · pixellink reload", NamedTextColor.GRAY)));
     }
 
     @Override
