@@ -209,6 +209,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
         // Joueurs Minecraft (réservé aux administrateurs).
         Route::middleware('admin')->group(function () {
+            Route::get('/minecraft/players', [MinecraftPlayerController::class, 'index'])->name('minecraft.players.index');
             Route::post('/minecraft/regenerate-token', [MinecraftPlayerController::class, 'regenerateToken'])->name('minecraft.regenerate-token');
             Route::delete('/minecraft/players/offline', [MinecraftPlayerController::class, 'clearOffline'])->name('minecraft.players.clear-offline');
             Route::delete('/minecraft/players/{player}', [MinecraftPlayerController::class, 'destroy'])->name('minecraft.players.destroy');

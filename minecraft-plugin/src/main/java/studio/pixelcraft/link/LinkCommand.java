@@ -1,13 +1,10 @@
 package studio.pixelcraft.link;
 
-import org.bukkit.ChatColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
+import com.velocitypowered.api.command.SimpleCommand;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
-public final class LinkCommand implements CommandExecutor {
-
-    private static final String PREFIX = ChatColor.AQUA + "[PixelCraftLink] " + ChatColor.RESET;
+public final class LinkCommand implements SimpleCommand {
 
     private final PixelCraftLink plugin;
 
@@ -16,44 +13,61 @@ public final class LinkCommand implements CommandExecutor {
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    public void execute(Invocation invocation) {
+        var source = invocation.source();
+        String[] args = invocation.arguments();
+
         if (args.length == 1 && args[0].equalsIgnoreCase("sync")) {
-            sender.sendMessage(PREFIX + "Synchronisation des joueurs en ligne…");
+            source.sendMessage(PixelCraftLink.PREFIX.append(
+                Component.text("Synchronisation des joueurs en ligne…", NamedTextColor.WHITE)));
             plugin.syncOnlinePlayers();
-            return true;
+            return;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("status")) {
             boolean configured = plugin.client() != null && plugin.client().isConfigured();
-            sender.sendMessage(PREFIX + (configured
-                ? ChatColor.GREEN + "Serveur relié au panel."
-                : ChatColor.YELLOW + "Aucune liaison configurée."));
-            return true;
+            source.sendMessage(PixelCraftLink.PREFIX.append(configured
+                ? Component.text("Proxy relié au panel.", NamedTextColor.GREEN)
+                : Component.text("Aucune liaison configurée.", NamedTextColor.YELLOW)));
+            return;
         }
 
-        // /pixellink <identifiant>  (URL lue dans config.yml)
+        // pixellink <identifiant>  (URL lue dans config.toml)
         if (args.length == 1) {
             String url = plugin.panelUrl();
             if (url == null || url.isEmpty()) {
-                sender.sendMessage(PREFIX + ChatColor.RED + "URL du panel non configurée.");
-                sender.sendMessage(PREFIX + ChatColor.GRAY + "Renseignez panel-url dans config.yml, ou utilisez /pixellink <url> <identifiant>.");
-                return true;
+                source.sendMessage(PixelCraftLink.PREFIX.append(
+                    Component.text("URL du panel non configurée.", NamedTextColor.RED)));
+                source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
+                    "Renseignez panel-url dans config.toml, ou utilisez « pixellink <url> <identifiant> ».",
+                    NamedTextColor.GRAY)));
+                return;
             }
-            sender.sendMessage(PREFIX + "Liaison en cours…");
-            plugin.claim(sender, url, args[0]);
-            return true;
+            source.sendMessage(PixelCraftLink.PREFIX.append(
+                Component.text("Liaison en cours…", NamedTextColor.WHITE)));
+            plugin.claim(source, url, args[0]);
+            return;
         }
 
-        // /pixellink <url> <identifiant>
+        // pixellink <url> <identifiant>
         if (args.length == 2) {
-            sender.sendMessage(PREFIX + "Liaison en cours…");
-            plugin.claim(sender, args[0], args[1]);
-            return true;
+            source.sendMessage(PixelCraftLink.PREFIX.append(
+                Component.text("Liaison en cours…", NamedTextColor.WHITE)));
+            plugin.claim(source, args[0], args[1]);
+            return;
         }
 
-        sender.sendMessage(PREFIX + ChatColor.YELLOW + "Usage : /pixellink <identifiant>");
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "1re fois : /pixellink <url-panel> <identifiant>");
-        sender.sendMessage(PREFIX + ChatColor.GRAY + "Autres : /pixellink status · /pixellink sync");
-        return true;
+        source.sendMessage(PixelCraftLink.PREFIX.append(
+            Component.text("Usage : pixellink <identifiant>", NamedTextColor.YELLOW)));
+        source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
+            "1re fois : pixellink <url-panel> <identifiant>", NamedTextColor.GRAY)));
+        source.sendMessage(PixelCraftLink.PREFIX.append(Component.text(
+            "Autres : pixellink status · pixellink sync", NamedTextColor.GRAY)));
+    }
+
+    @Override
+    public boolean hasPermission(Invocation invocation) {
+        // La console possède toujours la permission ; en jeu, réservé aux admins.
+        return invocation.source().hasPermission("pixelcraftlink.admin");
     }
 }

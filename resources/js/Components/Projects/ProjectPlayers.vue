@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { router } from "@inertiajs/vue3";
 import {
   Check,
@@ -22,19 +22,77 @@ const props = defineProps({
 const search = ref("");
 const copied = ref("");
 
+// Copie réactive locale : alimentée par les props au départ puis rafraîchie
+// via fetch sans recharger la page.
+const liveServer = ref(props.server);
+const livePlayers = ref(props.players);
+const refreshing = ref(false);
+const autoRefresh = ref(true);
+const lastRefreshedAt = ref(null);
+let pollTimer = null;
+
+// Si Inertia recharge la page (navigation, action), on resynchronise.
+watch(
+  () => props.players,
+  (val) => {
+    livePlayers.value = val;
+  },
+);
+watch(
+  () => props.server,
+  (val) => {
+    liveServer.value = val;
+  },
+);
+
+async function refresh() {
+  if (refreshing.value) return;
+  refreshing.value = true;
+  try {
+    const res = await fetch(
+      route("projects.minecraft.players.index", props.projectSlug),
+      {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    livePlayers.value = data.players ?? [];
+    liveServer.value = data.server ?? liveServer.value;
+    lastRefreshedAt.value = new Date();
+  } catch {
+    /* réseau indisponible : on garde les données courantes */
+  } finally {
+    refreshing.value = false;
+  }
+}
+
+onMounted(() => {
+  pollTimer = setInterval(() => {
+    if (autoRefresh.value && document.visibilityState === "visible") {
+      refresh();
+    }
+  }, 10000);
+});
+
+onBeforeUnmount(() => {
+  if (pollTimer) clearInterval(pollTimer);
+});
+
 const panelUrl = computed(() =>
   typeof window !== "undefined" ? window.location.origin : "",
 );
 const apiBase = computed(() => `${panelUrl.value}/api/v1/plugin`);
 
 const onlineCount = computed(
-  () => props.players.filter((p) => p.online).length,
+  () => livePlayers.value.filter((p) => p.online).length,
 );
 
 const filteredPlayers = computed(() => {
   const q = search.value.trim().toLowerCase();
-  if (!q) return props.players;
-  return props.players.filter(
+  if (!q) return livePlayers.value;
+  return livePlayers.value.filter(
     (p) =>
       p.name?.toLowerCase().includes(q) ||
       p.uuid?.toLowerCase().includes(q) ||
@@ -103,9 +161,9 @@ function formatDate(iso) {
     <div class="rounded-xl border border-border bg-card">
       <div class="flex items-center gap-2 border-b border-border px-4 py-3">
         <KeyRound class="h-4 w-4 text-primary" />
-        <h3 class="text-sm font-semibold text-foreground">Lier un serveur</h3>
+        <h3 class="text-sm font-semibold text-foreground">Lier le proxy</h3>
         <span
-          v-if="server?.linked_at"
+          v-if="liveServer?.linked_at"
           class="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-500"
         >
           <Check class="h-3 w-3" /> Relié
@@ -121,19 +179,21 @@ function formatDate(iso) {
       <div class="space-y-4 px-4 py-4">
         <ol class="space-y-1 text-xs text-muted-foreground">
           <li>
-            <span class="font-medium text-foreground">1.</span> Installez le plugin
-            <span class="font-mono text-foreground">PixelCraftLink</span> sur votre
-            serveur Spigot/Paper.
+            <span class="font-medium text-foreground">1.</span> Déposez le plugin
+            <span class="font-mono text-foreground">PixelCraftLink</span> dans le dossier
+            <span class="font-mono text-foreground">plugins/</span> de votre proxy
+            <span class="font-mono text-foreground">Velocity</span>, puis démarrez-le.
           </li>
           <li>
             <span class="font-medium text-foreground">2.</span> Renseignez une fois
-            l'URL du panel dans <span class="font-mono text-foreground">config.yml</span>
+            l'URL du panel dans
+            <span class="font-mono text-foreground">plugins/pixelcraftlink/config.toml</span>
             (champ <span class="font-mono text-foreground">panel-url</span>).
           </li>
           <li>
-            <span class="font-medium text-foreground">3.</span> En console (ou en jeu en
-            tant qu'opérateur), exécutez&nbsp;:
-            <span class="font-mono text-foreground">/pixellink &lt;identifiant&gt;</span>
+            <span class="font-medium text-foreground">3.</span> Dans la console du proxy,
+            exécutez&nbsp;:
+            <span class="font-mono text-foreground">pixellink &lt;identifiant&gt;</span>
           </li>
         </ol>
 
@@ -146,14 +206,14 @@ function formatDate(iso) {
               <code
                 class="flex-1 truncate rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-sm font-semibold tracking-wider text-foreground"
               >
-                {{ server?.link_code ?? "—" }}
+                {{ liveServer?.link_code ?? "—" }}
               </code>
               <Button
                 type="button"
                 size="icon"
                 variant="outline"
                 class="h-8 w-8 shrink-0"
-                @click="copy(server?.link_code ?? '', 'code')"
+                @click="copy(liveServer?.link_code ?? '', 'code')"
               >
                 <Check v-if="copied === 'code'" class="h-3.5 w-3.5 text-emerald-500" />
                 <Copy v-else class="h-3.5 w-3.5" />
@@ -189,14 +249,14 @@ function formatDate(iso) {
           <code
             class="flex-1 truncate rounded-md border border-border bg-muted/40 px-2 py-1.5 font-mono text-xs"
           >
-            /pixellink {{ server?.link_code ?? "<identifiant>" }}
+            pixellink {{ liveServer?.link_code ?? "<identifiant>" }}
           </code>
           <Button
             type="button"
             size="icon"
             variant="outline"
             class="h-8 w-8 shrink-0"
-            @click="copy(`/pixellink ${server?.link_code ?? ''}`, 'cmd')"
+            @click="copy(`pixellink ${liveServer?.link_code ?? ''}`, 'cmd')"
           >
             <Check v-if="copied === 'cmd'" class="h-3.5 w-3.5 text-emerald-500" />
             <Copy v-else class="h-3.5 w-3.5" />
@@ -205,14 +265,14 @@ function formatDate(iso) {
 
         <p class="text-[11px] text-muted-foreground">
           Astuce&nbsp;: pour relier sans toucher au
-          <span class="font-mono">config.yml</span>, utilisez
-          <span class="font-mono text-foreground">/pixellink {{ apiBase }} {{ server?.link_code ?? "<identifiant>" }}</span>.
+          <span class="font-mono">config.toml</span>, utilisez
+          <span class="font-mono text-foreground">pixellink {{ apiBase }} {{ liveServer?.link_code ?? "<identifiant>" }}</span>.
         </p>
 
         <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
           <p class="text-[11px] text-muted-foreground">
-            Dernière synchro&nbsp;: {{ formatDate(server?.last_synced_at) }}
-            <span v-if="server?.last_ip"> · IP serveur {{ server.last_ip }}</span>
+            Dernière synchro&nbsp;: {{ formatDate(liveServer?.last_synced_at) }}
+            <span v-if="liveServer?.last_ip"> · IP serveur {{ liveServer.last_ip }}</span>
           </p>
           <Button
             type="button"
@@ -235,7 +295,7 @@ function formatDate(iso) {
           <Users class="h-4 w-4 text-primary" />
           <h3 class="text-sm font-semibold text-foreground">Joueurs</h3>
           <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-            {{ players.length }} total · {{ onlineCount }} en ligne
+            {{ livePlayers.length }} total · {{ onlineCount }} en ligne
           </span>
         </div>
         <div class="flex items-center gap-2">
@@ -253,6 +313,32 @@ function formatDate(iso) {
             size="sm"
             variant="outline"
             class="h-8"
+            :disabled="refreshing"
+            title="Rafraîchir la liste"
+            @click="refresh"
+          >
+            <RefreshCw
+              class="mr-1 h-3.5 w-3.5"
+              :class="refreshing ? 'animate-spin' : ''"
+            />
+            Rafraîchir
+          </Button>
+          <label
+            class="flex select-none items-center gap-1.5 text-[11px] text-muted-foreground"
+            title="Rafraîchit automatiquement toutes les 10 secondes"
+          >
+            <input
+              v-model="autoRefresh"
+              type="checkbox"
+              class="h-3.5 w-3.5 rounded border-border accent-primary"
+            />
+            Auto
+          </label>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            class="h-8"
             @click="clearOffline"
           >
             Purger hors-ligne
@@ -265,6 +351,7 @@ function formatDate(iso) {
           <thead>
             <tr class="border-b border-border/60 text-[11px] uppercase tracking-wide text-muted-foreground">
               <th class="px-4 py-2 font-medium">Joueur</th>
+              <th class="px-4 py-2 font-medium">Serveur</th>
               <th class="px-4 py-2 font-medium">UUID</th>
               <th class="px-4 py-2 font-medium">IP</th>
               <th class="px-4 py-2 font-medium">Connexions</th>
@@ -288,6 +375,15 @@ function formatDate(iso) {
                   />
                   <span class="font-medium text-foreground">{{ player.name }}</span>
                 </div>
+              </td>
+              <td class="px-4 py-2">
+                <span
+                  v-if="player.online && player.current_server"
+                  class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+                >
+                  {{ player.current_server }}
+                </span>
+                <span v-else class="text-xs text-muted-foreground">—</span>
               </td>
               <td class="px-4 py-2">
                 <button
@@ -348,7 +444,7 @@ function formatDate(iso) {
         <Gamepad2 class="h-8 w-8 text-muted-foreground/50" />
         <p class="text-sm text-muted-foreground">
           {{
-            players.length
+            livePlayers.length
               ? "Aucun joueur ne correspond à la recherche."
               : "Aucun joueur enregistré pour l'instant. Reliez votre serveur pour les voir apparaître."
           }}

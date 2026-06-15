@@ -5,11 +5,33 @@ namespace App\Http\Controllers;
 use App\Models\MinecraftPlayer;
 use App\Models\MinecraftServer;
 use App\Models\Project;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class MinecraftPlayerController extends Controller
 {
+    /**
+     * Liste JSON des joueurs + état du serveur, pour rafraîchir la vue
+     * sans recharger la page (fetch côté front).
+     */
+    public function index(Request $request, Project $project): JsonResponse
+    {
+        $server = $project->minecraftServerOrCreate();
+
+        $players = $project->minecraftPlayers()
+            ->orderByDesc('online')
+            ->orderByDesc('last_seen_at')
+            ->get()
+            ->map(fn ($p) => $p->toPayload())
+            ->values();
+
+        return response()->json([
+            'server' => $server->toPayload(),
+            'players' => $players,
+        ]);
+    }
+
     public function regenerateToken(Request $request, Project $project): RedirectResponse
     {
         $server = $project->minecraftServerOrCreate();
