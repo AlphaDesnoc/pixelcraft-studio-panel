@@ -1,0 +1,1 @@
+{"id":"pixelcraftlink","name":"PixelCraftLink","version":"2.0.0","description":"Synchronise les joueurs (UUID + IP) et leur serveur courant vers le panel PixelCraft Studio.","authors":["PixelCraft Studio"],"dependencies":[],"main":"studio.pixelcraft.link.PixelCraftLink"}

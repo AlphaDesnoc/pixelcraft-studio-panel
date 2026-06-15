@@ -88,6 +88,22 @@ public final class PixelCraftLink {
         this.client = new PanelClient(url, token);
     }
 
+    /**
+     * Recharge config.toml depuis le disque, recrée le client HTTP et
+     * reprogramme la synchronisation. Renvoie false en cas d'erreur de lecture.
+     */
+    public boolean reloadConfig() {
+        try {
+            config.load();
+        } catch (IOException e) {
+            logger.error("Impossible de recharger config.toml", e);
+            return false;
+        }
+        reloadClient();
+        scheduleSync();
+        return true;
+    }
+
     public String panelUrl() {
         return config.getString("panel-url", "");
     }
@@ -206,7 +222,8 @@ public final class PixelCraftLink {
                 .orElse(null);
             players.add(playerJson(player, server));
         }
-        postAsync("/players/sync", "{\"players\":" + players + "}");
+        long interval = Math.max(15, config.getLong("sync-interval", 60));
+        postAsync("/players/sync", "{\"interval\":" + interval + ",\"players\":" + players + "}");
     }
 
     /**

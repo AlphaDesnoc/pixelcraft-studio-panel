@@ -99,21 +99,27 @@ class MinecraftController extends Controller
             'players.*.name' => ['required', 'string', 'max:32'],
             'players.*.ip' => ['nullable', 'string', 'max:45'],
             'players.*.server' => ['nullable', 'string', 'max:60'],
+            // Intervalle de synchro (s) du proxy émetteur, pour calibrer le délai
+            // d'expiration. Optionnel : valeur par défaut prudente sinon.
+            'interval' => ['nullable', 'integer', 'min:5', 'max:3600'],
         ]);
-
-        $onlineUuids = [];
 
         foreach ($data['players'] as $payload) {
             $this->upsertPlayer($server, $payload, online: true);
-            $onlineUuids[] = $payload['uuid'];
         }
 
-        // Tous les joueurs du projet absents de la liste passent hors-ligne
-        // (et on oublie le serveur sur lequel ils se trouvaient).
+        // Réconciliation tolérante au multi-proxy : on ne touche JAMAIS aux
+        // joueurs présents sur un autre proxy. On passe hors-ligne uniquement
+        // ceux dont le dernier signe de vie est trop ancien (déconnexion
+        // manquée ou proxy planté). Chaque proxy rafraîchit ses propres joueurs
+        // à chaque sync, ils restent donc en ligne.
+        $interval = (int) ($data['interval'] ?? 60);
+        $staleThreshold = now()->subSeconds(max($interval * 3, 120));
+
         MinecraftPlayer::query()
             ->where('project_id', $server->project_id)
             ->where('online', true)
-            ->when($onlineUuids !== [], fn ($q) => $q->whereNotIn('uuid', $onlineUuids))
+            ->where('last_seen_at', '<', $staleThreshold)
             ->update(['online' => false, 'current_server' => null]);
 
         $server->forceFill([
