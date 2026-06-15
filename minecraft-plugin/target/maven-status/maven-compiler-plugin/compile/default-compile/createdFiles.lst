@@ -1,0 +1,5 @@
+studio\pixelcraft\link\LinkCommand.class
+studio\pixelcraft\link\PanelClient$Result.class
+studio\pixelcraft\link\PanelClient.class
+studio\pixelcraft\link\PixelCraftLink.class
+studio\pixelcraft\link\PlayerConnectionListener.class

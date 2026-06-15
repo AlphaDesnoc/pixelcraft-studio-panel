@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\MyTasksController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PanelSessionController;
+use App\Http\Controllers\Api\Plugin\MinecraftController as PluginMinecraftController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProfileThemeController;
 use App\Http\Controllers\Api\ProfileTwoFactorController;
@@ -44,6 +45,17 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('/two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->middleware('throttle:10,1');
+
+    // Liaison du plugin via l'identifiant court (pas encore de token).
+    Route::post('/plugin/claim', [PluginMinecraftController::class, 'claim'])->middleware('throttle:20,1');
+
+    // Endpoints appelés par le plugin Minecraft (authentification par token serveur).
+    Route::prefix('plugin')->middleware(['mc.server', 'throttle:120,1'])->group(function (): void {
+        Route::post('/link', [PluginMinecraftController::class, 'link']);
+        Route::post('/players/sync', [PluginMinecraftController::class, 'sync']);
+        Route::post('/players/join', [PluginMinecraftController::class, 'join']);
+        Route::post('/players/quit', [PluginMinecraftController::class, 'quit']);
+    });
 
     Route::middleware(['auth:sanctum', 'active'])->group(function (): void {
         Route::get('/user', [AuthController::class, 'user']);
