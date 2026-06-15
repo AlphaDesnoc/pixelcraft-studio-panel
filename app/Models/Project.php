@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'name',
@@ -124,6 +124,31 @@ class Project extends Model
     public function ranks(): HasMany
     {
         return $this->hasMany(Rank::class)->orderBy('position');
+    }
+
+    public function minecraftServer(): HasOne
+    {
+        return $this->hasOne(MinecraftServer::class);
+    }
+
+    public function minecraftPlayers(): HasMany
+    {
+        return $this->hasMany(MinecraftPlayer::class);
+    }
+
+    public function minecraftServerOrCreate(): MinecraftServer
+    {
+        $server = $this->minecraftServer()->firstOrCreate([], [
+            'token' => MinecraftServer::generateToken(),
+            'link_code' => MinecraftServer::generateLinkCode(),
+        ]);
+
+        // Backfill : serveurs créés avant l'introduction de l'identifiant.
+        if (blank($server->link_code)) {
+            $server->update(['link_code' => MinecraftServer::generateLinkCode()]);
+        }
+
+        return $server;
     }
 
     public function bugs(): HasMany

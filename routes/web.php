@@ -10,6 +10,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\MessageController;
+use App\Http\Controllers\MinecraftPlayerController;
 use App\Http\Controllers\MyTasksController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\CallController;
@@ -205,6 +206,13 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::delete('/ranks/{rank}/members/{user}', [RankController::class, 'removeMember'])->name('ranks.members.remove');
         Route::post('/ranks/{rank}/responsible', [RankController::class, 'toggleResponsible'])->name('ranks.responsible');
         Route::post('/ranks/{rank}/bugs', [RankController::class, 'toggleBugs'])->name('ranks.bugs');
+
+        // Joueurs Minecraft (réservé aux administrateurs).
+        Route::middleware('admin')->group(function () {
+            Route::post('/minecraft/regenerate-token', [MinecraftPlayerController::class, 'regenerateToken'])->name('minecraft.regenerate-token');
+            Route::delete('/minecraft/players/offline', [MinecraftPlayerController::class, 'clearOffline'])->name('minecraft.players.clear-offline');
+            Route::delete('/minecraft/players/{player}', [MinecraftPlayerController::class, 'destroy'])->name('minecraft.players.destroy');
+        });
     });
 
     Route::post('/calls', [CallController::class, 'store'])->name('calls.store');

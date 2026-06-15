@@ -25,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active' => \App\Http\Middleware\EnsureUserIsActive::class,
             'project.member' => \App\Http\Middleware\EnsureProjectMember::class,
             'project.feature' => \App\Http\Middleware\EnsureProjectFeature::class,
+            'mc.server' => \App\Http\Middleware\AuthenticateMinecraftServer::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

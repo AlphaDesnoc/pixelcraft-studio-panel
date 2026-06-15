@@ -439,6 +439,20 @@ class ProjectController extends Controller
                 ->values()
             : collect();
 
+        // Joueurs Minecraft : réservé aux administrateurs.
+        $minecraftServer = null;
+        $minecraftPlayers = collect();
+        if ($isAdmin) {
+            $server = $project->minecraftServerOrCreate();
+            $minecraftServer = $server->toPayload();
+            $minecraftPlayers = $project->minecraftPlayers()
+                ->orderByDesc('online')
+                ->orderByDesc('last_seen_at')
+                ->get()
+                ->map(fn ($p) => $p->toPayload())
+                ->values();
+        }
+
         return [
             'project' => [
                 'id' => $project->id,
@@ -459,6 +473,9 @@ class ProjectController extends Controller
             'spaces' => $spaces,
             'ranks' => $ranks,
             'canManageRanks' => $isAdmin,
+            'canManagePlayers' => $isAdmin,
+            'minecraftServer' => $minecraftServer,
+            'minecraftPlayers' => $minecraftPlayers,
             'canReportBugs' => $canReportBugs,
             'canManageBugs' => $canManageBugs,
             'bugs' => $bugs,

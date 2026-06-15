@@ -41,6 +41,7 @@ import ChatView from "@/Components/Chat/ChatView.vue";
 import AnnouncementsView from "@/Components/Announcements/AnnouncementsView.vue";
 import TeamView from "@/Components/Team/TeamView.vue";
 import ProjectHistoryPanel from "@/Components/Projects/ProjectHistoryPanel.vue";
+import ProjectPlayers from "@/Components/Projects/ProjectPlayers.vue";
 import TaskActivityByRank from "@/Components/Projects/TaskActivityByRank.vue";
 import { spaceOnlyProps } from "@/composables/useProjectSpace.js";
 
@@ -93,6 +94,9 @@ const props = defineProps({
   myPermissions: { type: Object, default: () => ({}) },
   taskTemplates: { type: Array, default: () => [] },
   pinnedChatMessages: { type: Array, default: () => [] },
+  canManagePlayers: { type: Boolean, default: false },
+  minecraftServer: { type: Object, default: null },
+  minecraftPlayers: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -208,6 +212,10 @@ const tabs = computed(() => {
       key: "bugs",
       label: "Bugs",
     });
+  }
+  // Onglet « Joueurs » : réservé aux admins, uniquement sur l'espace global.
+  if (props.canManagePlayers && activeSpace.value === "global") {
+    result.push({ key: "players", label: "Joueurs" });
   }
   return result;
 });
@@ -765,6 +773,14 @@ const kanbanBugLinkTasks = computed(() =>
           :project-slug="project.slug"
           :members="members"
           :initial-logs="activityLogs"
+        />
+      </section>
+
+      <section v-else-if="activeTab === 'players'">
+        <ProjectPlayers
+          :project-slug="project.slug"
+          :server="minecraftServer"
+          :players="minecraftPlayers"
         />
       </section>
 
