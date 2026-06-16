@@ -346,9 +346,9 @@ function formatDate(iso) {
         </div>
       </div>
 
-      <div v-if="filteredPlayers.length" class="overflow-x-auto">
+      <div v-if="filteredPlayers.length" class="h-[480px] overflow-auto">
         <table class="w-full text-left text-sm">
-          <thead>
+          <thead class="sticky top-0 z-10 bg-card">
             <tr class="border-b border-border/60 text-[11px] uppercase tracking-wide text-muted-foreground">
               <th class="px-4 py-2 font-medium">Joueur</th>
               <th class="px-4 py-2 font-medium">Serveur</th>
