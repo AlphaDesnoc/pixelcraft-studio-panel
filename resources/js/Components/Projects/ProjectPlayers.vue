@@ -114,8 +114,20 @@ const stats = computed(() => {
     activeDay: players.filter((p) => within(p.last_seen_at, day)).length,
     activeWeek: players.filter((p) => within(p.last_seen_at, 7 * day)).length,
     geoKnown: players.filter((p) => p.geo?.country).length,
+    proxy: players.filter((p) => p.geo?.proxy).length,
+    hosting: players.filter((p) => p.geo?.hosting).length,
+    mobile: players.filter((p) => p.geo?.mobile).length,
   };
 });
+
+// Drapeau emoji à partir d'un code pays ISO-3166 alpha-2 (ex. "FR" → 🇫🇷).
+function flagEmoji(code) {
+  if (!code || code.length !== 2) return "";
+  const base = 127397; // 0x1F1E6 - 'A'.codePointAt(0)
+  return String.fromCodePoint(
+    ...[...code.toUpperCase()].map((c) => c.charCodeAt(0) + base),
+  );
+}
 
 // Construit un classement [{ label, count, pct }] à partir d'un accesseur.
 // `source` permet de restreindre l'échantillon (ex. joueurs en ligne).
@@ -499,7 +511,36 @@ function formatDate(iso) {
             <p v-else class="text-xs text-muted-foreground">Aucun joueur en ligne.</p>
           </div>
 
-          <div class="sm:col-span-2 lg:col-span-2">
+          <div>
+            <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <Wifi class="h-3.5 w-3.5 text-primary" /> Signaux réseau
+            </div>
+            <ul class="space-y-1.5">
+              <li class="flex items-center justify-between text-xs">
+                <span class="flex items-center gap-1.5 text-foreground">
+                  <span class="h-2 w-2 rounded-full bg-red-500" /> VPN / proxy
+                </span>
+                <span class="text-muted-foreground">{{ stats.proxy }}</span>
+              </li>
+              <li class="flex items-center justify-between text-xs">
+                <span class="flex items-center gap-1.5 text-foreground">
+                  <span class="h-2 w-2 rounded-full bg-amber-500" /> Datacenter
+                </span>
+                <span class="text-muted-foreground">{{ stats.hosting }}</span>
+              </li>
+              <li class="flex items-center justify-between text-xs">
+                <span class="flex items-center gap-1.5 text-foreground">
+                  <span class="h-2 w-2 rounded-full bg-sky-500" /> Mobile
+                </span>
+                <span class="text-muted-foreground">{{ stats.mobile }}</span>
+              </li>
+            </ul>
+            <p class="mt-2 text-[10px] text-muted-foreground">
+              Sur {{ stats.geoKnown }} IP géolocalisée{{ stats.geoKnown > 1 ? "s" : "" }}.
+            </p>
+          </div>
+
+          <div class="sm:col-span-2 lg:col-span-3">
             <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-foreground">
               <TrendingUp class="h-3.5 w-3.5 text-primary" /> Joueurs les plus actifs
             </div>
@@ -601,6 +642,7 @@ function formatDate(iso) {
               <th class="px-4 py-2 font-medium">IP</th>
               <th class="px-4 py-2 font-medium">Localisation</th>
               <th class="px-4 py-2 font-medium">Opérateur</th>
+              <th class="px-4 py-2 font-medium">Réseau</th>
               <th class="px-4 py-2 font-medium">Connexions</th>
               <th class="px-4 py-2 font-medium">Vu pour la 1re fois</th>
               <th class="px-4 py-2 font-medium">Vu récemment</th>
@@ -666,14 +708,46 @@ function formatDate(iso) {
                   class="text-xs text-foreground"
                   :title="player.geo?.region || ''"
                 >
+                  <span v-if="player.geo?.country_code" class="mr-1">{{ flagEmoji(player.geo.country_code) }}</span>
                   {{ formatLocation(player.geo) }}
                 </span>
                 <span v-else class="text-xs text-muted-foreground">—</span>
               </td>
               <td class="px-4 py-2">
-                <span class="text-xs text-muted-foreground">
+                <span class="text-xs text-muted-foreground" :title="player.geo?.as || ''">
                   {{ player.geo?.isp || "—" }}
                 </span>
+              </td>
+              <td class="px-4 py-2">
+                <div class="flex flex-wrap items-center gap-1">
+                  <span
+                    v-if="player.geo?.proxy"
+                    class="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-500"
+                    title="IP détectée comme VPN / proxy / Tor"
+                  >
+                    VPN
+                  </span>
+                  <span
+                    v-if="player.geo?.hosting"
+                    class="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-500"
+                    title="IP d'hébergeur / datacenter"
+                  >
+                    Datacenter
+                  </span>
+                  <span
+                    v-if="player.geo?.mobile"
+                    class="rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-500"
+                    title="Connexion mobile (4G/5G)"
+                  >
+                    Mobile
+                  </span>
+                  <span
+                    v-if="!player.geo?.proxy && !player.geo?.hosting && !player.geo?.mobile"
+                    class="text-xs text-muted-foreground"
+                  >
+                    —
+                  </span>
+                </div>
               </td>
               <td class="px-4 py-2 text-muted-foreground">{{ player.join_count }}</td>
               <td class="px-4 py-2 text-xs text-muted-foreground">
