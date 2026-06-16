@@ -24,7 +24,7 @@ class GeoIpLocator
 {
     private const ENDPOINT = 'http://ip-api.com/batch';
 
-    private const FIELDS = 'status,country,regionName,city,zip,isp,query';
+    private const FIELDS = 'status,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,mobile,proxy,hosting,query';
 
     private const CACHE_TTL_DAYS = 30;
 
@@ -166,7 +166,16 @@ class GeoIpLocator
                 'postal' => self::clean($row['zip'] ?? null),
                 'region' => self::clean($row['regionName'] ?? null),
                 'country' => self::clean($row['country'] ?? null),
+                'country_code' => self::clean($row['countryCode'] ?? null),
+                'lat' => isset($row['lat']) ? (float) $row['lat'] : null,
+                'lon' => isset($row['lon']) ? (float) $row['lon'] : null,
+                'timezone' => self::clean($row['timezone'] ?? null),
                 'isp' => self::clean($row['isp'] ?? null),
+                'org' => self::clean($row['org'] ?? null),
+                'as' => self::clean($row['as'] ?? null),
+                'mobile' => (bool) ($row['mobile'] ?? false),
+                'proxy' => (bool) ($row['proxy'] ?? false),
+                'hosting' => (bool) ($row['hosting'] ?? false),
             ];
         }
 
@@ -225,6 +234,8 @@ class GeoIpLocator
 
     private static function cacheKey(string $ip): string
     {
-        return 'geoip:'.$ip;
+        // v2 : forme enrichie (drapeau, lat/lon, flags réseau). Le préfixe
+        // invalide naturellement les entrées de l'ancien format.
+        return 'geoip:v2:'.$ip;
     }
 }

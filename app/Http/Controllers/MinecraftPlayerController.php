@@ -74,7 +74,16 @@ class MinecraftPlayerController extends Controller
                 'geo_postal' => $geo['postal'] ?? null,
                 'geo_region' => $geo['region'] ?? null,
                 'geo_country' => $geo['country'] ?? null,
+                'geo_country_code' => $geo['country_code'] ?? null,
+                'geo_lat' => $geo['lat'] ?? null,
+                'geo_lon' => $geo['lon'] ?? null,
+                'geo_timezone' => $geo['timezone'] ?? null,
                 'geo_isp' => $geo['isp'] ?? null,
+                'geo_org' => $geo['org'] ?? null,
+                'geo_as' => $geo['as'] ?? null,
+                'geo_proxy' => $geo['proxy'] ?? null,
+                'geo_hosting' => $geo['hosting'] ?? null,
+                'geo_mobile' => $geo['mobile'] ?? null,
                 'geo_resolved_at' => now(),
             ])->save();
         }

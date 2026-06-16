@@ -209,12 +209,23 @@ class MinecraftController extends Controller
             // Nouvelle IP : on efface la géoloc pour qu'elle soit re-résolue
             // au prochain affichage du panel.
             $player->ip = $payload['ip'];
-            $player->geo_city = null;
-            $player->geo_postal = null;
-            $player->geo_region = null;
-            $player->geo_country = null;
-            $player->geo_isp = null;
-            $player->geo_resolved_at = null;
+            $player->forceFill([
+                'geo_city' => null,
+                'geo_postal' => null,
+                'geo_region' => null,
+                'geo_country' => null,
+                'geo_country_code' => null,
+                'geo_lat' => null,
+                'geo_lon' => null,
+                'geo_timezone' => null,
+                'geo_isp' => null,
+                'geo_org' => null,
+                'geo_as' => null,
+                'geo_proxy' => null,
+                'geo_hosting' => null,
+                'geo_mobile' => null,
+                'geo_resolved_at' => null,
+            ]);
         }
 
         if (array_key_exists('server', $payload) && $payload['server'] !== null) {
