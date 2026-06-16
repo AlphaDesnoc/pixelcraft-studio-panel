@@ -12,6 +12,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'uuid',
     'name',
     'ip',
+    'geo_city',
+    'geo_postal',
+    'geo_region',
+    'geo_country',
+    'geo_isp',
+    'geo_resolved_at',
     'online',
     'current_server',
     'join_count',
@@ -24,6 +30,7 @@ class MinecraftPlayer extends Model
     {
         return [
             'online' => 'boolean',
+            'geo_resolved_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];
@@ -46,6 +53,13 @@ class MinecraftPlayer extends Model
             'uuid' => $this->uuid,
             'name' => $this->name,
             'ip' => $this->ip,
+            'geo' => [
+                'city' => $this->geo_city,
+                'postal' => $this->geo_postal,
+                'region' => $this->geo_region,
+                'country' => $this->geo_country,
+                'isp' => $this->geo_isp,
+            ],
             'online' => (bool) $this->online,
             'current_server' => $this->current_server,
             'join_count' => (int) $this->join_count,

@@ -205,8 +205,16 @@ class MinecraftController extends Controller
         $player->minecraft_server_id = $server->id;
         $player->name = $payload['name'] ?? $player->name;
 
-        if (! empty($payload['ip'])) {
+        if (! empty($payload['ip']) && $payload['ip'] !== $player->ip) {
+            // Nouvelle IP : on efface la géoloc pour qu'elle soit re-résolue
+            // au prochain affichage du panel.
             $player->ip = $payload['ip'];
+            $player->geo_city = null;
+            $player->geo_postal = null;
+            $player->geo_region = null;
+            $player->geo_country = null;
+            $player->geo_isp = null;
+            $player->geo_resolved_at = null;
         }
 
         if (array_key_exists('server', $payload) && $payload['server'] !== null) {
