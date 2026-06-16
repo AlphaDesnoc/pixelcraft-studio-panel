@@ -96,9 +96,21 @@ const filteredPlayers = computed(() => {
     (p) =>
       p.name?.toLowerCase().includes(q) ||
       p.uuid?.toLowerCase().includes(q) ||
-      p.ip?.toLowerCase().includes(q),
+      p.ip?.toLowerCase().includes(q) ||
+      p.geo?.city?.toLowerCase().includes(q) ||
+      p.geo?.postal?.toLowerCase().includes(q) ||
+      p.geo?.country?.toLowerCase().includes(q) ||
+      p.geo?.isp?.toLowerCase().includes(q),
   );
 });
+
+// Localisation lisible : "Ville (CP), Pays", en omettant les parties absentes.
+function formatLocation(geo) {
+  if (!geo) return null;
+  const cityZip = [geo.city, geo.postal].filter(Boolean).join(" ");
+  const parts = [cityZip || null, geo.country].filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
+}
 
 async function copy(value, key) {
   try {
@@ -304,7 +316,7 @@ function formatDate(iso) {
             <input
               v-model="search"
               type="text"
-              placeholder="Rechercher pseudo, UUID, IP…"
+              placeholder="Rechercher pseudo, UUID, IP, ville, opérateur…"
               class="h-8 w-56 rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -354,6 +366,8 @@ function formatDate(iso) {
               <th class="px-4 py-2 font-medium">Serveur</th>
               <th class="px-4 py-2 font-medium">UUID</th>
               <th class="px-4 py-2 font-medium">IP</th>
+              <th class="px-4 py-2 font-medium">Localisation</th>
+              <th class="px-4 py-2 font-medium">Opérateur</th>
               <th class="px-4 py-2 font-medium">Connexions</th>
               <th class="px-4 py-2 font-medium">Vu pour la 1re fois</th>
               <th class="px-4 py-2 font-medium">Vu récemment</th>
@@ -412,6 +426,21 @@ function formatDate(iso) {
                     class="ml-1 inline h-3 w-3 text-emerald-500"
                   />
                 </button>
+              </td>
+              <td class="px-4 py-2">
+                <span
+                  v-if="formatLocation(player.geo)"
+                  class="text-xs text-foreground"
+                  :title="player.geo?.region || ''"
+                >
+                  {{ formatLocation(player.geo) }}
+                </span>
+                <span v-else class="text-xs text-muted-foreground">—</span>
+              </td>
+              <td class="px-4 py-2">
+                <span class="text-xs text-muted-foreground">
+                  {{ player.geo?.isp || "—" }}
+                </span>
               </td>
               <td class="px-4 py-2 text-muted-foreground">{{ player.join_count }}</td>
               <td class="px-4 py-2 text-xs text-muted-foreground">
