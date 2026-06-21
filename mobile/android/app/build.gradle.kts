@@ -41,7 +41,8 @@ android {
 
     defaultConfig {
         applicationId = "fr.pixelcraftstudios.pixelcraft_panel"
-        minSdk = flutter.minSdkVersion
+        // LiveKit / flutter_webrtc exige minSdk 23 ; on garde une marge à 24.
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

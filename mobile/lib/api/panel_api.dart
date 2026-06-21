@@ -42,6 +42,38 @@ class ConversationsResponse {
   final List<ConversationParticipant> contacts;
 }
 
+/// Réponse du serveur lors de la connexion à un salon vocal/réunion.
+class VoiceTokenResult {
+  const VoiceTokenResult({
+    required this.token,
+    required this.url,
+    required this.room,
+    required this.isStage,
+    required this.role,
+    required this.canModerate,
+  });
+
+  final String token;
+  final String url;
+  final String room;
+  final bool isStage;
+  final String role; // speaker | audience
+  final bool canModerate;
+
+  bool get canPublish => role == 'speaker';
+
+  factory VoiceTokenResult.fromJson(Map<String, dynamic> json) {
+    return VoiceTokenResult(
+      token: json['token'] as String? ?? '',
+      url: json['url'] as String? ?? '',
+      room: json['room'] as String? ?? '',
+      isStage: json['is_stage'] as bool? ?? false,
+      role: json['role'] as String? ?? 'speaker',
+      canModerate: json['can_moderate'] as bool? ?? false,
+    );
+  }
+}
+
 class PanelApi {
   PanelApi({ApiClient? client}) : _client = client ?? ApiClient();
 
@@ -229,6 +261,45 @@ class PanelApi {
         queryParameters: space != null ? {'space': space} : null,
       );
       return ProjectWorkspace.fromJson(data);
+    });
+  }
+
+  /// Demande un access token LiveKit et enregistre la présence dans le salon.
+  Future<VoiceTokenResult> requestVoiceToken({
+    required String projectSlug,
+    required int channelId,
+  }) {
+    return _client.guard(() async {
+      final data = await _client.postJson(
+        '/projects/$projectSlug/voice-channels/$channelId/token',
+      );
+      return VoiceTokenResult.fromJson(data);
+    });
+  }
+
+  Future<void> leaveVoiceChannel({
+    required String projectSlug,
+    required int channelId,
+  }) {
+    return _client.guard(() async {
+      await _client.postJson(
+        '/projects/$projectSlug/voice-channels/$channelId/leave',
+      );
+    });
+  }
+
+  /// Promeut (speaker) ou rétrograde (audience) un participant d'une réunion.
+  Future<void> setVoiceParticipantRole({
+    required String projectSlug,
+    required int channelId,
+    required String identity,
+    required String role,
+  }) {
+    return _client.guard(() async {
+      await _client.postJson(
+        '/projects/$projectSlug/voice-channels/$channelId/set-role',
+        data: {'identity': identity, 'role': role},
+      );
     });
   }
 

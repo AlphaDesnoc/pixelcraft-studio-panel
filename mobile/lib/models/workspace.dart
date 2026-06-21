@@ -33,6 +33,8 @@ class ProjectWorkspace {
     this.teamCandidates = const [],
     this.byStatus = const [],
     this.byPriority = const [],
+    this.voiceChannels = const [],
+    this.voiceManageRanks = const [],
   });
 
   final WorkspaceProject project;
@@ -65,6 +67,8 @@ class ProjectWorkspace {
   final List<WorkspaceMember> teamCandidates;
   final List<WorkspaceBreakdownItem> byStatus;
   final List<WorkspaceBreakdownItem> byPriority;
+  final List<VoiceChannelModel> voiceChannels;
+  final List<VoiceManageRank> voiceManageRanks;
 
   factory ProjectWorkspace.fromJson(Map<String, dynamic> json) {
     return ProjectWorkspace(
@@ -130,6 +134,12 @@ class ProjectWorkspace {
           .toList(),
       byStatus: _breakdownList(json['byStatus']),
       byPriority: _breakdownList(json['byPriority']),
+      voiceChannels: (json['voiceChannels'] as List<dynamic>? ?? [])
+          .map((e) => VoiceChannelModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      voiceManageRanks: (json['voiceManageRanks'] as List<dynamic>? ?? [])
+          .map((e) => VoiceManageRank.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -751,6 +761,99 @@ class WorkspaceMember {
       id: json['id'] as int,
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
+    );
+  }
+}
+
+/// Salon vocal ou réunion (stage). `withVideo == true` => salon réunion.
+class VoiceChannelModel {
+  const VoiceChannelModel({
+    required this.id,
+    required this.name,
+    required this.withVideo,
+    required this.position,
+    this.rankId,
+    this.rank,
+    this.participants = const [],
+  });
+
+  final int id;
+  final String name;
+  final bool withVideo;
+  final int position;
+  final int? rankId;
+  final VoiceChannelRank? rank;
+  final List<VoiceParticipantInfo> participants;
+
+  bool get isStage => withVideo;
+
+  factory VoiceChannelModel.fromJson(Map<String, dynamic> json) {
+    final rankJson = json['rank'];
+    return VoiceChannelModel(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      withVideo: json['with_video'] as bool? ?? false,
+      position: json['position'] as int? ?? 0,
+      rankId: json['rank_id'] as int?,
+      rank: rankJson is Map<String, dynamic>
+          ? VoiceChannelRank.fromJson(rankJson)
+          : null,
+      participants: (json['participants'] as List<dynamic>? ?? [])
+          .map((e) => VoiceParticipantInfo.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class VoiceChannelRank {
+  const VoiceChannelRank({required this.id, required this.name, required this.color});
+
+  final int id;
+  final String name;
+  final String color;
+
+  factory VoiceChannelRank.fromJson(Map<String, dynamic> json) {
+    return VoiceChannelRank(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      color: json['color'] as String? ?? '#7c5cff',
+    );
+  }
+}
+
+/// Participant présent dans un salon vocal (vu depuis le lobby, hors LiveKit).
+class VoiceParticipantInfo {
+  const VoiceParticipantInfo({
+    required this.id,
+    required this.name,
+    this.avatarUrl,
+  });
+
+  final int id;
+  final String name;
+  final String? avatarUrl;
+
+  factory VoiceParticipantInfo.fromJson(Map<String, dynamic> json) {
+    return VoiceParticipantInfo(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      avatarUrl: json['avatar_url'] as String?,
+    );
+  }
+}
+
+class VoiceManageRank {
+  const VoiceManageRank({required this.id, required this.name, required this.color});
+
+  final int id;
+  final String name;
+  final String color;
+
+  factory VoiceManageRank.fromJson(Map<String, dynamic> json) {
+    return VoiceManageRank(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      color: json['color'] as String? ?? '#7c5cff',
     );
   }
 }

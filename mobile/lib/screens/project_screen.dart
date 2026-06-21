@@ -14,6 +14,7 @@ import 'project/ranks_tab.dart';
 import 'project/files_tab.dart';
 import 'project/overview_tab.dart';
 import 'project/gantt_tab.dart';
+import 'project/voice_tab.dart';
 
 class ProjectScreen extends StatefulWidget {
   const ProjectScreen({
@@ -117,6 +118,14 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       ));
     }
 
+    if (ws.voiceChannels.isNotEmpty) {
+      tabs.add(_ProjectTab(
+        label: 'Vocal',
+        icon: Icons.headset_mic_outlined,
+        builder: () => VoiceTab(workspace: ws),
+      ));
+    }
+
     if (ws.canRead('notes')) {
       tabs.add(_ProjectTab(
         label: 'Notes',
@@ -194,6 +203,7 @@ class _ProjectScreenState extends State<ProjectScreen> with SingleTickerProvider
       'calendar': 'Calendrier',
       'bugs': 'Bugs',
       'chat': 'Chat',
+      'voice': 'Vocal',
       'notes': 'Notes',
       'spreadsheet': 'Tableur',
       'files': 'Fichiers',
