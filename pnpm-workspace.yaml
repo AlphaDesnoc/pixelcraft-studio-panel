@@ -1,2 +1,5 @@
-allowBuilds:
-  vue-demi: true
+# Réglages pnpm (pnpm 11 ne lit plus le champ "pnpm" de package.json).
+# Dépendances autorisées à exécuter leurs scripts de build à l'installation
+# (équivalent de `pnpm approve-builds`). Sans ça : ERR_PNPM_IGNORED_BUILDS.
+onlyBuiltDependencies:
+  - vue-demi
