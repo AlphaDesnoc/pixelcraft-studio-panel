@@ -10,6 +10,7 @@ import 'screens/login_screen.dart';
 import 'services/app_update_service.dart';
 import 'services/auth_session.dart';
 import 'services/realtime_service.dart';
+import 'services/voice_room_service.dart';
 import 'theme/app_theme.dart';
 import 'utils/system_ui.dart';
 
@@ -29,6 +30,7 @@ class PixelCraftPanelApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthSession()..bootstrap()),
         ChangeNotifierProvider(create: (_) => RealtimeService()),
+        ChangeNotifierProvider(create: (_) => VoiceRoomService()),
       ],
       child: const _AppRoot(),
     );

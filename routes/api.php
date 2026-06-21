@@ -40,6 +40,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TaskTagController;
 use App\Http\Controllers\TaskTemplateController;
+use App\Http\Controllers\VoiceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -160,6 +161,11 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/chat/messages/{message}/pin', [ChatMessageController::class, 'pin']);
             Route::post('/chat/messages/{message}/reactions', [ChatReactionController::class, 'toggle']);
             Route::post('/chat/attachments', [AttachmentController::class, 'storeChat'])->middleware('throttle:panel-uploads');
+
+            // Salons vocaux / réunion (média via LiveKit) : mêmes contrôleurs que le web.
+            Route::post('/voice-channels/{voiceChannel}/token', [VoiceController::class, 'token']);
+            Route::post('/voice-channels/{voiceChannel}/leave', [VoiceController::class, 'leave']);
+            Route::post('/voice-channels/{voiceChannel}/set-role', [VoiceController::class, 'setRole']);
 
             Route::get('/activity-logs', [ActivityLogController::class, 'index']);
 
