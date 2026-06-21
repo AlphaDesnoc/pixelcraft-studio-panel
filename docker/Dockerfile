@@ -16,13 +16,16 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
 
-# ── Stage 1 : build des assets Vue/Vite ──────────────────────────────────────
-FROM node:22-bookworm-slim AS frontend
+# ── Stage 1 : build des assets Vue/Vite (pnpm) ───────────────────────────────
+FROM node:24-bookworm-slim AS frontend
+
+# Node 24 requis : package.json fixe engines.node >=24 et .npmrc a engine-strict=true.
+RUN corepack enable
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml .npmrc ./
+RUN pnpm install --frozen-lockfile
 
 COPY vite.config.js postcss.config.js tailwind.config.js jsconfig.json ./
 COPY resources ./resources
@@ -41,7 +44,7 @@ ENV VITE_APP_NAME=$VITE_APP_NAME \
     VITE_REVERB_PORT=$VITE_REVERB_PORT \
     VITE_REVERB_SCHEME=$VITE_REVERB_SCHEME
 
-RUN npm run build
+RUN pnpm build
 
 # ── Stage 2 : application PHP ────────────────────────────────────────────────
 FROM php:8.4-fpm-bookworm AS app
