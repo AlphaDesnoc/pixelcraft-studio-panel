@@ -1,5 +1,5 @@
 # Réglages pnpm (pnpm 11 ne lit plus le champ "pnpm" de package.json).
-# Dépendances autorisées à exécuter leurs scripts de build à l'installation
-# (équivalent de `pnpm approve-builds`). Sans ça : ERR_PNPM_IGNORED_BUILDS.
-onlyBuiltDependencies:
-  - vue-demi
+# Aucun script de build de dépendance ne doit s'exécuter à l'installation.
+# ignoreScripts (clé settings) supprime aussi l'échec ERR_PNPM_IGNORED_BUILDS,
+# contrairement à ignore-scripts du .npmrc.
+ignoreScripts: true
